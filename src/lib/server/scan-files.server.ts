@@ -1,5 +1,6 @@
 import '@tanstack/react-start/server-only'
 
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { z } from 'zod'
@@ -139,6 +140,23 @@ export async function readScanResult(
     })
   }
   return scanResultFileSchema.parse(parsed)
+}
+
+/** Resolves once Eve has written the result file, or rejects after `timeoutMs`. */
+export async function waitForScanResult(
+  scanId: number,
+  timeoutMs: number,
+  intervalMs = 5_000,
+): Promise<void> {
+  const target = join(resultsDir(), `scan-${scanId}.json`)
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (existsSync(target)) return
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  throw new Error(
+    `Scan ${scanId} did not finish within ${Math.round(timeoutMs / 60_000)} minutes.`,
+  )
 }
 
 export async function removeScanWorkspace(

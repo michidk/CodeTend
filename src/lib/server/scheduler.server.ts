@@ -4,7 +4,10 @@ import { and, eq, isNotNull, lte } from 'drizzle-orm'
 import { db } from '@/db'
 import { repositories } from '@/db/schema'
 import { getServerEnv } from '@/lib/env.server'
-import { failOrphanedScans, startScan } from '@/lib/server/scan-pipeline.server'
+import {
+  recoverInterruptedScans,
+  startScan,
+} from '@/lib/server/scan-pipeline.server'
 
 const SCHEDULER_KEY = Symbol.for('tecdebt.scheduler')
 
@@ -30,13 +33,9 @@ export function ensureScheduler(): void {
   }
   globalState[SCHEDULER_KEY] = state
 
-  void failOrphanedScans()
-    .then((count) => {
-      if (count > 0)
-        console.warn(`[tecdebt] marked ${count} orphaned scan(s) as failed`)
-    })
+  void recoverInterruptedScans()
     .catch((error) =>
-      console.error('[tecdebt] failed to clean up orphaned scans', error),
+      console.error('[tecdebt] failed to recover interrupted scans', error),
     )
     .then(() => tick(state))
 }

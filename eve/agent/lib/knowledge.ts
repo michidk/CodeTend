@@ -38,16 +38,25 @@ export function assessKnowledgeStaleness(
     else if (hash !== source.hash) changedSources.push(source.path)
   }
 
+  // Only new top-level *directories* count as new areas; new root files
+  // (lockfiles, licenses, tool configs) rarely change the architecture.
   const knownTopLevel = new Set<string>()
   for (const source of previous.sources) {
     knownTopLevel.add(source.path.split('/')[0] ?? source.path)
   }
   for (const subsystem of previous.summary.subsystems) {
     for (const path of subsystem.paths)
-      knownTopLevel.add(path.split('/')[0] ?? path)
+      knownTopLevel.add(path.replace(/^\.\//, '').split('/')[0] ?? path)
   }
+  const previousFiles = new Set(previous.sources.map((source) => source.path))
   const newTopLevelEntries = workspace.topLevel.filter(
-    (entry) => !knownTopLevel.has(entry) && !entry.startsWith('.'),
+    (entry) =>
+      !knownTopLevel.has(entry) &&
+      !entry.startsWith('.') &&
+      workspace.files.some(
+        (file) =>
+          file.path.startsWith(`${entry}/`) && !previousFiles.has(file.path),
+      ),
   )
 
   const countDrift =

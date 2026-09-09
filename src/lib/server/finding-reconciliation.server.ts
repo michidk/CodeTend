@@ -130,12 +130,57 @@ export async function reconcileScannerFindings(input: {
     reconciled.push({ id: previous.id, state, finding: fresh })
   }
 
-  const resolvedIds = existing
-    .filter(
-      (finding) =>
-        !touched.has(finding.id) && OPEN_FINDING_STATES.includes(finding.state),
-    )
-    .map((finding) => finding.id)
+  // Open findings the scanner neither returned nor explicitly resolved.
+  // Resolving them needs positive evidence: either a `resolved` verdict, or a
+  // scanner that verified every other hypothesis and therefore demonstrably
+  // worked through the list. Otherwise the finding is carried forward as
+  // `active` so a truncated or partial scanner output never fakes progress.
+  const untouchedOpen = existing.filter(
+    (finding) =>
+      !touched.has(finding.id) && OPEN_FINDING_STATES.includes(finding.state),
+  )
+  const verifiedAll =
+    untouchedOpen.length > 0 &&
+    untouchedOpen.every((finding) => verdictById.has(finding.id))
+  const resolvedIds: number[] = []
+  const carriedIds: number[] = []
+  for (const finding of untouchedOpen) {
+    const verdict = verdictById.get(finding.id)?.verdict
+    if (verdict === 'resolved' || (verifiedAll && verdict === undefined)) {
+      resolvedIds.push(finding.id)
+    } else if (verdict === 'confirmed' || verdict === 'improved') {
+      // Verified but no updated finding returned: keep the previous content.
+      touched.add(finding.id)
+      await db
+        .update(findings)
+        .set({
+          state: verdict === 'improved' ? 'improved' : 'active',
+          lastSeenScanId: input.scanId,
+          updatedAt: now,
+        })
+        .where(eq(findings.id, finding.id))
+      await db
+        .insert(findingOccurrences)
+        .values({
+          findingId: finding.id,
+          scanId: input.scanId,
+          state: verdict === 'improved' ? 'improved' : 'active',
+          severity: finding.severity,
+          confidence: finding.confidence,
+          note: verdictById.get(finding.id)?.note ?? null,
+        })
+        .onConflictDoNothing()
+      counts[verdict === 'improved' ? 'improved' : 'active'] += 1
+      reconciled.push({
+        id: finding.id,
+        state: verdict === 'improved' ? 'improved' : 'active',
+        finding: toScannerFinding(finding),
+      })
+    } else {
+      carriedIds.push(finding.id)
+    }
+  }
+
   if (resolvedIds.length > 0) {
     await db
       .update(findings)
@@ -156,7 +201,48 @@ export async function reconcileScannerFindings(input: {
     counts.resolved += resolvedIds.length
   }
 
+  for (const id of carriedIds) {
+    const previous = byId.get(id)
+    if (!previous) continue
+    await db
+      .update(findings)
+      .set({ state: 'active', updatedAt: now })
+      .where(eq(findings.id, id))
+    await db
+      .insert(findingOccurrences)
+      .values({
+        findingId: id,
+        scanId: input.scanId,
+        state: 'active',
+        severity: previous.severity,
+        confidence: previous.confidence,
+        note: 'Carried forward: the scanner did not report on this finding.',
+      })
+      .onConflictDoNothing()
+    counts.active += 1
+    reconciled.push({
+      id,
+      state: 'active',
+      finding: toScannerFinding(previous),
+    })
+  }
+
   return { findings: reconciled, counts }
+}
+
+function toScannerFinding(finding: Finding): ScannerFinding {
+  return {
+    fingerprint: finding.fingerprint,
+    title: finding.title,
+    severity: finding.severity,
+    confidence: finding.confidence,
+    description: finding.description,
+    whyItMatters: finding.whyItMatters,
+    recommendation: finding.recommendation,
+    effort: finding.effort,
+    locations: finding.locations,
+    previousFindingId: finding.id,
+  }
 }
 
 function nextStateForMatch(

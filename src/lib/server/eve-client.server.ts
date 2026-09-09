@@ -37,66 +37,77 @@ export async function checkEveHealth(): Promise<EveHealth> {
 }
 
 export interface EveTurnOutcome {
-  readonly sessionId: string
   readonly status: 'completed' | 'failed' | 'waiting'
   readonly message: string | undefined
   readonly failure: string | undefined
 }
 
+export interface EveScanSession {
+  readonly sessionId: string
+  /** Consumes the event stream until the turn settles. */
+  readonly settle: (
+    onPhase: (phase: string) => Promise<void>,
+  ) => Promise<EveTurnOutcome>
+}
+
 /**
- * Starts a fresh Eve session for a scan and waits for the turn to settle.
- * Progress is reported through `onPhase` from the workflow tool's partial
- * snapshots so the UI can show which pipeline step is running.
+ * Starts a fresh Eve session for a scan. The session id is available at once
+ * so the caller can persist it; `settle` streams progress (the workflow tool's
+ * partial snapshots become UI phases) until the turn completes or fails.
  */
-export async function runEveScanSession(
+export async function startEveScanSession(
   scanId: number,
-  onPhase: (phase: string) => Promise<void>,
-): Promise<EveTurnOutcome> {
+): Promise<EveScanSession> {
   const client = getEveClient()
   const { response } = await client.sessions.create({
     message: `Run scan ${scanId}.`,
   })
 
-  let message: string | undefined
-  let failure: string | undefined
-  let status: EveTurnOutcome['status'] = 'waiting'
-  let lastPhase: string | undefined
+  return {
+    sessionId: response.sessionId,
+    settle: async (onPhase) => {
+      let message: string | undefined
+      let failure: string | undefined
+      let status: EveTurnOutcome['status'] = 'waiting'
+      let lastPhase: string | undefined
 
-  for await (const event of response) {
-    switch (event.type) {
-      case 'action.partial': {
-        const output = readPartialOutput(event.data)
-        if (output?.phase && output.phase !== lastPhase) {
-          lastPhase = output.phase
-          await onPhase(output.phase)
+      for await (const event of response) {
+        switch (event.type) {
+          case 'action.partial': {
+            const output = readPartialOutput(event.data)
+            if (output?.phase && output.phase !== lastPhase) {
+              lastPhase = output.phase
+              await onPhase(output.phase)
+            }
+            break
+          }
+          case 'message.completed': {
+            const data = event.data as { message?: string | null }
+            if (typeof data.message === 'string') message = data.message
+            break
+          }
+          case 'turn.completed':
+            status = 'completed'
+            break
+          case 'turn.failed':
+          case 'session.failed': {
+            const data = event.data as { code?: string; message?: string }
+            status = 'failed'
+            failure = [data.code, data.message].filter(Boolean).join(': ')
+            break
+          }
+          case 'turn.cancelled':
+            status = 'failed'
+            failure = 'The Eve turn was cancelled.'
+            break
+          default:
+            break
         }
-        break
       }
-      case 'message.completed': {
-        const data = event.data as { message?: string | null }
-        if (typeof data.message === 'string') message = data.message
-        break
-      }
-      case 'turn.completed':
-        status = 'completed'
-        break
-      case 'turn.failed':
-      case 'session.failed': {
-        const data = event.data as { code?: string; message?: string }
-        status = 'failed'
-        failure = [data.code, data.message].filter(Boolean).join(': ')
-        break
-      }
-      case 'turn.cancelled':
-        status = 'failed'
-        failure = 'The Eve turn was cancelled.'
-        break
-      default:
-        break
-    }
-  }
 
-  return { sessionId: response.sessionId, status, message, failure }
+      return { status, message, failure }
+    },
+  }
 }
 
 function readPartialOutput(data: unknown): { phase?: string } | undefined {

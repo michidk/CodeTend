@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { getServerEnv } from '@/lib/env.server'
 import { gitnexusHome } from '@/lib/server/scan-files.server'
 
@@ -83,6 +84,7 @@ async function startServer(port: number): Promise<boolean> {
 function resolveGitNexusBinary(): string {
   const candidates = [
     process.env.GITNEXUS_BIN,
+    resolve('.tools/node_modules/.bin/gitnexus'),
     `${homedir()}/.local/bin/gitnexus`,
     '/usr/local/bin/gitnexus',
     '/usr/bin/gitnexus',

@@ -1,4 +1,5 @@
 import type { ScanRequest, ScanResult, WorkspaceManifest } from './contract'
+import { resolveGitAuth } from './git-auth'
 import {
   gitnexusHome,
   requestsDir,
@@ -134,9 +135,11 @@ export async function cloneRepository(
   await mkdir(workspacesDir(), { recursive: true })
   await rm(hostPath, { recursive: true, force: true })
 
+  const auth = await resolveGitAuth(request.repositoryUrl)
   const clone = await run(
     'git',
     [
+      ...auth.gitConfig.flatMap((setting) => ['-c', setting]),
       'clone',
       '--depth',
       '1',
@@ -187,9 +190,11 @@ export async function indexWithGitNexus(
   'use step'
   const { existsSync } = await import('node:fs')
   const { homedir } = await import('node:os')
+  const { resolve } = await import('node:path')
   const binary =
     [
       process.env.GITNEXUS_BIN,
+      resolve('../.tools/node_modules/.bin/gitnexus'),
       `${homedir()}/.local/bin/gitnexus`,
       '/usr/local/bin/gitnexus',
     ].find((candidate) => candidate && existsSync(candidate)) ?? 'gitnexus'

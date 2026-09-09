@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { and, eq, inArray, lt } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   type FindingCounts,
@@ -26,7 +26,7 @@ import {
   calculateScannerScore,
   gradeForScore,
 } from '@/lib/scoring'
-import { runEveScanSession } from '@/lib/server/eve-client.server'
+import { startEveScanSession } from '@/lib/server/eve-client.server'
 import {
   reconcileScannerFindings,
   sumCounts,
@@ -35,10 +35,12 @@ import { ensureGitNexusServer } from '@/lib/server/gitnexus.server'
 import {
   readScanResult,
   removeScanWorkspace,
+  waitForScanResult,
   writeScanRequest,
 } from '@/lib/server/scan-files.server'
 
 const ACTIVE_SCAN_STATUSES = ['queued', 'running'] as const
+const SCAN_TIMEOUT_MS = 3 * 60 * 60_000
 
 /**
  * Creates a scan row for a repository and starts the pipeline in the
@@ -170,19 +172,33 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       .set({ status: 'running', startedAt: new Date() })
       .where(eq(scannerRuns.scanId, scanId))
 
-    const outcome = await runEveScanSession(scanId, (phase) =>
-      setPhase(scanId, phase),
-    )
+    const session = await startEveScanSession(scanId)
     await db
       .update(scans)
-      .set({ eveSessionId: outcome.sessionId })
+      .set({ eveSessionId: session.sessionId })
       .where(eq(scans.id, scanId))
+
+    // The live stream drives UI phases, but the result file is the source of
+    // truth: Eve's session is durable and keeps running even if this HTTP
+    // stream drops, so the scan completes whenever the file appears.
+    const outcome = await Promise.race([
+      session
+        .settle((phase) => setPhase(scanId, phase))
+        .catch((error) => {
+          console.warn(
+            `[tecdebt] scan ${scanId}: Eve stream ended early, waiting for the result file`,
+            error,
+          )
+          return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
+        }),
+      waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null),
+    ])
 
     const result = await readScanResult(scanId)
     if (!result) {
       throw new Error(
-        outcome.failure ??
-          `Eve finished with status "${outcome.status}" but wrote no result file.`,
+        outcome?.failure ??
+          `Eve finished with status "${outcome?.status ?? 'unknown'}" but wrote no result file.`,
       )
     }
 
@@ -190,30 +206,11 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     await persistScanResult(scanId, repository, result)
     await removeScanWorkspace(repository.id, scanId)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await db
-      .update(scans)
-      .set({
-        status: 'failed',
-        phase: 'failed',
-        error: message,
-        finishedAt: new Date(),
-      })
-      .where(eq(scans.id, scanId))
-    await db
-      .update(scannerRuns)
-      .set({
-        status: 'failed',
-        error: 'Scan failed before this scanner produced a result.',
-        finishedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(scannerRuns.scanId, scanId),
-          inArray(scannerRuns.status, ['pending', 'running']),
-        ),
-      )
-    await removeScanWorkspace(repository.id, scanId).catch(() => undefined)
+    await failScan(
+      scanId,
+      repository.id,
+      error instanceof Error ? error.message : String(error),
+    )
   }
 }
 
@@ -356,48 +353,78 @@ async function persistScanResult(
 }
 
 /**
- * Scans left in `queued`/`running` by a previous app process cannot be
- * resumed by this PoC (the Eve session may still finish, but nobody is
- * listening), so they are marked failed on startup. Only scans without
- * activity for a while are affected: the dev server re-evaluates this module
- * on reloads while a scan started seconds ago is still legitimately running.
+ * Recovery after an app restart. Eve sessions are durable, so a scan that was
+ * running when the app stopped usually still finishes and writes its result
+ * file. Scans with a result file are persisted; scans without one that are
+ * older than the grace period are marked failed; younger ones are re-attached
+ * by waiting for their result file.
  */
 const ORPHAN_GRACE_MS = 30 * 60_000
 
-export async function failOrphanedScans(): Promise<number> {
-  const cutoff = new Date(Date.now() - ORPHAN_GRACE_MS)
-  const orphaned = await db
+export async function recoverInterruptedScans(): Promise<void> {
+  const active = await db.query.scans.findMany({
+    where: inArray(scans.status, [...ACTIVE_SCAN_STATUSES]),
+    with: { repository: true },
+  })
+  for (const scan of active) {
+    void adoptScan(scan.id, scan.repository, scan.createdAt).catch((error) =>
+      console.error(`[tecdebt] failed to recover scan ${scan.id}`, error),
+    )
+  }
+}
+
+async function adoptScan(
+  scanId: number,
+  repository: Repository,
+  createdAt: Date,
+) {
+  const remaining = SCAN_TIMEOUT_MS - (Date.now() - createdAt.getTime())
+  try {
+    if ((await readScanResult(scanId)) === null) {
+      if (Date.now() - createdAt.getTime() > ORPHAN_GRACE_MS) {
+        throw new Error(
+          'The application restarted while this scan was running.',
+        )
+      }
+      await waitForScanResult(scanId, Math.max(remaining, 60_000))
+    }
+    const result = await readScanResult(scanId)
+    if (!result) throw new Error('Scan result file disappeared.')
+    await setPhase(scanId, 'reconciling')
+    await persistScanResult(scanId, repository, result)
+    await removeScanWorkspace(repository.id, scanId)
+    console.info(`[tecdebt] recovered scan ${scanId} after restart`)
+  } catch (error) {
+    await failScan(
+      scanId,
+      repository.id,
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+}
+
+async function failScan(scanId: number, repositoryId: number, message: string) {
+  await db
     .update(scans)
     .set({
       status: 'failed',
       phase: 'failed',
-      error: 'The application restarted while this scan was running.',
+      error: message,
+      finishedAt: new Date(),
+    })
+    .where(eq(scans.id, scanId))
+  await db
+    .update(scannerRuns)
+    .set({
+      status: 'failed',
+      error: 'Scan failed before this scanner produced a result.',
       finishedAt: new Date(),
     })
     .where(
       and(
-        inArray(scans.status, [...ACTIVE_SCAN_STATUSES]),
-        lt(scans.createdAt, cutoff),
+        eq(scannerRuns.scanId, scanId),
+        inArray(scannerRuns.status, ['pending', 'running']),
       ),
     )
-    .returning({ id: scans.id })
-  if (orphaned.length > 0) {
-    await db
-      .update(scannerRuns)
-      .set({
-        status: 'failed',
-        error: 'The application restarted.',
-        finishedAt: new Date(),
-      })
-      .where(
-        and(
-          inArray(
-            scannerRuns.scanId,
-            orphaned.map((scan) => scan.id),
-          ),
-          inArray(scannerRuns.status, ['pending', 'running']),
-        ),
-      )
-  }
-  return orphaned.length
+  await removeScanWorkspace(repositoryId, scanId).catch(() => undefined)
 }

@@ -20,3 +20,6 @@ eve/node_modules/
 
 # Scan workspaces (fresh clones and GitNexus indexes)
 /data/
+
+# Optional local tool installs (e.g. gitnexus)
+/.tools/

@@ -42,7 +42,9 @@ schedule / "Scan now" / (future) webhook
 ## Quick start (local)
 
 Prerequisites: Bun 1.4, Node 24 (for Eve), Git, PostgreSQL (Docker is fine),
-an Anthropic API key. Optionally `npm i -g gitnexus`.
+an Anthropic API key. Optionally GitNexus: `npm i -g gitnexus` or
+`mkdir -p .tools && (cd .tools && npm i gitnexus)` (the app looks in both
+places, or at `GITNEXUS_BIN`).
 
 ```bash
 cp .env.example .env               # set ANTHROPIC_API_KEY, EVE_PASSWORD, DATABASE_URL
@@ -124,7 +126,8 @@ then derives states from *our persisted results* (never Git history):
 | open finding returned again, same severity | `active` |
 | open finding returned with lower severity or scanner verdict `improved` | `improved` |
 | open finding returned with higher severity, or a resolved finding reappears | `regressed` |
-| open finding not returned (or verdict `resolved`) | `resolved` |
+| scanner verdict `resolved`, or the scanner verified every other hypothesis and omitted this one | `resolved` |
+| open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
 
 Every observation is stored as a `finding_occurrences` row, which powers the
 "active findings over time" chart.
@@ -181,10 +184,22 @@ bun run scripts/cli.ts add <name> <url> [branch] [cron]   # scripting helpers
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `TECDEBT_MODEL` | Model access for the Eve agents |
 | `GITNEXUS_ENABLED`, `GITNEXUS_MCP_PORT` | Optional code-intelligence layer |
 
+## Repository access
+
+The PoC clones with the credentials already available on the host that runs
+the Eve runtime. For `github.com` URLs it asks the local **GitHub CLI**
+(`gh auth git-credential`) when `gh auth status` succeeds; otherwise it falls
+back to the Git credential helpers configured on the host. Public repositories
+need nothing. The logic lives in a single function,
+[`eve/agent/lib/git-auth.ts`](eve/agent/lib/git-auth.ts), so a later version
+can swap in GitHub App installation tokens (per-repository `x-access-token`
+credentials) without changing the clone step. That is also where the future
+GitHub push webhook trigger will plug into `startScan(repositoryId, 'webhook')`.
+
 ## Limitations
 
-- Repositories are cloned with whatever Git credentials the host has; there is
-  no GitHub App or token management.
+- Repository access uses local `gh`/Git credentials; a GitHub App integration
+  is planned but not part of the PoC.
 - Scans interrupted by an app restart are marked failed even though Eve's
   durable session may finish; results are not re-attached.
 - The sandbox is `just-bash` (virtual shell, no real toolchains, no network).
