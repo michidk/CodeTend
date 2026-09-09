@@ -55,8 +55,9 @@ bun run eve:build && bun run eve:start   # terminal 1: Eve runtime on :2000
 bun run dev                              # terminal 2: app on :3000, migrations applied automatically
 ```
 
-`scripts/start-eve.sh` and `scripts/start-dev.sh` start both processes with
-`.env` loaded (used by the VibePod preview tooling).
+`scripts/start-dev.sh` supervises both processes with `.env` loaded under one
+managed VibePod preview. `scripts/start-eve.sh` remains available when Eve is
+run separately.
 
 ## Quick start (Docker Compose)
 
