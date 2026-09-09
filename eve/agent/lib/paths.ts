@@ -15,6 +15,7 @@ export const workspacesDir = () => `${dataDir()}/workspaces`
 export const requestsDir = () => `${dataDir()}/requests`
 export const resultsDir = () => `${dataDir()}/results`
 export const gitnexusHome = () => `${dataDir()}/gitnexus`
+export const usageDir = () => `${dataDir()}/usage`
 
 export function workspaceName(repositoryId: number, scanId: number): string {
   return `repo-${repositoryId}-scan-${scanId}`

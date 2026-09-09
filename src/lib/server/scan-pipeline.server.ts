@@ -38,6 +38,12 @@ import {
   waitForScanResult,
   writeScanRequest,
 } from '@/lib/server/scan-files.server'
+import {
+  readScanUsage,
+  removeScanUsage,
+  type ScanUsage,
+  usageColumns,
+} from '@/lib/server/scan-usage.server'
 
 const ACTIVE_SCAN_STATUSES = ['queued', 'running'] as const
 const SCAN_TIMEOUT_MS = 3 * 60 * 60_000
@@ -230,6 +236,7 @@ async function persistScanResult(
   result: Awaited<ReturnType<typeof readScanResult>> & object,
 ) {
   const finishedAt = new Date()
+  const usage = await loadScanUsage(scanId)
   const countsPerScanner: FindingCounts[] = []
   const scoreInputs: {
     scanner: { id: string; weight: number }
@@ -250,6 +257,7 @@ async function persistScanResult(
           error: outcome.error ?? 'Scanner failed.',
           startedAt: new Date(outcome.startedAt),
           finishedAt: new Date(outcome.finishedAt),
+          ...usageColumns(usage?.perScanner.get(scanner.id)),
         })
         .where(
           and(
@@ -296,6 +304,7 @@ async function persistScanResult(
         fixPrompt,
         startedAt: new Date(outcome.startedAt),
         finishedAt: new Date(outcome.finishedAt),
+        ...usageColumns(usage?.perScanner.get(scanner.id)),
       })
       .where(
         and(
@@ -351,6 +360,8 @@ async function persistScanResult(
       overallScore,
       grade: gradeForScore(overallScore),
       counts,
+      model: usage?.model ?? null,
+      ...usageColumns(usage?.total),
       error: allFailed ? 'Every scanner failed.' : null,
       finishedAt,
     })
@@ -360,6 +371,7 @@ async function persistScanResult(
     .update(repositories)
     .set({ lastScanAt: finishedAt, updatedAt: finishedAt })
     .where(eq(repositories.id, repository.id))
+  await discardScanUsage(usage)
 }
 
 /**
@@ -414,27 +426,68 @@ async function adoptScan(
 }
 
 async function failScan(scanId: number, repositoryId: number, message: string) {
+  const usage = await loadScanUsage(scanId)
   await db
     .update(scans)
     .set({
       status: 'failed',
       phase: 'failed',
       error: message,
+      model: usage?.model ?? null,
+      ...usageColumns(usage?.total),
       finishedAt: new Date(),
     })
     .where(eq(scans.id, scanId))
-  await db
-    .update(scannerRuns)
-    .set({
-      status: 'failed',
-      error: 'Scan failed before this scanner produced a result.',
-      finishedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(scannerRuns.scanId, scanId),
-        inArray(scannerRuns.status, ['pending', 'running']),
-      ),
-    )
+  const unfinishedRuns = await db.query.scannerRuns.findMany({
+    where: and(
+      eq(scannerRuns.scanId, scanId),
+      inArray(scannerRuns.status, ['pending', 'running']),
+    ),
+    columns: { id: true, scannerId: true },
+  })
+  for (const run of unfinishedRuns) {
+    await db
+      .update(scannerRuns)
+      .set({
+        status: 'failed',
+        error: 'Scan failed before this scanner produced a result.',
+        finishedAt: new Date(),
+        ...usageColumns(usage?.perScanner.get(run.scannerId)),
+      })
+      .where(eq(scannerRuns.id, run.id))
+  }
   await removeScanWorkspace(repositoryId, scanId).catch(() => undefined)
+  await discardScanUsage(usage)
+}
+
+/**
+ * Token usage recorded by the Eve hooks for this scan's session tree. The
+ * hooks key the file by root session id, which is the session the app
+ * created for the scan.
+ */
+async function loadScanUsage(scanId: number): Promise<ScanUsage | null> {
+  const scan = await db.query.scans.findFirst({
+    where: eq(scans.id, scanId),
+    columns: { eveSessionId: true },
+  })
+  if (!scan?.eveSessionId) return null
+  try {
+    return await readScanUsage(scan.eveSessionId)
+  } catch (error) {
+    console.warn(`[tecdebt] failed to read usage for scan ${scanId}`, error)
+    return null
+  }
+}
+
+/** Accounting cleanup must never change the outcome of a completed scan. */
+async function discardScanUsage(usage: ScanUsage | null): Promise<void> {
+  if (!usage) return
+  try {
+    await removeScanUsage(usage.rootSessionId)
+  } catch (error) {
+    console.warn(
+      `[tecdebt] failed to remove usage file ${usage.rootSessionId}`,
+      error,
+    )
+  }
 }

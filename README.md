@@ -28,7 +28,7 @@ schedule / "Scan now" / (future) webhook
         │   4. one scanner subagent per scanner        (parallel, structured output)
         │   5. write data/results/scan-<id>.json       ("use step")
         ▼
- app reconciles findings, scores, builds fix prompts, persists, updates UI
+ app reconciles findings, scores, aggregates provider usage, persists, updates UI
 ```
 
 | Layer | Choice |
@@ -67,7 +67,7 @@ docker compose up --build
 
 Compose starts PostgreSQL, applies migrations, starts the Eve runtime and the
 app on <http://localhost:3000>. The `scan_data` volume is shared between the app
-(requests/results) and Eve (checkouts).
+(requests/results/usage) and Eve (checkouts).
 
 ## Using it
 
@@ -77,7 +77,8 @@ app on <http://localhost:3000>. The `scan_data` volume is shared between the app
    reconciling).
 4. The repository page shows the overall score and A–F grade, score delta,
    scanner scores, new/improved/resolved/regressed counts, active findings, scan
-   history and **change over time** charts.
+   history, token/cost usage and **change over time** charts. The global
+   **Scans** page shows usage across every repository.
 5. Each scanner page shows its score trend, findings with evidence and
    recommendations, and the aggregated **fix prompt** with a Copy button.
 
@@ -120,6 +121,19 @@ finding (critical 30, high 16, medium 8, low 3; confidence high ×1, medium
 ×0.8, low ×0.5). The overall score is the weighted mean of scanner scores;
 grades are A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, else F. The model never proposes
 numbers.
+
+## Token and cost tracking
+
+Eve hooks record the provider-reported input, output, cache-read and cache-write
+tokens for the root agent, knowledge agent and every scanner step. They append
+usage-only JSON lines under `data/usage/`; prompts and model responses are never
+logged. After a scan settles, the app deduplicates and aggregates those records,
+stores scan and per-scanner totals in PostgreSQL, and removes the temporary file.
+
+Costs are estimates based on the configured model's Anthropic list price. A
+provider-reported cost takes precedence when available. Unknown models still
+show token counts and model calls, but their cost is shown as unavailable rather
+than guessed.
 
 ## Finding lifecycle
 
@@ -173,6 +187,7 @@ scripts/                   migrate, dev migrations plugin, import-boundary check
 ```bash
 bun run dev              # app with automatic migrations
 bun run check            # Biome + import boundaries
+bun run test             # focused pricing and usage-accounting tests
 bun run typecheck
 bun run build
 bun run eve:typecheck    # type-check the Eve agent
@@ -221,4 +236,5 @@ GitHub push webhook trigger will plug into `startScan(repositoryId, 'webhook')`.
   from the filesystem only.
 - No authentication in front of the app. Put a proxy in front for anything
   beyond local use.
-- No automated test suite (intentional for the PoC).
+- The automated suite currently covers pricing and usage accounting; the wider
+  scan and reconciliation pipeline still relies on integration verification.

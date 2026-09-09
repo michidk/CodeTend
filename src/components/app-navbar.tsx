@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { title: 'Dashboard', url: '/', exact: true, color: 'bg-candy-sun' },
-  { title: 'Scanners', url: '/scanners', exact: false, color: 'bg-candy-sky' },
+  { title: 'Dashboard', url: '/', exact: true },
+  { title: 'Scanners', url: '/scanners', exact: false },
+  { title: 'Scans', url: '/scans', exact: false },
 ] as const
 
 function isActive(pathname: string, url: string, exact: boolean) {

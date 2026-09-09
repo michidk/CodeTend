@@ -17,6 +17,7 @@ import {
 import { ScanStatusBadge } from '@/components/health/scan-status'
 import { ScoreDelta } from '@/components/health/score-delta'
 import { TrendCharts } from '@/components/health/trend-charts'
+import { CostCell, TokensCell } from '@/components/health/usage-stats'
 import { Page, PageHeader, SectionHeading } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
@@ -373,7 +374,7 @@ function RepositoryPage() {
         <SectionHeading id="history-heading" color="bg-candy-grape">
           Scan history
         </SectionHeading>
-        <Card>
+        <Card className="overflow-x-auto">
           <ScanHistoryTable history={history} />
         </Card>
       </section>
@@ -470,6 +471,8 @@ function ScanHistoryTable({
           <TableHead className="text-right">Score</TableHead>
           <TableHead className="text-right">New</TableHead>
           <TableHead className="text-right">Resolved</TableHead>
+          <TableHead className="text-right">Tokens</TableHead>
+          <TableHead className="text-right">Cost</TableHead>
           <TableHead className="text-right">Duration</TableHead>
           <TableHead>Finished</TableHead>
         </TableRow>
@@ -508,6 +511,15 @@ function ScanHistoryTable({
             </TableCell>
             <TableCell className="text-right tabular-nums">
               {scan.counts?.resolved ?? '–'}
+            </TableCell>
+            <TableCell className="text-right">
+              <TokensCell usage={scan} />
+            </TableCell>
+            <TableCell className="text-right">
+              <CostCell
+                value={scan.estimatedCostUsd}
+                tracked={scan.modelCalls != null}
+              />
             </TableCell>
             <TableCell className="text-right tabular-nums">
               {formatDuration(scan.startedAt, scan.finishedAt)}

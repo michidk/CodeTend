@@ -62,3 +62,22 @@ export function formatDuration(
 export function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 8) : '–'
 }
+
+const compactNumber = new Intl.NumberFormat('en', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+
+/** "1.2M" / "48.3K" / "912" token counts. */
+export function formatTokens(value: number | null | undefined): string {
+  if (value == null) return '–'
+  return compactNumber.format(value)
+}
+
+/** "$12.34" for normal amounts, more precision for cents, "–" when unknown. */
+export function formatCostUsd(value: number | null | undefined): string {
+  if (value == null) return '–'
+  if (value === 0) return '$0.00'
+  const digits = value < 0.01 ? 4 : value < 1 ? 3 : 2
+  return `$${value.toFixed(digits)}`
+}

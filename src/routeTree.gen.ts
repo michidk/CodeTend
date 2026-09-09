@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as RepositoriesNewRouteImport } from './routes/repositories/new'
 import { Route as ScannersIndexRouteImport } from './routes/scanners/index'
+import { Route as ScansIndexRouteImport } from './routes/scans/index'
 import { Route as ScansScanIdRouteImport } from './routes/scans/$scanId'
 import { Route as RepositoriesRepositoryIdIndexRouteImport } from './routes/repositories/$repositoryId/index'
 import { Route as RepositoriesRepositoryIdEditRouteImport } from './routes/repositories/$repositoryId/edit'
@@ -37,6 +38,11 @@ const RepositoriesNewRoute = RepositoriesNewRouteImport.update({
 const ScannersIndexRoute = ScannersIndexRouteImport.update({
   id: '/scanners/',
   path: '/scanners/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScansIndexRoute = ScansIndexRouteImport.update({
+  id: '/scans/',
+  path: '/scans/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScansScanIdRoute = ScansScanIdRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/repositories/new': typeof RepositoriesNewRoute
   '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners/': typeof ScannersIndexRoute
+  '/scans/': typeof ScansIndexRoute
   '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
   '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByTo {
   '/repositories/new': typeof RepositoriesNewRoute
   '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners': typeof ScannersIndexRoute
+  '/scans': typeof ScansIndexRoute
   '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
   '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId': typeof RepositoriesRepositoryIdIndexRoute
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   '/repositories/new': typeof RepositoriesNewRoute
   '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners/': typeof ScannersIndexRoute
+  '/scans/': typeof ScansIndexRoute
   '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
   '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/repositories/new'
     | '/scans/$scanId'
     | '/scanners/'
+    | '/scans/'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId/'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/repositories/new'
     | '/scans/$scanId'
     | '/scanners'
+    | '/scans'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/repositories/new'
     | '/scans/$scanId'
     | '/scanners/'
+    | '/scans/'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId/'
@@ -145,6 +157,7 @@ export interface RootRouteChildren {
   RepositoriesNewRoute: typeof RepositoriesNewRoute
   ScansScanIdRoute: typeof ScansScanIdRoute
   ScannersIndexRoute: typeof ScannersIndexRoute
+  ScansIndexRoute: typeof ScansIndexRoute
   RepositoriesRepositoryIdEditRoute: typeof RepositoriesRepositoryIdEditRoute
   RepositoriesRepositoryIdKnowledgeRoute: typeof RepositoriesRepositoryIdKnowledgeRoute
   RepositoriesRepositoryIdIndexRoute: typeof RepositoriesRepositoryIdIndexRoute
@@ -179,6 +192,13 @@ declare module '@tanstack/react-router' {
       path: '/scanners'
       fullPath: '/scanners/'
       preLoaderRoute: typeof ScannersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scans/': {
+      id: '/scans/'
+      path: '/scans'
+      fullPath: '/scans/'
+      preLoaderRoute: typeof ScansIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scans/$scanId': {
@@ -225,6 +245,7 @@ const rootRouteChildren: RootRouteChildren = {
   RepositoriesNewRoute: RepositoriesNewRoute,
   ScansScanIdRoute: ScansScanIdRoute,
   ScannersIndexRoute: ScannersIndexRoute,
+  ScansIndexRoute: ScansIndexRoute,
   RepositoriesRepositoryIdEditRoute: RepositoriesRepositoryIdEditRoute,
   RepositoriesRepositoryIdKnowledgeRoute:
     RepositoriesRepositoryIdKnowledgeRoute,

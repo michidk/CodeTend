@@ -9,6 +9,12 @@ import {
   scoreTextClass,
 } from '@/components/health/grade-badge'
 import { ScanStatusBadge } from '@/components/health/scan-status'
+import {
+  CostCell,
+  StatTile,
+  TokensCell,
+  totalUsageTokens,
+} from '@/components/health/usage-stats'
 import { Markdown } from '@/components/markdown'
 import { Page, PageHeader, SectionHeading } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
@@ -23,7 +29,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatDateTime, formatDuration, shortSha } from '@/lib/format'
+import {
+  formatDateTime,
+  formatDuration,
+  formatTokens,
+  shortSha,
+} from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { enabledScanners } from '@/lib/scanners'
 import { getScanDetail } from '@/lib/server/repository-detail'
@@ -53,6 +64,12 @@ function ScanPage() {
     return (
       <EntityNotFound entity="Scan" backTo="/" backLabel="Go to dashboard" />
     )
+
+  const usageTracked = scan.modelCalls != null
+  const cachedTokens =
+    scan.cacheReadTokens == null
+      ? null
+      : scan.cacheReadTokens + (scan.cacheWriteTokens ?? 0)
 
   return (
     <Page>
@@ -94,7 +111,54 @@ function ScanPage() {
         </Card>
       ) : null}
 
-      <Card>
+      <section aria-labelledby="usage-heading" className="space-y-3">
+        <SectionHeading id="usage-heading" color="bg-candy-sun">
+          Model usage
+        </SectionHeading>
+        {usageTracked ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <StatTile
+                label="Model calls"
+                value={formatTokens(scan.modelCalls)}
+              />
+              <StatTile
+                label="Tokens"
+                value={formatTokens(totalUsageTokens(scan))}
+                hint="input, output and cache activity"
+              />
+              <StatTile
+                label="Cached tokens"
+                value={formatTokens(cachedTokens)}
+              />
+              <StatTile
+                label="Estimated cost"
+                value={
+                  <CostCell
+                    value={scan.estimatedCostUsd}
+                    tracked={usageTracked}
+                  />
+                }
+                className="bg-candy-sun"
+              />
+            </div>
+            <p className="text-xs font-semibold text-muted-foreground">
+              Model <code>{scan.model ?? 'unknown'}</code>. Hover token totals
+              below for their input, output and cache breakdown.
+            </p>
+          </>
+        ) : (
+          <Card>
+            <CardContent className="text-sm font-semibold text-muted-foreground">
+              {active
+                ? 'Usage will appear after this scan finishes.'
+                : 'Usage was not recorded for this scan.'}
+            </CardContent>
+          </Card>
+        )}
+      </section>
+
+      <Card className="overflow-x-auto">
         <CardHeader>
           <CardTitle>
             Scanner runs · overall{' '}
@@ -109,6 +173,8 @@ function ScanPage() {
               <TableHead>Scanner</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Score</TableHead>
+              <TableHead className="text-right">Tokens</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Duration</TableHead>
               <TableHead>Summary</TableHead>
             </TableRow>
@@ -146,6 +212,15 @@ function ScanPage() {
                     className={`text-right font-semibold tabular-nums ${scoreTextClass(run?.score)}`}
                   >
                     {formatScore(run?.score)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {run ? <TokensCell usage={run} /> : '–'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <CostCell
+                      value={run?.estimatedCostUsd ?? null}
+                      tracked={run?.modelCalls != null}
+                    />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatDuration(run?.startedAt, run?.finishedAt)}
