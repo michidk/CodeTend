@@ -23,6 +23,8 @@ import {
   writeScanResult,
 } from '../lib/steps'
 
+const SCANNER_ATTEMPTS = 2
+
 interface Progress {
   readonly phase: string
   readonly detail?: string
@@ -131,20 +133,40 @@ export default defineWorkflowTool({
     const outcomes: ScannerOutcome[] = await Promise.all(
       request.scanners.map(async (scanner): Promise<ScannerOutcome> => {
         const startedAt = await nowIso()
+        const message = scannerAgentMessage({
+          scanner,
+          siblingScanners: request.scanners,
+          repoPath,
+          repositoryName: request.repositoryName,
+          workspace,
+          knowledge,
+          gitnexusRepo,
+          previousCommitSha: request.previousCommitSha ?? null,
+        })
         try {
-          const result = await ctx.agent({
-            key: `scanner:${scanner.id}`,
-            target: 'scanner',
-            message: scannerAgentMessage({
-              scanner,
-              repoPath,
-              repositoryName: request.repositoryName,
-              workspace,
-              knowledge,
-              gitnexusRepo,
-            }),
-            outputSchema: request.outputSchema as JsonObject,
-          })
+          let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
+          let lastError: unknown
+          // Launching a dozen subagents at once occasionally trips a transient
+          // start failure inside the runtime; one retry with a fresh key
+          // (keys must be unique per run) recovers it.
+          for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+            try {
+              result = await ctx.agent({
+                key:
+                  attempt === 0
+                    ? `scanner:${scanner.id}`
+                    : `scanner:${scanner.id}:retry${attempt}`,
+                target: 'scanner',
+                message,
+                outputSchema: request.outputSchema as JsonObject,
+              })
+              lastError = undefined
+              break
+            } catch (error) {
+              lastError = error
+            }
+          }
+          if (lastError !== undefined) throw lastError
           return {
             scannerId: scanner.id,
             status: result ? 'completed' : 'failed',
@@ -159,7 +181,7 @@ export default defineWorkflowTool({
           return {
             scannerId: scanner.id,
             status: 'failed',
-            error: error instanceof Error ? error.message : String(error),
+            error: describeError(error),
             startedAt,
             finishedAt: await nowIso(),
           }
@@ -216,4 +238,22 @@ function resolveSources(
     sources.push({ path: normalized, hash })
   }
   return sources
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null) {
+    const record = error as { message?: unknown; name?: unknown }
+    if (typeof record.message === 'string') {
+      return typeof record.name === 'string'
+        ? `${record.name}: ${record.message}`
+        : record.message
+    }
+    try {
+      return JSON.stringify(error).slice(0, 1000)
+    } catch {
+      return String(error)
+    }
+  }
+  return String(error)
 }

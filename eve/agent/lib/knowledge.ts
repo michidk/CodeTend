@@ -92,7 +92,7 @@ export const knowledgeOutputSchema = {
     overview: {
       type: 'string',
       description:
-        'Markdown document (roughly 600-1500 words) with sections: Overview, Languages & frameworks, Architecture, Major subsystems (responsibility of each important directory/module), Domain concepts, Important workflows, Relationships between areas, Conventions. Ground every claim in files you actually read.',
+        'Markdown document (roughly 600-1500 words) with sections: Overview, Languages & frameworks, Architecture, Major subsystems (responsibility of each important directory/module), Domain concepts, Important workflows, Relationships between areas, Conventions & stated rules (with where they are written down), Testing & tooling (frameworks, layout, which commands CI runs). Ground every claim in files you actually read; never include secret values.',
     },
     languages: { type: 'array', items: { type: 'string' } },
     frameworks: { type: 'array', items: { type: 'string' } },
@@ -172,9 +172,9 @@ export function knowledgeAgentMessage(input: {
         : '',
       'Re-verify the sections that depend on changed or removed files against the current source, keep accurate sections, and extend the document for new areas. Source code is authoritative; never keep a claim the current files contradict.',
       '',
-      '```markdown',
+      '<previous-knowledge>',
       input.previous.overview,
-      '```',
+      '</previous-knowledge>',
     )
   } else {
     parts.push(

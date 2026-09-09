@@ -133,8 +133,18 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       })),
     )
 
+    const previousScan = await db.query.scans.findFirst({
+      where: and(
+        eq(scans.repositoryId, repository.id),
+        inArray(scans.status, ['completed', 'partial']),
+      ),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+      columns: { commitSha: true },
+    })
+
     await writeScanRequest({
       scanId,
+      previousCommitSha: previousScan?.commitSha ?? null,
       repositoryId: repository.id,
       repositoryName: repository.name,
       repositoryUrl: repository.url,

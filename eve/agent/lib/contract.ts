@@ -51,6 +51,8 @@ export interface ScanRequest {
   readonly branch: string
   readonly gitnexus: boolean
   readonly knowledge: PreviousKnowledge | null
+  /** Commit analyzed by the previous completed scan, if any. */
+  readonly previousCommitSha: string | null
   readonly scanners: readonly ScanRequestScanner[]
   readonly outputSchema: Record<string, unknown>
 }

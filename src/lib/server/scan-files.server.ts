@@ -34,6 +34,7 @@ export interface ScanRequestFile {
     readonly sources: readonly { path: string; hash: string }[]
     readonly fileCount: number | null
   } | null
+  readonly previousCommitSha: string | null
   readonly scanners: readonly {
     readonly id: string
     readonly name: string
