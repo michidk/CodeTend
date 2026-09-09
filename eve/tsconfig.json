@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node", "eve/workflow-modules"],
+    "paths": { "@/*": ["../src/*"] }
+  },
+  "include": [
+    "agent/**/*.ts",
+    "../src/lib/findings.ts",
+    "../src/lib/scanners.ts"
+  ]
+}

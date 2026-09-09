@@ -1,0 +1,235 @@
+import '@tanstack/react-start/server-only'
+
+import { and, eq, inArray } from 'drizzle-orm'
+import { db } from '@/db'
+import {
+  type Finding,
+  type FindingCounts,
+  findingOccurrences,
+  findings,
+} from '@/db/schema'
+import {
+  type FindingState,
+  OPEN_FINDING_STATES,
+  type ScannerFinding,
+  type ScannerResult,
+  SEVERITY_ORDER,
+} from '@/lib/findings'
+
+export interface ReconciledFinding {
+  readonly id: number
+  readonly state: FindingState
+  readonly finding: ScannerFinding
+}
+
+export interface ReconciliationOutcome {
+  readonly findings: readonly ReconciledFinding[]
+  readonly counts: FindingCounts
+}
+
+const EMPTY_COUNTS: FindingCounts = {
+  new: 0,
+  active: 0,
+  improved: 0,
+  resolved: 0,
+  regressed: 0,
+}
+
+/**
+ * Reconciles one scanner's fresh result with the persisted logical findings
+ * of the same repository and scanner. Matching happens by fingerprint (and by
+ * `previousFindingId` when the scanner verified a hypothesis):
+ *
+ * - unmatched result           → new
+ * - matched open finding       → active, improved (lower severity or scanner verdict) or regressed (higher severity)
+ * - matched resolved finding   → regressed
+ * - open finding not returned  → resolved (also when the scanner says so)
+ *
+ * This compares our own persisted results, never Git history.
+ */
+export async function reconcileScannerFindings(input: {
+  repositoryId: number
+  scanId: number
+  scannerId: string
+  result: ScannerResult
+}): Promise<ReconciliationOutcome> {
+  const existing = await db.query.findings.findMany({
+    where: and(
+      eq(findings.repositoryId, input.repositoryId),
+      eq(findings.scannerId, input.scannerId),
+    ),
+  })
+  const byFingerprint = new Map(
+    existing.map((finding) => [finding.fingerprint, finding]),
+  )
+  const byId = new Map(existing.map((finding) => [finding.id, finding]))
+  const verdictById = new Map(
+    input.result.hypothesisVerdicts.map((verdict) => [
+      verdict.previousFindingId,
+      verdict,
+    ]),
+  )
+
+  const reconciled: ReconciledFinding[] = []
+  const touched = new Set<number>()
+  const counts = { ...EMPTY_COUNTS }
+  const now = new Date()
+
+  for (const fresh of dedupeByFingerprint(input.result.findings)) {
+    const previous =
+      (fresh.previousFindingId
+        ? byId.get(fresh.previousFindingId)
+        : undefined) ?? byFingerprint.get(fresh.fingerprint)
+
+    if (!previous || touched.has(previous.id)) {
+      const [inserted] = await db
+        .insert(findings)
+        .values({
+          repositoryId: input.repositoryId,
+          scannerId: input.scannerId,
+          fingerprint: touched.has(previous?.id ?? -1)
+            ? `${fresh.fingerprint}-${input.scanId}`
+            : fresh.fingerprint,
+          state: 'new',
+          ...findingColumns(fresh),
+          firstSeenScanId: input.scanId,
+          lastSeenScanId: input.scanId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: findings.id })
+      if (!inserted) continue
+      touched.add(inserted.id)
+      await recordOccurrence(inserted.id, input.scanId, 'new', fresh)
+      counts.new += 1
+      reconciled.push({ id: inserted.id, state: 'new', finding: fresh })
+      continue
+    }
+
+    touched.add(previous.id)
+    const verdict = verdictById.get(previous.id)?.verdict
+    const state = nextStateForMatch(previous, fresh, verdict)
+    await db
+      .update(findings)
+      .set({
+        state,
+        ...findingColumns(fresh),
+        lastSeenScanId: input.scanId,
+        resolvedScanId: null,
+        updatedAt: now,
+      })
+      .where(eq(findings.id, previous.id))
+    await recordOccurrence(
+      previous.id,
+      input.scanId,
+      state,
+      fresh,
+      verdictById.get(previous.id)?.note,
+    )
+    counts[state] += 1
+    reconciled.push({ id: previous.id, state, finding: fresh })
+  }
+
+  const resolvedIds = existing
+    .filter(
+      (finding) =>
+        !touched.has(finding.id) && OPEN_FINDING_STATES.includes(finding.state),
+    )
+    .map((finding) => finding.id)
+  if (resolvedIds.length > 0) {
+    await db
+      .update(findings)
+      .set({ state: 'resolved', resolvedScanId: input.scanId, updatedAt: now })
+      .where(inArray(findings.id, resolvedIds))
+    for (const id of resolvedIds) {
+      const previous = byId.get(id)
+      if (!previous) continue
+      await db.insert(findingOccurrences).values({
+        findingId: id,
+        scanId: input.scanId,
+        state: 'resolved',
+        severity: previous.severity,
+        confidence: previous.confidence,
+        note: verdictById.get(id)?.note ?? null,
+      })
+    }
+    counts.resolved += resolvedIds.length
+  }
+
+  return { findings: reconciled, counts }
+}
+
+function nextStateForMatch(
+  previous: Finding,
+  fresh: ScannerFinding,
+  verdict: 'confirmed' | 'improved' | 'resolved' | undefined,
+): FindingState {
+  const previousRank = SEVERITY_ORDER[previous.severity]
+  const freshRank = SEVERITY_ORDER[fresh.severity]
+  if (previous.state === 'resolved') return 'regressed'
+  if (freshRank < previousRank) return 'regressed'
+  if (verdict === 'improved' || freshRank > previousRank) return 'improved'
+  return 'active'
+}
+
+function findingColumns(fresh: ScannerFinding) {
+  return {
+    title: fresh.title,
+    severity: fresh.severity,
+    confidence: fresh.confidence,
+    description: fresh.description,
+    whyItMatters: fresh.whyItMatters,
+    recommendation: fresh.recommendation,
+    effort: fresh.effort,
+    locations: fresh.locations,
+  }
+}
+
+async function recordOccurrence(
+  findingId: number,
+  scanId: number,
+  state: FindingState,
+  fresh: ScannerFinding,
+  note?: string,
+) {
+  await db
+    .insert(findingOccurrences)
+    .values({
+      findingId,
+      scanId,
+      state,
+      severity: fresh.severity,
+      confidence: fresh.confidence,
+      note: note ?? null,
+    })
+    .onConflictDoNothing()
+}
+
+function dedupeByFingerprint(
+  list: readonly ScannerFinding[],
+): ScannerFinding[] {
+  const seen = new Map<string, ScannerFinding>()
+  for (const finding of list) {
+    const current = seen.get(finding.fingerprint)
+    if (
+      !current ||
+      SEVERITY_ORDER[finding.severity] < SEVERITY_ORDER[current.severity]
+    ) {
+      seen.set(finding.fingerprint, finding)
+    }
+  }
+  return [...seen.values()]
+}
+
+export function sumCounts(list: readonly FindingCounts[]): FindingCounts {
+  return list.reduce<FindingCounts>(
+    (total, counts) => ({
+      new: total.new + counts.new,
+      active: total.active + counts.active,
+      improved: total.improved + counts.improved,
+      resolved: total.resolved + counts.resolved,
+      regressed: total.regressed + counts.regressed,
+    }),
+    EMPTY_COUNTS,
+  )
+}

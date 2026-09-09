@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tecdebt
+      POSTGRES_USER: tecdebt
+      POSTGRES_PASSWORD: tecdebt
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tecdebt -d tecdebt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      target: app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["bun", "run", "db:migrate"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://tecdebt:tecdebt@postgres:5432/tecdebt
+
+  eve:
+    build:
+      context: .
+      target: eve
+    restart: unless-stopped
+    expose:
+      - "2000"
+    environment:
+      PORT: "2000"
+      TECDEBT_DATA_DIR: /data
+      EVE_USERNAME: tecdebt
+      EVE_PASSWORD: ${EVE_PASSWORD:?Set EVE_PASSWORD in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      TECDEBT_MODEL: ${TECDEBT_MODEL:-claude-sonnet-5}
+      GITNEXUS_MCP_URL: ${GITNEXUS_MCP_URL:-}
+    volumes:
+      - scan_data:/data
+      - eve_state:/app/eve/.eve
+
+  app:
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      eve:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://tecdebt:tecdebt@postgres:5432/tecdebt
+      TECDEBT_DATA_DIR: /data
+      EVE_URL: http://eve:2000
+      EVE_USERNAME: tecdebt
+      EVE_PASSWORD: ${EVE_PASSWORD:?Set EVE_PASSWORD in .env}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-30}
+      # GitNexus runs in the app image and is reached by Eve over the shared network.
+      GITNEXUS_ENABLED: ${GITNEXUS_ENABLED:-false}
+    volumes:
+      - scan_data:/data
+
+volumes:
+  postgres_data:
+  scan_data:
+  eve_state:

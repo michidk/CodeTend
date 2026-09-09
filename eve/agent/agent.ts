@@ -1,0 +1,16 @@
+import { defineAgent } from 'eve'
+import { anthropicModel, MODEL_CONTEXT_WINDOW_TOKENS } from './lib/model'
+
+/**
+ * Root orchestrator. It never analyzes code itself: the tecdebt app sends one
+ * message per scan and the root calls the durable `run_scan` workflow tool.
+ */
+export default defineAgent({
+  model: anthropicModel(),
+  modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
+  defaultTools: false,
+  limits: {
+    maxInputTokensPerSession: false,
+    sessionTimeoutMs: 2 * 24 * 60 * 60 * 1_000,
+  },
+})

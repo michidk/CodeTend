@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/routes/**/*.tsx",
+    "src/routes/**/*.ts",
+    "src/router.tsx",
+    "src/server.ts",
+    "scripts/**/*.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "*.config.ts"],
+  "ignoreIssues": {
+    "src/components/ui/card.tsx": ["exports"],
+    "src/components/ui/table.tsx": ["exports"],
+    "src/components/ui/tooltip.tsx": ["exports"],
+    "src/components/ui/dialog.tsx": ["exports"],
+    "src/components/ui/chart-content.tsx": ["exports"]
+  },
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["tailwindcss"]
+}

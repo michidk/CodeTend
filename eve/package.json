@@ -1,0 +1,26 @@
+{
+  "name": "tecdebt-agent",
+  "private": true,
+  "type": "module",
+  "description": "Eve agent runtime for tecdebt repository health scans.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "eve build",
+    "start": "eve start --host 127.0.0.1 --port 2000",
+    "dev": "eve dev --no-ui --port 2000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.0",
+    "ai": "^7.0.82",
+    "eve": "0.52.3",
+    "just-bash": "^3.4.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.2"
+  }
+}

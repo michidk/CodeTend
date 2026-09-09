@@ -1,0 +1,22 @@
+node_modules
+.DS_Store
+dist
+*.local
+.env
+.nitro
+.tanstack
+.output
+.vinxi
+__unconfig*
+
+# Agent/session artifacts
+.artifacts/
+logs/
+
+# Eve runtime (workflow state, builds, sandbox cache)
+eve/.eve/
+eve/.output/
+eve/node_modules/
+
+# Scan workspaces (fresh clones and GitNexus indexes)
+/data/

@@ -1,0 +1,190 @@
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-deep: var(--deep);
+  --color-deep-foreground: var(--deep-foreground);
+  --color-positive: var(--positive);
+  --color-positive-foreground: var(--positive-foreground);
+  --color-positive-text: var(--positive-text);
+  --color-destructive-text: var(--destructive-text);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-link: var(--link);
+  --color-grade-a: var(--grade-a);
+  --color-grade-b: var(--grade-b);
+  --color-grade-c: var(--grade-c);
+  --color-grade-d: var(--grade-d);
+  --color-grade-f: var(--grade-f);
+  --shadow-deep: var(--deep-shadow);
+  --shadow-deep-strong: var(--deep-shadow-strong);
+  --shadow-control: var(--control-shadow);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    /* Slate paper surface, teal accent, deep ink. */
+    --background: #eef1f4;
+    --foreground: #1c2430;
+    --card: #ffffff;
+    --card-foreground: #1c2430;
+    --popover: #ffffff;
+    --popover-foreground: #1c2430;
+    --primary: #0f766e;
+    --primary-foreground: #f0fdfa;
+    --secondary: #f6f8fa;
+    --secondary-foreground: #1c2430;
+    --muted: #f3f5f7;
+    --muted-foreground: #5b6675;
+    --accent: #dcefec;
+    --accent-foreground: #0f5f59;
+    --destructive: #c2410c;
+    --border: #d8dee5;
+    --input: #7c8896;
+    --ring: #0f766e;
+    --chart-1: #0f766e;
+    --chart-2: #2563eb;
+    --chart-3: #b45309;
+    --chart-4: #7c3aed;
+    --chart-5: #be185d;
+    --radius: 1rem;
+    --deep: #1f2d3d;
+    --deep-foreground: #eef1f4;
+    --positive: #3f7d3a;
+    --positive-foreground: #eef7ec;
+    --positive-text: #2f6a2b;
+    --destructive-text: #9a3412;
+    --warning: #b45309;
+    --warning-text: #92400e;
+    --link: #0f5f59;
+    --grade-a: #2f7d32;
+    --grade-b: #4f8a2a;
+    --grade-c: #b7791f;
+    --grade-d: #c2410c;
+    --grade-f: #9f1239;
+    --page-texture: url("/paper-grain-light.svg");
+    --deep-shadow: 0 8px 24px -18px rgb(28 36 48 / 40%);
+    --deep-shadow-strong: 0 10px 30px -18px rgb(28 36 48 / 50%);
+    --control-shadow:
+      0 1px 1px rgb(28 36 48 / 8%), 0 3px 10px -7px rgb(28 36 48 / 40%);
+    --scrollbar-thumb: color-mix(in srgb, var(--deep) 45%, var(--background));
+    --scrollbar-thumb-hover: color-mix(
+      in srgb,
+      var(--deep) 65%,
+      var(--background)
+    );
+  }
+
+  .dark {
+    --background: #121821;
+    --foreground: #e6ebf1;
+    --card: #1a222d;
+    --card-foreground: #e6ebf1;
+    --popover: #1a222d;
+    --popover-foreground: #e6ebf1;
+    --primary: #2dd4bf;
+    --primary-foreground: #0b1a18;
+    --secondary: #212b38;
+    --secondary-foreground: #e6ebf1;
+    --muted: #1f2833;
+    --muted-foreground: #9aa6b5;
+    --accent: #173c3a;
+    --accent-foreground: #b5f1e8;
+    --destructive: #f97316;
+    --border: #2b3543;
+    --input: #7c8896;
+    --ring: #2dd4bf;
+    --chart-1: #2dd4bf;
+    --chart-2: #60a5fa;
+    --chart-3: #fbbf24;
+    --chart-4: #c084fc;
+    --chart-5: #f472b6;
+    --deep: #2dd4bf;
+    --deep-foreground: #0b1a18;
+    --positive: #6cbf62;
+    --positive-foreground: #0f1a0e;
+    --positive-text: #9fdc95;
+    --destructive-text: #fdba74;
+    --warning: #f59e0b;
+    --warning-text: #fcd34d;
+    --link: #5eead4;
+    --grade-a: #6cbf62;
+    --grade-b: #9ccc65;
+    --grade-c: #fbbf24;
+    --grade-d: #fb923c;
+    --grade-f: #fb7185;
+    --page-texture: url("/paper-grain-dark.svg");
+    --deep-shadow: 0 8px 24px -18px rgb(0 0 0 / 55%);
+    --deep-shadow-strong: 0 10px 30px -18px rgb(0 0 0 / 65%);
+    --control-shadow:
+      0 1px 1px rgb(0 0 0 / 22%), 0 3px 10px -7px rgb(0 0 0 / 75%);
+    --scrollbar-thumb: color-mix(in srgb, var(--deep) 45%, var(--background));
+    --scrollbar-thumb-hover: color-mix(
+      in srgb,
+      var(--deep) 65%,
+      var(--background)
+    );
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: light;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    background-image: var(--page-texture);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+
+  pre,
+  code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+}

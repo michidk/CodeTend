@@ -1,0 +1,44 @@
+import { Badge } from '@/components/ui/badge'
+import type { Confidence, FindingState, Severity } from '@/lib/findings'
+import { cn } from '@/lib/utils'
+
+const SEVERITY_CLASSES: Record<Severity, string> = {
+  critical: 'border-transparent bg-grade-f text-white',
+  high: 'border-transparent bg-grade-d text-white',
+  medium: 'border-transparent bg-grade-c text-white',
+  low: 'border-transparent bg-muted text-foreground',
+}
+
+export function SeverityBadge({ severity }: { readonly severity: Severity }) {
+  return (
+    <Badge className={cn('capitalize', SEVERITY_CLASSES[severity])}>
+      {severity}
+    </Badge>
+  )
+}
+
+export function ConfidenceBadge({
+  confidence,
+}: {
+  readonly confidence: Confidence
+}) {
+  return (
+    <Badge variant="outline" className="capitalize">
+      {confidence} confidence
+    </Badge>
+  )
+}
+
+const STATE_CLASSES: Record<FindingState, string> = {
+  new: 'border-transparent bg-accent text-accent-foreground',
+  active: 'border-transparent bg-secondary text-secondary-foreground',
+  improved: 'border-transparent bg-positive/15 text-positive-text',
+  resolved: 'border-transparent bg-positive text-positive-foreground',
+  regressed: 'border-transparent bg-destructive/15 text-destructive-text',
+}
+
+export function FindingStateBadge({ state }: { readonly state: FindingState }) {
+  return (
+    <Badge className={cn('capitalize', STATE_CLASSES[state])}>{state}</Badge>
+  )
+}
