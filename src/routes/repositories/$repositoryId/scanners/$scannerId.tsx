@@ -5,6 +5,7 @@ import { EntityNotFound } from '@/components/entity-not-found'
 import { FindingCard } from '@/components/health/finding-card'
 import { formatScore, scoreTextClass } from '@/components/health/grade-badge'
 import { ScannerScoreChart } from '@/components/health/trend-charts'
+import { Markdown } from '@/components/markdown'
 import { Page, PageHeader } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
@@ -56,7 +57,7 @@ function ScannerDetailPage() {
           <Link
             to="/repositories/$repositoryId"
             params={{ repositoryId: String(repository.id) }}
-            className="inline-flex items-center gap-1 text-link hover:underline"
+            className="inline-flex items-center gap-1 text-ink hover:underline"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             {repository.name}
@@ -66,13 +67,13 @@ function ScannerDetailPage() {
         description={scanner.description}
         size="compact"
         leading={
-          <div className="rounded-2xl bg-card px-4 py-3 text-center shadow-deep">
+          <div className="-rotate-3 rounded-2xl border-[3px] border-ink bg-card px-4 py-3 text-center shadow-toy">
             <p
-              className={`font-display text-4xl font-bold leading-none tabular-nums ${scoreTextClass(latestRun?.score)}`}
+              className={`font-display text-5xl font-bold leading-none tabular-nums ${scoreTextClass(latestRun?.score)}`}
             >
               {formatScore(latestRun?.score)}
             </p>
-            <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+            <p className="mt-1 text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
               score
             </p>
           </div>
@@ -85,12 +86,12 @@ function ScannerDetailPage() {
       />
 
       {latestRun?.status === 'failed' ? (
-        <Card className="border-destructive/40">
+        <Card className="bg-candy-pink text-ink">
           <CardContent className="text-sm">
-            <p className="font-semibold text-destructive-text">
+            <p className="font-extrabold">
               This scanner failed in the latest scan.
             </p>
-            <p className="mt-1 text-muted-foreground">{latestRun.error}</p>
+            <p className="mt-1 font-semibold">{latestRun.error}</p>
           </CardContent>
         </Card>
       ) : null}
@@ -116,9 +117,7 @@ function ScannerDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {latestRun?.summary ? (
-              <p className="whitespace-pre-wrap leading-relaxed">
-                {latestRun.summary}
-              </p>
+              <Markdown compact>{latestRun.summary}</Markdown>
             ) : (
               <p className="text-muted-foreground">
                 Appears after the first completed scan.
@@ -157,7 +156,7 @@ function ScannerDetailPage() {
                   contains the current findings and asks the agent to verify
                   them, follow the repository’s conventions and fix root causes.
                 </p>
-                <ScrollArea className="h-80 rounded-xl border bg-muted">
+                <ScrollArea className="h-80 rounded-2xl border-[3px] border-ink bg-muted shadow-toy-inset">
                   <pre className="whitespace-pre-wrap break-words p-4 text-xs leading-relaxed">
                     <code>{fixPrompt}</code>
                   </pre>

@@ -62,6 +62,7 @@ function DashboardPage() {
   return (
     <Page>
       <PageHeader
+        eyebrow="Playground"
         title="Repository health"
         description="Every registered repository, its latest grade and whether it is getting healthier or accumulating debt."
         help="Each scan clones the configured branch, runs every specialized scanner over the whole repository and scores the result deterministically from the findings."
@@ -75,11 +76,12 @@ function DashboardPage() {
           actionHref="/repositories/new"
         />
       ) : (
-        <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((row) => (
+        <div className="grid gap-5 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((row, index) => (
             <RepositoryCard
               key={row.id}
               row={row}
+              index={index}
               onScanNow={() => void scanNow(row)}
             />
           ))}
@@ -89,28 +91,43 @@ function DashboardPage() {
   )
 }
 
+const CARD_COLORS = [
+  'bg-candy-sun',
+  'bg-candy-sky',
+  'bg-candy-lime',
+  'bg-candy-pink',
+  'bg-candy-grape',
+] as const
+
 function RepositoryCard({
   row,
+  index,
   onScanNow,
 }: {
   readonly row: DashboardRow
+  readonly index: number
   readonly onScanNow: () => void
 }) {
   const latest = row.latestScan
+  const stripe = CARD_COLORS[index % CARD_COLORS.length]
   return (
-    <Card className="h-full">
+    <Card
+      className="h-full animate-pop-in pt-0 motion-reduce:animate-none"
+      style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
+    >
+      <div className={`h-3 border-b-[3px] border-ink ${stripe}`} />
       <CardContent className="flex h-full flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <Link
               to="/repositories/$repositoryId"
               params={{ repositoryId: String(row.id) }}
-              className="font-display text-lg font-bold leading-tight hover:underline"
+              className="font-display text-2xl font-bold leading-tight decoration-primary decoration-[3px] underline-offset-4 hover:underline"
             >
               {row.name}
             </Link>
             <p
-              className="mt-0.5 truncate text-xs text-muted-foreground"
+              className="mt-0.5 truncate text-xs font-semibold text-muted-foreground"
               title={row.url}
             >
               {row.url.replace(/^https?:\/\//, '')} · {row.branch}
@@ -119,20 +136,22 @@ function RepositoryCard({
           <GradeBadge grade={latest?.grade} />
         </div>
 
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex items-end justify-between gap-3 rounded-2xl border-[3px] border-ink bg-muted px-4 py-3 shadow-toy-inset">
           <div>
-            <p className="text-xs font-medium text-muted-foreground">Score</p>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
+              Score
+            </p>
             <p
-              className={`font-display text-4xl font-bold leading-none tabular-nums ${scoreTextClass(latest?.overallScore)}`}
+              className={`font-display text-5xl font-bold leading-none tabular-nums ${scoreTextClass(latest?.overallScore)}`}
             >
               {formatScore(latest?.overallScore)}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs font-medium text-muted-foreground">
-              Active findings
+            <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
+              Findings
             </p>
-            <p className="font-display text-2xl font-bold leading-none tabular-nums">
+            <p className="font-display text-3xl font-bold leading-none tabular-nums">
               {row.activeFindings}
             </p>
           </div>
@@ -152,7 +171,7 @@ function RepositoryCard({
           {!row.enabled ? <Badge variant="outline">schedule off</Badge> : null}
         </div>
 
-        <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/70 pt-3 text-xs">
+        <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 border-t-[3px] border-dashed border-ink/25 pt-3 text-xs font-semibold">
           <dt className="text-muted-foreground">Last scan</dt>
           <dd className="text-right tabular-nums">
             {formatRelative(row.lastScanAt)}
@@ -174,7 +193,7 @@ function RepositoryCard({
             onClick={onScanNow}
             disabled={row.runningScan !== null}
           >
-            <Play className="size-4" aria-hidden="true" />
+            <Play className="size-4" aria-hidden="true" strokeWidth={3} />
             {row.runningScan ? 'Scanning…' : 'Scan now'}
           </Button>
           <Button size="sm" variant="outline" asChild>

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { CopyButton } from '@/components/copy-button'
 import { EntityNotFound } from '@/components/entity-not-found'
+import { Markdown } from '@/components/markdown'
 import { Page, PageHeader } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
@@ -40,7 +41,7 @@ function KnowledgePage() {
           <Link
             to="/repositories/$repositoryId"
             params={{ repositoryId: String(repository.id) }}
-            className="inline-flex items-center gap-1 text-link hover:underline"
+            className="inline-flex items-center gap-1 text-ink hover:underline"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             {repository.name}
@@ -60,19 +61,19 @@ function KnowledgePage() {
         }
       />
       {!knowledge ? (
-        <Card>
-          <CardContent className="text-sm text-muted-foreground">
+        <Card className="bg-candy-sun text-ink">
+          <CardContent className="text-sm font-bold">
             Knowledge is built during the first scan.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
           <div className="space-y-3 sm:space-y-4">
-            <Card>
+            <Card className="bg-candy-sky text-ink">
               <CardHeader>
                 <CardTitle>Snapshot</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-1 text-sm">
+              <CardContent className="space-y-1 text-sm font-semibold">
                 <p>
                   Commit{' '}
                   <code className="text-xs">
@@ -84,7 +85,7 @@ function KnowledgePage() {
                 <p>Grounded in {knowledge.sources.length} source files</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-candy-sun text-ink">
               <CardHeader>
                 <CardTitle>Stack</CardTitle>
               </CardHeader>
@@ -93,7 +94,7 @@ function KnowledgePage() {
                   ...knowledge.summary.languages,
                   ...knowledge.summary.frameworks,
                 ].map((item) => (
-                  <Badge key={item} variant="secondary">
+                  <Badge key={item} variant="outline">
                     {item}
                   </Badge>
                 ))}
@@ -108,7 +109,7 @@ function KnowledgePage() {
                   {knowledge.summary.subsystems.map((subsystem) => (
                     <li key={subsystem.name}>
                       <p className="font-semibold">{subsystem.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         {subsystem.paths.join(', ')}
                       </p>
                       <p className="text-muted-foreground">
@@ -119,7 +120,7 @@ function KnowledgePage() {
                 </ul>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-candy-grape text-ink">
               <CardHeader>
                 <CardTitle>Domain concepts</CardTitle>
               </CardHeader>
@@ -134,9 +135,7 @@ function KnowledgePage() {
           </div>
           <Card className="lg:col-span-2">
             <CardContent>
-              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
-                {knowledge.overview}
-              </pre>
+              <Markdown className="text-sm">{knowledge.overview}</Markdown>
             </CardContent>
           </Card>
           <Card className="lg:col-span-3">

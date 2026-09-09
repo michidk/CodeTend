@@ -17,12 +17,18 @@ import {
 import { ScanStatusBadge } from '@/components/health/scan-status'
 import { ScoreDelta } from '@/components/health/score-delta'
 import { TrendCharts } from '@/components/health/trend-charts'
-import { Page, PageHeader } from '@/components/page-layout'
+import { Page, PageHeader, SectionHeading } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  interactiveCardLinkClassName,
+} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -183,8 +189,8 @@ function RepositoryPage() {
       />
 
       {running ? (
-        <Card className="border-accent bg-accent/40">
-          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
+        <Card className="bg-candy-sky">
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm font-semibold text-ink">
             <ScanStatusBadge status={running.status} phase={running.phase} />
             <span>
               Scan #{running.id} started{' '}
@@ -199,25 +205,24 @@ function RepositoryPage() {
         aria-label="Current health"
         className="grid gap-3 sm:gap-4 lg:grid-cols-3"
       >
-        <Card className="bg-deep text-deep-foreground shadow-deep-strong">
+        <Card className="bg-primary text-ink shadow-toy-lg">
           <CardContent className="space-y-3">
-            <p className="text-sm font-medium opacity-80">Overall score</p>
+            <p className="text-xs font-extrabold uppercase tracking-wide">
+              Overall score
+            </p>
             <div className="flex items-end gap-3">
-              <p className="font-display text-6xl font-bold leading-none tabular-nums">
+              <p className="font-display text-7xl font-bold leading-none tabular-nums">
                 {formatScore(latestScan?.overallScore)}
               </p>
-              <ScoreDelta
-                delta={delta}
-                className="mb-1 text-deep-foreground/90 [&_svg]:text-current"
-              />
+              <ScoreDelta delta={delta} className="mb-2 bg-card" />
             </div>
-            <p className="text-sm opacity-80">
+            <p className="text-sm font-bold">
               {latestScan?.grade
                 ? GRADE_DESCRIPTIONS[latestScan.grade as Grade]
                 : 'Run a scan to grade this repository.'}
             </p>
             {latestScan ? (
-              <p className="text-xs opacity-70">
+              <p className="text-xs font-semibold opacity-80">
                 Last scan {formatRelative(latestScan.finishedAt)} at{' '}
                 {shortSha(latestScan.commitSha)} · {latestScan.fileCount ?? '?'}{' '}
                 files
@@ -226,7 +231,7 @@ function RepositoryPage() {
             ) : null}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-candy-sun text-ink">
           <CardHeader>
             <CardTitle>Findings after the latest scan</CardTitle>
           </CardHeader>
@@ -237,27 +242,27 @@ function RepositoryPage() {
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-candy-grape text-ink">
           <CardHeader>
             <CardTitle>Repository knowledge</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-2 text-sm font-semibold">
             {knowledge ? (
               <>
                 <p>
-                  <span className="text-muted-foreground">Languages:</span>{' '}
+                  <span className="opacity-70">Languages:</span>{' '}
                   {knowledge.summary.languages.join(', ') || '–'}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Frameworks:</span>{' '}
+                  <span className="opacity-70">Frameworks:</span>{' '}
                   {knowledge.summary.frameworks.join(', ') || '–'}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Subsystems:</span>{' '}
+                  <span className="opacity-70">Subsystems:</span>{' '}
                   {knowledge.summary.subsystems.length} · grounded in{' '}
                   {knowledge.sourceCount} files
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs opacity-80">
                   Refreshed {formatRelative(knowledge.refreshedAt)} · stale
                   sections are re-verified when their source files change.
                 </p>
@@ -272,9 +277,7 @@ function RepositoryPage() {
                 </Button>
               </>
             ) : (
-              <p className="text-muted-foreground">
-                Built during the first scan.
-              </p>
+              <p className="opacity-80">Built during the first scan.</p>
             )}
           </CardContent>
         </Card>
@@ -286,10 +289,10 @@ function RepositoryPage() {
         aria-labelledby="scanners-heading"
         className="space-y-3 sm:space-y-4"
       >
-        <h2 id="scanners-heading" className="font-display text-lg font-bold">
+        <SectionHeading id="scanners-heading" color="bg-candy-sky">
           Scanner scores
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+        </SectionHeading>
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
           {enabledScanners.map((scanner) => {
             const run = scannerRuns.find(
               (entry) => entry.scannerId === scanner.id,
@@ -303,25 +306,25 @@ function RepositoryPage() {
                   repositoryId: String(repository.id),
                   scannerId: scanner.id,
                 }}
-                className="group rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={interactiveCardLinkClassName}
               >
                 <Card
                   size="sm"
-                  className="h-full transition-colors group-hover:border-primary/50"
+                  className="h-full transition-[box-shadow,background-color] duration-200 group-hover:bg-secondary group-hover:shadow-toy"
                 >
                   <CardContent className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-display font-bold leading-tight">
+                      <p className="font-display text-lg font-semibold leading-tight">
                         {scanner.name}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
                         {run?.status === 'failed'
                           ? 'Failed in the latest scan'
                           : `${open} open finding${open === 1 ? '' : 's'}`}
                       </p>
                     </div>
                     <p
-                      className={`font-display text-3xl font-bold tabular-nums ${scoreTextClass(run?.score)}`}
+                      className={`font-display text-4xl font-bold tabular-nums ${scoreTextClass(run?.score)}`}
                     >
                       {formatScore(run?.score)}
                     </p>
@@ -337,22 +340,22 @@ function RepositoryPage() {
         aria-labelledby="findings-heading"
         className="space-y-3 sm:space-y-4"
       >
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 id="findings-heading" className="font-display text-lg font-bold">
-            Active findings{' '}
-            <Badge variant="secondary">{openFindings.length}</Badge>
-          </h2>
-        </div>
+        <SectionHeading id="findings-heading" color="bg-candy-pink">
+          Active findings{' '}
+          <Badge variant="outline" className="ml-1 align-middle">
+            {openFindings.length}
+          </Badge>
+        </SectionHeading>
         {openFindings.length === 0 ? (
-          <Card>
-            <CardContent className="text-sm text-muted-foreground">
+          <Card className="bg-candy-lime text-ink">
+            <CardContent className="text-sm font-bold">
               {latestScan
-                ? 'No open findings. Nice.'
+                ? 'No open findings. Nice!'
                 : 'Findings appear after the first scan.'}
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {openFindings.map((finding) => (
               <FindingCard key={finding.id} finding={finding} showScanner />
             ))}
@@ -364,9 +367,9 @@ function RepositoryPage() {
         aria-labelledby="history-heading"
         className="space-y-3 sm:space-y-4"
       >
-        <h2 id="history-heading" className="font-display text-lg font-bold">
+        <SectionHeading id="history-heading" color="bg-candy-grape">
           Scan history
-        </h2>
+        </SectionHeading>
         <Card>
           <ScanHistoryTable history={history} />
         </Card>
@@ -407,8 +410,8 @@ function CountsGrid({
     label: string
     className: string
   }[] = [
-    { key: 'new', label: 'New', className: 'text-accent-foreground' },
-    { key: 'active', label: 'Still active', className: 'text-foreground' },
+    { key: 'new', label: 'New', className: 'text-link' },
+    { key: 'active', label: 'Active', className: 'text-foreground' },
     { key: 'improved', label: 'Improved', className: 'text-positive-text' },
     { key: 'resolved', label: 'Resolved', className: 'text-positive-text' },
     {
@@ -418,21 +421,26 @@ function CountsGrid({
     },
   ]
   return (
-    <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
-      <div className="rounded-xl bg-secondary px-2 py-2">
-        <p className="font-display text-2xl font-bold tabular-nums">
+    <div className="grid grid-cols-3 gap-2 text-center">
+      <div className="rounded-2xl border-[3px] border-ink bg-card px-2 py-2 shadow-toy-sm">
+        <p className="font-display text-3xl font-bold tabular-nums">
           {openTotal}
         </p>
-        <p className="text-[11px] font-semibold text-muted-foreground">Open</p>
+        <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+          Open
+        </p>
       </div>
       {entries.map((entry) => (
-        <div key={entry.key} className="rounded-xl bg-secondary px-2 py-2">
+        <div
+          key={entry.key}
+          className="rounded-2xl border-[3px] border-ink bg-card px-2 py-2 shadow-toy-sm"
+        >
           <p
-            className={`font-display text-2xl font-bold tabular-nums ${entry.className}`}
+            className={`font-display text-3xl font-bold tabular-nums ${entry.className}`}
           >
             {counts ? counts[entry.key] : '–'}
           </p>
-          <p className="text-[11px] font-semibold text-muted-foreground">
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
             {entry.label}
           </p>
         </div>
@@ -448,7 +456,7 @@ function ScanHistoryTable({
 }) {
   if (history.length === 0) {
     return (
-      <CardContent className="text-sm text-muted-foreground">
+      <CardContent className="text-sm font-semibold text-muted-foreground">
         No scans yet.
       </CardContent>
     )
@@ -475,7 +483,7 @@ function ScanHistoryTable({
               <Link
                 to="/scans/$scanId"
                 params={{ scanId: String(scan.id) }}
-                className="font-semibold text-link hover:underline"
+                className="font-extrabold text-link decoration-[3px] underline-offset-4 hover:underline"
               >
                 #{scan.id}
               </Link>
@@ -488,7 +496,7 @@ function ScanHistoryTable({
               <code className="text-xs">{shortSha(scan.commitSha)}</code>
             </TableCell>
             <TableCell
-              className={`text-right font-semibold tabular-nums ${scoreTextClass(scan.overallScore)}`}
+              className={`text-right font-display text-base font-bold tabular-nums ${scoreTextClass(scan.overallScore)}`}
             >
               {formatScore(scan.overallScore)}
               {scan.grade ? (

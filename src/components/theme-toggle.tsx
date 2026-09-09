@@ -21,7 +21,7 @@ export function ThemeToggle() {
           size="icon-sm"
           aria-label="Toggle color theme"
           disabled={!hasHydrated}
-          className="relative text-muted-foreground/70 hover:bg-transparent hover:text-foreground"
+          className="relative text-muted-foreground"
           onClick={() => {
             const isDark = document.documentElement.classList.contains('dark')
             setTheme(isDark ? 'light' : 'dark')

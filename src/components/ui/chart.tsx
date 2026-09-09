@@ -94,7 +94,7 @@ const ChartContainer = React.forwardRef<
               aria-hidden="true"
               className="absolute inset-0 h-full w-full bg-accent/70"
             />
-            <span className="relative rounded-full bg-card px-4 py-2 font-semibold text-muted-foreground shadow-deep">
+            <span className="relative rounded-full border-2 border-ink bg-card px-4 py-2 font-bold text-muted-foreground shadow-toy-sm">
               {renderStatus === 'loading'
                 ? 'Loading chart…'
                 : 'Chart unavailable'}

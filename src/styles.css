@@ -188,3 +188,106 @@
     font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   }
 }
+
+/* Model-authored markdown (knowledge overview, finding text). */
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown table {
+  margin-block: 0.6em;
+}
+
+.markdown-compact p,
+.markdown-compact ul,
+.markdown-compact ol {
+  margin-block: 0.35em;
+}
+
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+
+.markdown ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+
+.markdown li + li {
+  margin-top: 0.2em;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-block: 1.2em 0.4em;
+  line-height: 1.25;
+}
+
+.markdown-document h1 {
+  font-size: 1.5rem;
+}
+
+.markdown-document h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-document h3 {
+  font-size: 1.05rem;
+}
+
+.markdown-compact h1,
+.markdown-compact h2,
+.markdown-compact h3,
+.markdown-compact h4 {
+  font-size: 0.95rem;
+  margin-block: 0.8em 0.3em;
+}
+
+.markdown :not(pre) > code {
+  background: var(--muted);
+  border-radius: 0.375rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+
+.markdown blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.9em;
+  color: var(--muted-foreground);
+}
+
+.markdown th,
+.markdown td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.35em 0.6em;
+  vertical-align: top;
+}
+
+.markdown th {
+  font-weight: 600;
+}
+
+.markdown hr {
+  border-color: var(--border);
+  margin-block: 1.2em;
+}
+
+.markdown strong {
+  font-weight: 600;
+}
