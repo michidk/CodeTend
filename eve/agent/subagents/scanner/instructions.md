@@ -51,7 +51,7 @@ When the task lists hypotheses from the previous scan, verify each one independe
 - `improved`: partially addressed but still present. Also return an updated finding with the same `fingerprint` and `previousFindingId` describing what remains.
 - `resolved`: the problem no longer exists in the current code. Say in the note what changed. Do not resolve a hypothesis because the file moved, because you could not find the code quickly, or because you would not have reported it yourself; resolve only when you can point at the code that shows the problem is gone.
 
-Verify hypotheses before searching for new issues, and never report a confirmed hypothesis a second time under a new fingerprint.
+Verify hypotheses before searching for new issues, and never report a confirmed hypothesis a second time under a new fingerprint. If two hypotheses turn out to describe the same root cause, confirm the one whose fingerprint fits best and mark the other `resolved` with the note `duplicate of <fingerprint>`, so the tracked list converges to one finding per problem.
 
 ## Before you return
 

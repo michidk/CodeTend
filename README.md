@@ -88,10 +88,15 @@ runs on every scan as its own Eve subagent session with read-only filesystem
 access (`bash`, `read_file`, `glob`, `grep`) and, when available, GitNexus MCP
 tools.
 
-Architecture & Modularity · Abstraction Quality · DRY & Duplication · Dead &
-Obsolete Code · Complexity & Maintainability · Tests & Testability ·
-Reliability & Error Handling · Documentation & Understandability · Domain & API
-Design · Type Safety & Data Contracts · Consistency / Vibe Debt
+Architecture & Modularity · Duplication & Abstraction · Dead & Obsolete Code ·
+Complexity & Maintainability · Tests & Testability · Reliability & Error
+Handling · Documentation & Understandability · Domain & API Design · Type
+Safety & Data Contracts · Consistency / Vibe Debt · Dependencies & Build Health
+· Security Hygiene
+
+Each scanner's `prompt` names what it owns, which neighbouring dimensions own
+the adjacent concerns ("Not yours"), and how to calibrate severity, so the same
+problem is not reported (and scored) by two scanners.
 
 ### Adding a scanner
 
@@ -101,6 +106,11 @@ scoring, charts, scanner pages and fix prompts iterate the registry. The
 shared analysis contract (evidence-first, language-agnostic, structured
 findings, hypothesis verification) lives in
 [`eve/agent/subagents/scanner/instructions.md`](eve/agent/subagents/scanner/instructions.md).
+
+Removing or merging a scanner needs a data migration as well, because findings
+are keyed by `scanner_id`: re-parent the old scanner's rows onto the surviving
+scanner (see `drizzle/0001_merge_abstraction_into_duplication.sql`) so they are
+handed back as hypotheses instead of being orphaned.
 
 ## Scoring
 

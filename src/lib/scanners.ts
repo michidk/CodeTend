@@ -37,33 +37,19 @@ Yours is the shape of the module graph: which module depends on which, and who o
 Calibrate: a structure is a finding when it will hurt the next ten changes, not when it merely differs from a layout you prefer. Name the boundary that is violated and the concrete imports or calls that violate it.`,
   },
   {
-    id: 'abstraction',
-    name: 'Abstraction Quality',
-    shortName: 'Abstraction',
-    description:
-      'Over-abstraction, under-abstraction, unnecessary indirection, leaky and competing abstractions.',
-    weight: 1,
-    enabled: true,
-    fixPromptTitle: 'Improve Abstractions',
-    prompt: `Review the quality of the abstractions in the repository: whether the named concepts (interfaces, base classes, generic layers, helpers, wrappers, plugins) earn their existence and whether important concepts that recur in many shapes still lack a name.
-Look for: over-abstraction (interfaces with one implementation, factories/strategies/plugins with no variation, deep inheritance or generic layers that only forward calls), unnecessary indirection (wrappers, adapters and helpers that add nothing over what they wrap), leaky abstractions (callers must know implementation details to use them correctly, or the abstraction exposes its dependencies), competing abstractions (two or more abstractions for the same concept that coexist), and under-abstraction only when a concept appears in several *different* shapes across the codebase so that no single extraction of copies would name it.
-Not yours: two or more near-identical copies of the same code (Duplication owns anything whose fix is "extract the copies into one function"), an existing shared helper that some call sites bypass (Consistency), the naming and contracts of domain types and public APIs (Domain & API Design), or the size and control flow of a function (Complexity).
-Calibrate: for every finding, name the concept that should exist or be removed and where it is currently expressed. Do not propose abstractions for variation that does not exist yet.`,
-  },
-  {
     id: 'duplication',
-    name: 'DRY & Duplication',
+    name: 'Duplication & Abstraction',
     shortName: 'Duplication',
     description:
-      'Semantic duplication, repeated business logic, validation, models and parallel implementations.',
-    weight: 1,
+      'Semantic duplication, parallel implementations, unnamed recurring concepts, and abstractions that do not earn their place.',
+    weight: 1.25,
     enabled: true,
-    fixPromptTitle: 'Reduce Duplication',
-    prompt: `Find meaningful semantic duplication in the repository: the same logic implemented more than once where no shared implementation exists, so that the copies must evolve together.
-Focus on duplicated business rules, validation logic, data models/DTOs that describe the same thing, parallel implementations of the same behavior (two clients for the same service, two parsers for the same format, two ways to compute the same value), and copy-pasted procedures. Highlight where the copies have already drifted or where drift would be dangerous.
-Ignore trivial textual repetition, boilerplate required by the language or framework, and test-fixture repetition unless it hides real drift.
-Not yours: call sites that skip an existing shared helper and inline their own version (Consistency owns bypassed conventions), a concept that recurs in genuinely different shapes and needs a new abstraction rather than a merge of copies (Abstraction), or two competing designs for the same domain entity (Domain & API Design).
-Calibrate: use search aggressively (identical identifiers, similar function names, repeated string literals and error messages, similar shapes) to confirm duplication rather than guessing from one file. One finding per duplicated concept, with every copy listed as a location; state clearly why the locations are the same logic.`,
+    fixPromptTitle: 'Reduce Duplication & Improve Abstractions',
+    prompt: `Find meaningful semantic duplication in the repository and judge whether its abstractions earn their existence. These are two sides of one question: is each concept expressed exactly once, under a name that fits?
+Duplication: the same logic implemented more than once where no shared implementation exists, so that the copies must evolve together. Focus on duplicated business rules, validation logic, data models/DTOs that describe the same thing, parallel implementations of the same behavior (two clients for the same service, two parsers for the same format, two ways to compute the same value), copy-pasted procedures, and concepts that recur in several *different* shapes so that no single extraction would name them. Highlight where the copies have already drifted or where drift would be dangerous. Ignore trivial textual repetition, boilerplate required by the language or framework, and test-fixture repetition unless it hides real drift.
+Abstraction: over-abstraction (interfaces with one implementation, factories/strategies/plugins with no variation, deep inheritance or generic layers that only forward calls), unnecessary indirection (wrappers, adapters and helpers that add nothing over what they wrap), leaky abstractions (callers must know implementation details to use them correctly), and competing abstractions (two or more abstractions for the same concept that coexist).
+Not yours: call sites that skip an existing shared helper and inline their own version (Consistency owns bypassed conventions), two competing designs for the same domain entity or public contract (Domain & API Design), the module dependency graph and layering (Architecture), or the size and control flow of a single function (Complexity).
+Calibrate: use search aggressively (identical identifiers, similar function names, repeated string literals and error messages, similar shapes) to confirm duplication rather than guessing from one file. One finding per duplicated or misplaced concept, with every copy or layer listed as a location; state clearly why the locations are the same logic, name the concept that should exist or be removed, and do not propose abstractions for variation that does not exist yet.`,
   },
   {
     id: 'dead-code',
@@ -176,8 +162,38 @@ Calibrate: do not demand types for their own sake; report where a weak or untrut
     fixPromptTitle: 'Restore Consistency',
     prompt: `Review whether the repository feels like one coherent system built with shared conventions.
 Identify the dominant convention for each concern first (how data is fetched, how errors are handled, how components/modules/tests are structured, how configuration is accessed, how user-facing text is formatted, how logging is done, naming and file layout). Then look for: multiple patterns solving the same problem side by side, old and new approaches coexisting without a migration being finished, shared utilities or abstractions that exist but are bypassed in some places with local re-implementations, inconsistent terminology for the same domain object, and locally reasonable implementations that conflict with repository-wide conventions.
-Yours is the deviation from an established convention and the fragmentation it causes. Not yours: copies of logic where no shared implementation exists (Duplication), inconsistent shapes in public or domain contracts (Domain & API Design), the module dependency structure (Architecture), or the quality of an abstraction in isolation (Abstraction).
+Yours is the deviation from an established convention and the fragmentation it causes. Not yours: copies of logic where no shared implementation exists (Duplication), inconsistent shapes in public or domain contracts (Domain & API Design), the module dependency structure (Architecture), or the quality of an abstraction in isolation (Duplication & Abstraction).
 Calibrate: one finding per fragmented concern, naming the dominant convention, the deviating sites and the direction to converge in (usually towards the dominant pattern, unless the repository is visibly migrating away from it). Never speculate about who or what wrote the code; judge only the code itself.`,
+  },
+  {
+    id: 'dependencies',
+    name: 'Dependencies & Build Health',
+    shortName: 'Dependencies',
+    description:
+      'Third-party dependencies, lockfiles, build and CI configuration, toolchain and script hygiene.',
+    weight: 0.75,
+    enabled: true,
+    fixPromptTitle: 'Fix Dependency & Build Issues',
+    prompt: `Review the repository's dependencies, build configuration and developer tooling as they are declared in the checkout: manifests, lockfiles, build scripts, task runners, CI and container definitions.
+Look for: the same capability provided by several competing libraries (two HTTP clients, two date libraries, two test runners), multiple major versions of one package pulled in at once, dependencies declared but never imported or imported but never declared, unpinned or wildly ranged versions where the ecosystem expects pinning, a missing or out-of-sync lockfile, packages the repository itself marks as deprecated or that have a well-known successor, vendored or copied third-party code, build and CI steps that disagree with each other or with the documented workflow (CI runs different commands than the contributor docs, scripts that duplicate one another, checks configured but not enforced), toolchain versions declared inconsistently across files (engine fields, version files, container base images, CI matrices), and dependency scope mistakes (test or build tools shipped as runtime dependencies).
+You cannot access the network, so do not claim a package is outdated or vulnerable unless the repository's own files say so (audit reports, renovate/dependabot configuration, changelogs, comments). Judge from structure and consistency, not from version numbers you would have to look up.
+Not yours: dead application code (Dead & Obsolete Code owns unused source; you own unused *dependencies*), documentation that is stale but unrelated to setup and build (Documentation), or code-level inconsistency (Consistency).
+Calibrate: group findings by concern (one finding for "competing HTTP clients", not one per import), name the canonical choice the repository should converge on, and reserve high severity for problems that break or silently change builds.`,
+  },
+  {
+    id: 'security',
+    name: 'Security Hygiene',
+    shortName: 'Security',
+    description:
+      'Secrets handling, insecure defaults, missing sanitization and dangerous constructs visible in the source.',
+    weight: 1.25,
+    enabled: true,
+    fixPromptTitle: 'Fix Security Hygiene Issues',
+    prompt: `Review security hygiene as it is visible in the source: this is a code-health review of how the repository handles secrets and trust, not a penetration test or a vulnerability scan.
+Look for: credentials, tokens, private keys or connection strings committed in code, configuration, fixtures or history-visible files; secrets that leak through logging, debug output, serialization or error messages (for example a config struct that derives a debug/serialize representation over a password); insecure defaults (debug mode, permissive CORS, disabled TLS verification, wildcard hosts, default passwords) that ship unless overridden; missing or inconsistent sanitization and escaping at trust boundaries (user input reaching shell commands, SQL, HTML, file paths, deserializers or redirects); dangerous constructs used casually (eval-style execution, unsafe deserialization, weak or home-grown cryptography, predictable randomness for security-relevant values); authentication and authorization checks that are applied inconsistently across similar entry points; and security-relevant behavior that is implemented but not covered by any test.
+Never copy a secret value into a finding; refer to it by kind and location only. Do not report generic hardening advice that the repository's stated scope does not call for (a local CLI does not need rate limiting).
+Not yours: crashes or hangs that are not security-relevant (Reliability), type-level weaknesses without a security consequence (Type Safety & Data Contracts), or missing tests in general (Tests & Testability).
+Calibrate: trace how an attacker or an accident would exploit each finding and what they would gain; reserve critical for exposures reachable today (a live secret in the repository, an unauthenticated destructive endpoint) and high for insecure defaults that will bite on the first real deployment.`,
   },
 ]
 
