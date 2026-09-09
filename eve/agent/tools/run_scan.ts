@@ -24,6 +24,7 @@ import {
 } from '../lib/steps'
 
 const SCANNER_ATTEMPTS = 2
+const SCANNER_CONCURRENCY = 4
 
 interface Progress {
   readonly phase: string
@@ -130,64 +131,74 @@ export default defineWorkflowTool({
 
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.
-    const outcomes: ScannerOutcome[] = await Promise.all(
-      request.scanners.map(async (scanner): Promise<ScannerOutcome> => {
-        const startedAt = await nowIso()
-        const message = scannerAgentMessage({
-          scanner,
-          siblingScanners: request.scanners,
-          repoPath,
-          repositoryName: request.repositoryName,
-          workspace,
-          knowledge,
-          gitnexusRepo,
-          previousCommitSha: request.previousCommitSha ?? null,
-        })
-        try {
-          let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
-          let lastError: unknown
-          // Launching a dozen subagents at once occasionally trips a transient
-          // start failure inside the runtime; one retry with a fresh key
-          // (keys must be unique per run) recovers it.
-          for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+    const outcomes: ScannerOutcome[] = []
+    for (
+      let start = 0;
+      start < request.scanners.length;
+      start += SCANNER_CONCURRENCY
+    ) {
+      const batch = request.scanners.slice(start, start + SCANNER_CONCURRENCY)
+      outcomes.push(
+        ...(await Promise.all(
+          batch.map(async (scanner): Promise<ScannerOutcome> => {
+            const startedAt = await nowIso()
+            const message = scannerAgentMessage({
+              scanner,
+              siblingScanners: request.scanners,
+              repoPath,
+              repositoryName: request.repositoryName,
+              workspace,
+              knowledge,
+              gitnexusRepo,
+              previousCommitSha: request.previousCommitSha ?? null,
+            })
             try {
-              result = await ctx.agent({
-                key:
-                  attempt === 0
-                    ? `scanner:${scanner.id}`
-                    : `scanner:${scanner.id}:retry${attempt}`,
-                target: 'scanner',
-                message,
-                outputSchema: request.outputSchema as JsonObject,
-              })
-              lastError = undefined
-              break
+              let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
+              let lastError: unknown
+              // Launching a dozen subagents at once occasionally trips a transient
+              // start failure inside the runtime; one retry with a fresh key
+              // (keys must be unique per run) recovers it.
+              for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+                try {
+                  result = await ctx.agent({
+                    key:
+                      attempt === 0
+                        ? `scanner:${scanner.id}`
+                        : `scanner:${scanner.id}:retry${attempt}`,
+                    target: 'scanner',
+                    message,
+                    outputSchema: request.outputSchema as JsonObject,
+                  })
+                  lastError = undefined
+                  break
+                } catch (error) {
+                  lastError = error
+                }
+              }
+              if (lastError !== undefined) throw lastError
+              return {
+                scannerId: scanner.id,
+                status: result ? 'completed' : 'failed',
+                result: result ?? undefined,
+                error: result
+                  ? undefined
+                  : 'Scanner returned no structured output.',
+                startedAt,
+                finishedAt: await nowIso(),
+              }
             } catch (error) {
-              lastError = error
+              return {
+                scannerId: scanner.id,
+                status: 'failed',
+                error: describeError(error),
+                startedAt,
+                finishedAt: await nowIso(),
+              }
             }
-          }
-          if (lastError !== undefined) throw lastError
-          return {
-            scannerId: scanner.id,
-            status: result ? 'completed' : 'failed',
-            result: result ?? undefined,
-            error: result
-              ? undefined
-              : 'Scanner returned no structured output.',
-            startedAt,
-            finishedAt: await nowIso(),
-          }
-        } catch (error) {
-          return {
-            scannerId: scanner.id,
-            status: 'failed',
-            error: describeError(error),
-            startedAt,
-            finishedAt: await nowIso(),
-          }
-        }
-      }),
-    )
+          }),
+        )),
+      )
+    }
 
     const persisting: Progress = { phase: 'persisting' }
     yield persisting
