@@ -112,7 +112,7 @@ export function RepositoryForm({
                   update('name', suggestName(event.target.value))
               }}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs font-semibold text-muted-foreground">
               Anything <code>git clone</code> accepts from the app host. Private
               repositories need credentials in the URL or the host’s Git
               configuration.

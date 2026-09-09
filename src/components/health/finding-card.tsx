@@ -106,10 +106,10 @@ function Section({
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
-      <Markdown compact className="mt-1">
+      <Markdown compact className="mt-1 font-medium">
         {children}
       </Markdown>
     </div>

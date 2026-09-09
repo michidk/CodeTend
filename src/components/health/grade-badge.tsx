@@ -59,5 +59,5 @@ export function scoreTextClass(score: number | null | undefined): string {
 }
 
 export function formatScore(score: number | null | undefined): string {
-  return score == null ? '–' : score.toFixed(score % 1 === 0 ? 0 : 1)
+  return score == null ? '?' : score.toFixed(score % 1 === 0 ? 0 : 1)
 }
