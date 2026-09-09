@@ -3,10 +3,10 @@ import type { Confidence, FindingState, Severity } from '@/lib/findings'
 import { cn } from '@/lib/utils'
 
 const SEVERITY_CLASSES: Record<Severity, string> = {
-  critical: 'bg-destructive text-white',
-  high: 'bg-primary text-ink',
-  medium: 'bg-candy-sun text-ink',
-  low: 'bg-muted text-foreground',
+  critical: 'border-transparent bg-grade-f text-white',
+  high: 'border-transparent bg-grade-d text-white',
+  medium: 'border-transparent bg-grade-c text-white',
+  low: 'border-transparent bg-muted text-foreground',
 }
 
 export function SeverityBadge({ severity }: { readonly severity: Severity }) {
@@ -30,11 +30,11 @@ export function ConfidenceBadge({
 }
 
 const STATE_CLASSES: Record<FindingState, string> = {
-  new: 'bg-candy-sky text-ink',
-  active: 'bg-secondary text-secondary-foreground',
-  improved: 'bg-candy-lime/50 text-ink',
-  resolved: 'bg-candy-lime text-ink',
-  regressed: 'bg-candy-pink text-ink',
+  new: 'border-transparent bg-accent text-accent-foreground',
+  active: 'border-transparent bg-secondary text-secondary-foreground',
+  improved: 'border-transparent bg-positive/15 text-positive-text',
+  resolved: 'border-transparent bg-positive text-positive-foreground',
+  regressed: 'border-transparent bg-destructive/15 text-destructive-text',
 }
 
 export function FindingStateBadge({ state }: { readonly state: FindingState }) {

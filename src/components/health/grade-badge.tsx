@@ -2,22 +2,13 @@ import type { Grade } from '@/lib/scoring'
 import { cn } from '@/lib/utils'
 
 const GRADE_CLASSES: Record<Grade, string> = {
-  A: 'bg-grade-a text-ink',
-  B: 'bg-grade-b text-ink',
-  C: 'bg-grade-c text-ink',
-  D: 'bg-grade-d text-ink',
-  F: 'bg-grade-f text-ink',
+  A: 'bg-grade-a text-white',
+  B: 'bg-grade-b text-white',
+  C: 'bg-grade-c text-white',
+  D: 'bg-grade-d text-white',
+  F: 'bg-grade-f text-white',
 }
 
-const GRADE_TILT: Record<Grade, string> = {
-  A: '-rotate-6',
-  B: 'rotate-3',
-  C: '-rotate-3',
-  D: 'rotate-6',
-  F: '-rotate-6',
-}
-
-/** A chunky letter block, like a wooden alphabet cube, tilted per grade. */
 export function GradeBadge({
   grade,
   size = 'default',
@@ -33,18 +24,15 @@ export function GradeBadge({
       role="img"
       aria-label={known ? `Grade ${known}` : 'Not graded yet'}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center border-ink font-display font-bold tabular-nums leading-none transition-transform duration-300 ease-spring hover:rotate-0 hover:scale-105 motion-reduce:transition-none',
-        size === 'sm' && 'size-9 rounded-xl border-2 text-lg shadow-toy-sm',
-        size === 'default' &&
-          'size-12 rounded-2xl border-[3px] text-2xl shadow-toy-sm',
-        size === 'lg' &&
-          'size-24 rounded-[1.5rem] border-4 text-6xl shadow-toy-lg',
-        known ? GRADE_TILT[known] : 'rotate-0',
+        'inline-flex shrink-0 items-center justify-center rounded-xl font-display font-extrabold tabular-nums leading-none',
+        size === 'sm' && 'size-8 text-base',
+        size === 'default' && 'size-11 text-xl',
+        size === 'lg' && 'size-20 text-5xl',
         known ? GRADE_CLASSES[known] : 'bg-muted text-muted-foreground',
         className,
       )}
     >
-      {known ?? '?'}
+      {known ?? '–'}
     </span>
   )
 }
@@ -59,5 +47,5 @@ export function scoreTextClass(score: number | null | undefined): string {
 }
 
 export function formatScore(score: number | null | undefined): string {
-  return score == null ? '?' : score.toFixed(score % 1 === 0 ? 0 : 1)
+  return score == null ? '–' : score.toFixed(score % 1 === 0 ? 0 : 1)
 }

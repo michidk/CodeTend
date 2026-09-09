@@ -38,13 +38,13 @@ const components: ComponentProps<typeof ReactMarkdown>['components'] = {
       {...props}
       target="_blank"
       rel="noreferrer"
-      className="font-bold text-link underline decoration-2 underline-offset-2 hover:text-foreground"
+      className="font-semibold text-link underline underline-offset-2 hover:text-foreground"
     />
   ),
   pre: ({ node: _node, ...props }) => (
     <pre
       {...props}
-      className="overflow-x-auto rounded-2xl border-[3px] border-ink bg-muted p-3 text-xs leading-relaxed shadow-toy-inset"
+      className="overflow-x-auto rounded-lg border border-border bg-muted p-3 text-xs leading-relaxed"
     />
   ),
   table: ({ node: _node, ...props }) => (

@@ -189,8 +189,8 @@ function RepositoryPage() {
       />
 
       {running ? (
-        <Card className="bg-candy-sky">
-          <CardContent className="flex flex-wrap items-center gap-3 text-sm font-semibold text-ink">
+        <Card className="border-accent bg-accent/40">
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
             <ScanStatusBadge status={running.status} phase={running.phase} />
             <span>
               Scan #{running.id} started{' '}
@@ -205,24 +205,25 @@ function RepositoryPage() {
         aria-label="Current health"
         className="grid gap-3 sm:gap-4 lg:grid-cols-3"
       >
-        <Card className="bg-primary text-ink shadow-toy-lg">
+        <Card className="bg-deep text-deep-foreground shadow-deep-strong">
           <CardContent className="space-y-3">
-            <p className="text-xs font-extrabold uppercase tracking-wide">
-              Overall score
-            </p>
+            <p className="text-sm font-medium opacity-80">Overall score</p>
             <div className="flex items-end gap-3">
-              <p className="font-display text-7xl font-bold leading-none tabular-nums">
+              <p className="font-display text-6xl font-bold leading-none tabular-nums">
                 {formatScore(latestScan?.overallScore)}
               </p>
-              <ScoreDelta delta={delta} className="mb-2 bg-card" />
+              <ScoreDelta
+                delta={delta}
+                className="mb-1 text-deep-foreground/90 [&_svg]:text-current"
+              />
             </div>
-            <p className="text-sm font-bold">
+            <p className="text-sm opacity-80">
               {latestScan?.grade
                 ? GRADE_DESCRIPTIONS[latestScan.grade as Grade]
                 : 'Run a scan to grade this repository.'}
             </p>
             {latestScan ? (
-              <p className="text-xs font-semibold opacity-80">
+              <p className="text-xs opacity-70">
                 Last scan {formatRelative(latestScan.finishedAt)} at{' '}
                 {shortSha(latestScan.commitSha)} · {latestScan.fileCount ?? '?'}{' '}
                 files
@@ -231,7 +232,7 @@ function RepositoryPage() {
             ) : null}
           </CardContent>
         </Card>
-        <Card className="bg-candy-sun text-ink">
+        <Card>
           <CardHeader>
             <CardTitle>Findings after the latest scan</CardTitle>
           </CardHeader>
@@ -242,27 +243,27 @@ function RepositoryPage() {
             />
           </CardContent>
         </Card>
-        <Card className="bg-candy-grape text-ink">
+        <Card>
           <CardHeader>
             <CardTitle>Repository knowledge</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm font-semibold">
+          <CardContent className="space-y-2 text-sm">
             {knowledge ? (
               <>
                 <p>
-                  <span className="opacity-70">Languages:</span>{' '}
+                  <span className="text-muted-foreground">Languages:</span>{' '}
                   {knowledge.summary.languages.join(', ') || '–'}
                 </p>
                 <p>
-                  <span className="opacity-70">Frameworks:</span>{' '}
+                  <span className="text-muted-foreground">Frameworks:</span>{' '}
                   {knowledge.summary.frameworks.join(', ') || '–'}
                 </p>
                 <p>
-                  <span className="opacity-70">Subsystems:</span>{' '}
+                  <span className="text-muted-foreground">Subsystems:</span>{' '}
                   {knowledge.summary.subsystems.length} · grounded in{' '}
                   {knowledge.sourceCount} files
                 </p>
-                <p className="text-xs opacity-80">
+                <p className="text-xs text-muted-foreground">
                   Refreshed {formatRelative(knowledge.refreshedAt)} · stale
                   sections are re-verified when their source files change.
                 </p>
@@ -277,7 +278,9 @@ function RepositoryPage() {
                 </Button>
               </>
             ) : (
-              <p className="opacity-80">Built during the first scan.</p>
+              <p className="text-muted-foreground">
+                Built during the first scan.
+              </p>
             )}
           </CardContent>
         </Card>
@@ -310,21 +313,21 @@ function RepositoryPage() {
               >
                 <Card
                   size="sm"
-                  className="h-full transition-[box-shadow,background-color] duration-200 group-hover:bg-secondary group-hover:shadow-toy"
+                  className="h-full transition-colors group-hover:border-primary/50"
                 >
                   <CardContent className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-display text-lg font-semibold leading-tight">
+                      <p className="font-display font-bold leading-tight">
                         {scanner.name}
                       </p>
-                      <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         {run?.status === 'failed'
                           ? 'Failed in the latest scan'
                           : `${open} open finding${open === 1 ? '' : 's'}`}
                       </p>
                     </div>
                     <p
-                      className={`font-display text-4xl font-bold tabular-nums ${scoreTextClass(run?.score)}`}
+                      className={`font-display text-3xl font-bold tabular-nums ${scoreTextClass(run?.score)}`}
                     >
                       {formatScore(run?.score)}
                     </p>
@@ -347,15 +350,15 @@ function RepositoryPage() {
           </Badge>
         </SectionHeading>
         {openFindings.length === 0 ? (
-          <Card className="bg-candy-lime text-ink">
-            <CardContent className="text-sm font-bold">
+          <Card>
+            <CardContent className="text-sm text-muted-foreground">
               {latestScan
-                ? 'No open findings. Nice!'
+                ? 'No open findings. Nice.'
                 : 'Findings appear after the first scan.'}
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {openFindings.map((finding) => (
               <FindingCard key={finding.id} finding={finding} showScanner />
             ))}
@@ -422,25 +425,20 @@ function CountsGrid({
   ]
   return (
     <div className="grid grid-cols-3 gap-2 text-center">
-      <div className="rounded-2xl border-[3px] border-ink bg-card px-2 py-2 shadow-toy-sm">
-        <p className="font-display text-3xl font-bold tabular-nums">
+      <div className="rounded-xl bg-secondary px-2 py-2">
+        <p className="font-display text-2xl font-bold tabular-nums">
           {openTotal}
         </p>
-        <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
-          Open
-        </p>
+        <p className="text-[11px] font-semibold text-muted-foreground">Open</p>
       </div>
       {entries.map((entry) => (
-        <div
-          key={entry.key}
-          className="rounded-2xl border-[3px] border-ink bg-card px-2 py-2 shadow-toy-sm"
-        >
+        <div key={entry.key} className="rounded-xl bg-secondary px-2 py-2">
           <p
-            className={`font-display text-3xl font-bold tabular-nums ${entry.className}`}
+            className={`font-display text-2xl font-bold tabular-nums ${entry.className}`}
           >
             {counts ? counts[entry.key] : '–'}
           </p>
-          <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-semibold text-muted-foreground">
             {entry.label}
           </p>
         </div>

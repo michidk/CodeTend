@@ -41,7 +41,7 @@ function KnowledgePage() {
           <Link
             to="/repositories/$repositoryId"
             params={{ repositoryId: String(repository.id) }}
-            className="inline-flex items-center gap-1 text-ink hover:underline"
+            className="inline-flex items-center gap-1 text-link hover:underline"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             {repository.name}
@@ -61,19 +61,19 @@ function KnowledgePage() {
         }
       />
       {!knowledge ? (
-        <Card className="bg-candy-sun text-ink">
-          <CardContent className="text-sm font-bold">
+        <Card>
+          <CardContent className="text-sm text-muted-foreground">
             Knowledge is built during the first scan.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
           <div className="space-y-3 sm:space-y-4">
-            <Card className="bg-candy-sky text-ink">
+            <Card>
               <CardHeader>
                 <CardTitle>Snapshot</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-1 text-sm font-semibold">
+              <CardContent className="space-y-1 text-sm">
                 <p>
                   Commit{' '}
                   <code className="text-xs">
@@ -85,7 +85,7 @@ function KnowledgePage() {
                 <p>Grounded in {knowledge.sources.length} source files</p>
               </CardContent>
             </Card>
-            <Card className="bg-candy-sun text-ink">
+            <Card>
               <CardHeader>
                 <CardTitle>Stack</CardTitle>
               </CardHeader>
@@ -94,7 +94,7 @@ function KnowledgePage() {
                   ...knowledge.summary.languages,
                   ...knowledge.summary.frameworks,
                 ].map((item) => (
-                  <Badge key={item} variant="outline">
+                  <Badge key={item} variant="secondary">
                     {item}
                   </Badge>
                 ))}
@@ -109,7 +109,7 @@ function KnowledgePage() {
                   {knowledge.summary.subsystems.map((subsystem) => (
                     <li key={subsystem.name}>
                       <p className="font-semibold">{subsystem.name}</p>
-                      <p className="text-xs font-semibold text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {subsystem.paths.join(', ')}
                       </p>
                       <p className="text-muted-foreground">
@@ -120,7 +120,7 @@ function KnowledgePage() {
                 </ul>
               </CardContent>
             </Card>
-            <Card className="bg-candy-grape text-ink">
+            <Card>
               <CardHeader>
                 <CardTitle>Domain concepts</CardTitle>
               </CardHeader>

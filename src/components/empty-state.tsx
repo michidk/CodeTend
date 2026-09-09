@@ -22,12 +22,12 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center justify-center py-10 text-center sm:py-14">
-        <span className="mb-5 flex size-20 -rotate-6 animate-bob items-center justify-center rounded-[1.5rem] border-[3px] border-ink bg-candy-sun text-ink shadow-toy motion-reduce:animate-none">
-          <Icon className="size-10" strokeWidth={2.25} aria-hidden="true" />
+      <CardContent className="flex flex-col items-center justify-center py-9 text-center sm:py-12">
+        <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+          <Icon className="size-7" aria-hidden="true" />
         </span>
-        <h2 className="font-display text-2xl font-bold">{title}</h2>
-        <p className="mt-1 mb-5 max-w-sm text-sm font-semibold text-muted-foreground">
+        <h2 className="font-display text-lg font-bold">{title}</h2>
+        <p className="mt-1 mb-4 max-w-sm text-sm text-muted-foreground">
           {description}
         </p>
         <Button asChild>

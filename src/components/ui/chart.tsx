@@ -86,15 +86,15 @@ const ChartContainer = React.forwardRef<
         </RechartsPrimitive.ResponsiveContainer>
         {renderStatus !== 'ready' ? (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden rounded-2xl"
+            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden rounded-lg"
             role="status"
             aria-live="polite"
           >
             <Skeleton
               aria-hidden="true"
-              className="absolute inset-0 h-full w-full rounded-2xl bg-accent/70"
+              className="absolute inset-0 h-full w-full bg-accent/70"
             />
-            <span className="relative rounded-full border-2 border-ink bg-card px-4 py-2 font-bold text-muted-foreground shadow-toy-sm">
+            <span className="relative rounded-full bg-card px-4 py-2 font-semibold text-muted-foreground shadow-deep">
               {renderStatus === 'loading'
                 ? 'Loading chart…'
                 : 'Chart unavailable'}

@@ -7,7 +7,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { SectionHeading } from '@/components/page-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   type ChartConfig,
@@ -36,7 +35,7 @@ const SCANNER_COLORS = [
   'var(--chart-5)',
   'var(--grade-a)',
   'var(--grade-d)',
-  'var(--candy-grape)',
+  'var(--deep)',
   'var(--warning)',
   'var(--positive)',
   'var(--destructive)',
@@ -79,11 +78,11 @@ export function TrendCharts({
   return (
     <section aria-labelledby="trend-heading" className="space-y-3 sm:space-y-4">
       <div className="flex items-baseline justify-between gap-3">
-        <SectionHeading id="trend-heading" color="bg-candy-lime">
+        <h2 id="trend-heading" className="font-display text-lg font-bold">
           Change over time
-        </SectionHeading>
+        </h2>
         {tooFew ? (
-          <p className="text-xs font-semibold text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Trends appear after the second scan.
           </p>
         ) : null}
@@ -113,8 +112,8 @@ export function TrendCharts({
                   type="monotone"
                   dataKey="overallScore"
                   stroke="var(--color-overallScore)"
-                  strokeWidth={3.5}
-                  dot={{ r: 5, strokeWidth: 2.5, stroke: 'var(--ink)' }}
+                  strokeWidth={2.5}
+                  dot={{ r: 3 }}
                   connectNulls
                   isAnimationActive={false}
                 />
@@ -227,8 +226,8 @@ export function ScannerScoreChart({
           type="monotone"
           dataKey="score"
           stroke="var(--color-score)"
-          strokeWidth={3.5}
-          dot={{ r: 5, strokeWidth: 2.5, stroke: 'var(--ink)' }}
+          strokeWidth={2.5}
+          dot={{ r: 3 }}
           connectNulls
           isAnimationActive={false}
         />

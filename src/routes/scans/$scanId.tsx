@@ -61,7 +61,7 @@ function ScanPage() {
           <Link
             to="/repositories/$repositoryId"
             params={{ repositoryId: String(scan.repositoryId) }}
-            className="inline-flex items-center gap-1 text-ink hover:underline"
+            className="inline-flex items-center gap-1 text-link hover:underline"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             {scan.repository.name}
@@ -84,10 +84,10 @@ function ScanPage() {
       />
 
       {scan.error ? (
-        <Card className="bg-candy-pink text-ink">
+        <Card className="border-destructive/40">
           <CardContent className="text-sm">
-            <p className="font-extrabold">Scan error</p>
-            <p className="mt-1 whitespace-pre-wrap font-semibold">
+            <p className="font-semibold text-destructive-text">Scan error</p>
+            <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
               {scan.error}
             </p>
           </CardContent>
@@ -127,7 +127,7 @@ function ScanPage() {
                         repositoryId: String(scan.repositoryId),
                         scannerId: scanner.id,
                       }}
-                      className="font-extrabold text-link decoration-[3px] underline-offset-4 hover:underline"
+                      className="text-link hover:underline"
                     >
                       {scanner.name}
                     </Link>
@@ -143,7 +143,7 @@ function ScanPage() {
                     </Badge>
                   </TableCell>
                   <TableCell
-                    className={`text-right font-display text-base font-bold tabular-nums ${scoreTextClass(run?.score)}`}
+                    className={`text-right font-semibold tabular-nums ${scoreTextClass(run?.score)}`}
                   >
                     {formatScore(run?.score)}
                   </TableCell>
@@ -175,15 +175,15 @@ function ScanPage() {
           </Badge>
         </SectionHeading>
         {scan.occurrences.length === 0 ? (
-          <Card className="bg-candy-lime text-ink">
-            <CardContent className="text-sm font-bold">
+          <Card>
+            <CardContent className="text-sm text-muted-foreground">
               {active
                 ? 'Findings appear once the scanners finish.'
                 : 'No findings were recorded for this scan.'}
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {scan.occurrences.map((occurrence) => (
               <FindingCard
                 key={occurrence.id}
@@ -199,7 +199,7 @@ function ScanPage() {
         )}
       </section>
 
-      <p className="text-xs font-semibold text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Created {formatDateTime(scan.createdAt)}
         {scan.eveSessionId ? ` · Eve session ${scan.eveSessionId}` : ''}
       </p>

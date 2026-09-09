@@ -71,17 +71,17 @@ export function PageHeader({
         {leading ? <div className="shrink-0">{leading}</div> : null}
         <div className="min-w-0">
           {eyebrow ? (
-            <p className="mb-2 inline-flex items-center rounded-full border-2 border-ink bg-candy-sun px-2.5 py-0.5 text-xs font-extrabold uppercase tracking-wide text-ink">
+            <p className="mb-1 text-sm font-semibold text-muted-foreground">
               {eyebrow}
             </p>
           ) : null}
           <div className="flex items-center gap-2">
             <h1
               className={cn(
-                'min-w-0 break-words font-display font-bold tracking-tight text-foreground',
+                'min-w-0 break-words font-display font-extrabold tracking-tight text-foreground',
                 size === 'compact'
-                  ? 'text-3xl sm:text-4xl'
-                  : 'text-4xl md:text-6xl',
+                  ? 'text-2xl sm:text-3xl'
+                  : 'text-3xl md:text-5xl',
               )}
             >
               {title}
@@ -93,7 +93,7 @@ export function PageHeader({
             ) : null}
           </div>
           {description ? (
-            <p className="mt-2 max-w-2xl text-base font-semibold leading-relaxed text-muted-foreground">
+            <p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-muted-foreground">
               {description}
             </p>
           ) : null}
@@ -109,33 +109,21 @@ export function PageHeader({
 }
 
 interface SectionHeadingProps extends ComponentProps<'h2'> {
-  /** Candy background class for the little block that leads the heading. */
   color?: string
 }
 
-/** A section title with a tilted colour block, like a label on a toy bin. */
 export function SectionHeading({
-  color = 'bg-candy-sun',
+  color: _color,
   className,
   children,
   ...props
 }: SectionHeadingProps) {
   return (
     <h2
-      className={cn(
-        'flex items-center gap-3 font-display text-2xl font-bold',
-        className,
-      )}
+      className={cn('font-display text-xl font-bold tracking-tight', className)}
       {...props}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'inline-block size-5 shrink-0 rotate-12 rounded-md border-2 border-ink shadow-toy-sm',
-          color,
-        )}
-      />
-      <span>{children}</span>
+      {children}
     </h2>
   )
 }

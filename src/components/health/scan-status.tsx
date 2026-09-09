@@ -4,11 +4,11 @@ import type { ScanStatus } from '@/db/schema'
 import { cn } from '@/lib/utils'
 
 const STATUS_CLASSES: Record<ScanStatus, string> = {
-  queued: 'bg-muted text-muted-foreground',
-  running: 'bg-candy-sky text-ink',
-  completed: 'bg-candy-lime text-ink',
-  partial: 'bg-candy-sun text-ink',
-  failed: 'bg-candy-pink text-ink',
+  queued: 'border-transparent bg-muted text-muted-foreground',
+  running: 'border-transparent bg-accent text-accent-foreground',
+  completed: 'border-transparent bg-positive/15 text-positive-text',
+  partial: 'border-transparent bg-warning/15 text-warning-text',
+  failed: 'border-transparent bg-destructive/15 text-destructive-text',
 }
 
 export function ScanStatusBadge({

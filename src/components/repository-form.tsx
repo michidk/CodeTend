@@ -112,7 +112,7 @@ export function RepositoryForm({
                   update('name', suggestName(event.target.value))
               }}
             />
-            <p className="text-xs font-semibold text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Anything <code>git clone</code> accepts from the app host. Private
               repositories need credentials in the URL or the host’s Git
               configuration.
@@ -187,7 +187,7 @@ export function RepositoryForm({
                 : 'Enter a valid 5-field cron expression, e.g. 0 3 * * *'}
             </p>
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-2xl border-[3px] border-ink bg-secondary px-4 py-3 shadow-toy-sm">
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-secondary px-4 py-3">
             <div>
               <Label htmlFor="enabled">Scheduled scans enabled</Label>
               <p className="mt-1 text-xs text-muted-foreground">
