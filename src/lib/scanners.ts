@@ -18,6 +18,12 @@ export interface ScannerDefinition {
   readonly prompt: string
   /** Title of the aggregated coding-agent prompt, e.g. "Fix Architecture Issues". */
   readonly fixPromptTitle: string
+  /**
+   * Dimension-specific handling rules appended to the fix prompt, for
+   * findings whose naive fix is wrong or harmful (e.g. deleting a committed
+   * secret without rotating it).
+   */
+  readonly fixGuidance?: string
 }
 
 export const SCANNERS: readonly ScannerDefinition[] = [
@@ -174,6 +180,10 @@ Calibrate: one finding per fragmented concern, naming the dominant convention, t
     weight: 0.75,
     enabled: true,
     fixPromptTitle: 'Fix Dependency & Build Issues',
+    fixGuidance: `- Change dependencies with the repository's own package manager and commit the regenerated lockfile; never hand-edit a lockfile.
+- Do not bump a major version or swap one library for another without reading its migration notes and running the full test suite; if the upgrade is not mechanical, stop and report what would need to change instead of half-migrating.
+- When removing a dependency, search for indirect uses (string references, plugin registrations, build and CI configuration) before deleting it.
+- Keep the fix scoped to the findings; do not upgrade unrelated packages "while you are there".`,
     prompt: `Review the repository's dependencies, build configuration and developer tooling as they are declared in the checkout: manifests, lockfiles, build scripts, task runners, CI and container definitions.
 Look for: the same capability provided by several competing libraries (two HTTP clients, two date libraries, two test runners), multiple major versions of one package pulled in at once, dependencies declared but never imported or imported but never declared, unpinned or wildly ranged versions where the ecosystem expects pinning, a missing or out-of-sync lockfile, packages the repository itself marks as deprecated or that have a well-known successor, vendored or copied third-party code, build and CI steps that disagree with each other or with the documented workflow (CI runs different commands than the contributor docs, scripts that duplicate one another, checks configured but not enforced), toolchain versions declared inconsistently across files (engine fields, version files, container base images, CI matrices), and dependency scope mistakes (test or build tools shipped as runtime dependencies).
 You cannot access the network, so do not claim a package is outdated or vulnerable unless the repository's own files say so (audit reports, renovate/dependabot configuration, changelogs, comments). Judge from structure and consistency, not from version numbers you would have to look up.
@@ -189,6 +199,11 @@ Calibrate: group findings by concern (one finding for "competing HTTP clients", 
     weight: 1.25,
     enabled: true,
     fixPromptTitle: 'Fix Security Hygiene Issues',
+    fixGuidance: `- Treat any credential, token or key that was committed to the repository as compromised, even after you remove it: it stays in git history. Remove it from the working tree, move the value to the repository's existing configuration or secret mechanism, and tell the user plainly that it must be rotated. Do not rewrite git history unless the user explicitly asks.
+- Never print, log, echo or paste a secret value in your output, commit messages or summary; refer to it by kind and location only.
+- Do not fix a finding by weakening a control: never disable TLS verification, authentication, authorization, escaping, validation or a security test to make something pass. If a check cannot be satisfied, say so and stop.
+- When adding sanitization, validation or escaping, use the library or helper the repository already uses for that boundary rather than writing a new one, and add a test that exercises the malicious input the finding describes.
+- If a finding turns out to be exploitable today in a deployed system, say so explicitly at the top of your summary so the user can act on it before the code change ships.`,
     prompt: `Review security hygiene as it is visible in the source: this is a code-health review of how the repository handles secrets and trust, not a penetration test or a vulnerability scan.
 Look for: credentials, tokens, private keys or connection strings committed in code, configuration, fixtures or history-visible files; secrets that leak through logging, debug output, serialization or error messages (for example a config struct that derives a debug/serialize representation over a password); insecure defaults (debug mode, permissive CORS, disabled TLS verification, wildcard hosts, default passwords) that ship unless overridden; missing or inconsistent sanitization and escaping at trust boundaries (user input reaching shell commands, SQL, HTML, file paths, deserializers or redirects); dangerous constructs used casually (eval-style execution, unsafe deserialization, weak or home-grown cryptography, predictable randomness for security-relevant values); authentication and authorization checks that are applied inconsistently across similar entry points; and security-relevant behavior that is implemented but not covered by any test.
 Never copy a secret value into a finding; refer to it by kind and location only. Do not report generic hardening advice that the repository's stated scope does not call for (a local CLI does not need rate limiting).

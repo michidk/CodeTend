@@ -14,7 +14,10 @@ export interface FixPromptFinding {
 }
 
 export interface FixPromptInput {
-  readonly scanner: Pick<ScannerDefinition, 'name' | 'fixPromptTitle'>
+  readonly scanner: Pick<
+    ScannerDefinition,
+    'name' | 'fixPromptTitle' | 'fixGuidance'
+  >
   readonly repositoryName: string
   readonly repositoryUrl: string
   readonly branch: string
@@ -61,9 +64,18 @@ export function buildFixPrompt(input: FixPromptInput): string {
     '4. Keep changes scoped to the findings. Do not refactor unrelated code.',
     '5. Update or add tests where behavior is touched, run the repository’s existing checks (type checker, linter, tests, build) and fix what they report.',
     '6. Finish with a short summary of what you changed per finding and anything you deliberately left alone, with the reason.',
-    '',
-    '## Findings',
   ]
+
+  if (input.scanner.fixGuidance) {
+    lines.push(
+      '',
+      `## Handling ${input.scanner.name} findings`,
+      '',
+      input.scanner.fixGuidance,
+    )
+  }
+
+  lines.push('', '## Findings')
 
   if (sorted.length === 0) {
     lines.push('', 'No open findings. Nothing to do for this dimension.')
