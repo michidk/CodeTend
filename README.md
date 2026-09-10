@@ -36,13 +36,13 @@ schedule / "Scan now" / (future) webhook
 | App | Bun, TanStack Start + Router, React 19, shadcn/ui (Base UI), Tailwind v4, Recharts |
 | Persistence | PostgreSQL + Drizzle with automatic migrations (`bun run dev` applies pending migrations) |
 | Agent runtime | [Eve](https://eve.dev) (`eve/`): durable workflow tool, declared subagents, just-bash sandbox, MCP connections, structured outputs |
-| Models | Anthropic through the AI SDK provider (`TECDEBT_MODEL`, default `claude-sonnet-5`) |
+| Models | OpenAI through the AI SDK provider (`TECDEBT_MODEL`, default `gpt-5.6-sol`) |
 | Code intelligence | [GitNexus](https://github.com/abhigyanpatwari/GitNexus) over MCP, optional |
 
 ## Quick start (local)
 
 Prerequisites: Bun 1.4, Node 24 (for Eve), Git, PostgreSQL (Docker is fine),
-an Anthropic API key. Optionally GitNexus: `npm i -g gitnexus` or
+an OpenAI API key. Optionally GitNexus: `npm i -g gitnexus` or
 `mkdir -p .tools && (cd .tools && npm i gitnexus)` (the app looks in both
 places, or at `GITNEXUS_BIN`).
 
@@ -131,7 +131,7 @@ usage-only JSON lines under `data/usage/`; prompts and model responses are never
 logged. After a scan settles, the app deduplicates and aggregates those records,
 stores scan and per-scanner totals in PostgreSQL, and removes the temporary file.
 
-Costs are estimates based on the configured model's Anthropic list price. A
+Costs are estimates based on the configured model's provider list price. A
 provider-reported cost takes precedence when available. Unknown models still
 show token counts and model calls, but their cost is shown as unavailable rather
 than guessed.

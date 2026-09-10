@@ -39,12 +39,13 @@ interface ModelRates {
 }
 
 /**
- * Anthropic list prices (USD per million tokens, first-party API). Cache reads
- * cost 10% of the input price and 5-minute cache writes 125%; those
- * multipliers are the same for every model. Unknown models still get their
- * tokens tracked, but no cost is estimated rather than a misleading one.
+ * Provider list prices (USD per million tokens, first-party APIs). Cache reads
+ * cost 10% of the input price and cache writes 125% for the models listed
+ * here. Unknown models still get their tokens tracked, but no cost is
+ * estimated rather than a misleading one.
  */
 const MODEL_RATES: Readonly<Record<string, ModelRates>> = {
+  'gpt-5.6-sol': { input: 4, output: 20 },
   'claude-fable-5': { input: 10, output: 50 },
   'claude-mythos-5': { input: 10, output: 50 },
   'claude-opus-5': { input: 5, output: 25 },

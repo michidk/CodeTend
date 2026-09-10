@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/openai": "^3.0.0",
     "ai": "^7.0.82",
     "eve": "0.52.3",
     "just-bash": "^3.4.2",

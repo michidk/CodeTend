@@ -18,14 +18,14 @@ describe('AI pricing', () => {
   })
 
   test('prices input, output and cache token classes', () => {
-    const cost = estimateCostUsd('claude-sonnet-5', {
+    const cost = estimateCostUsd('gpt-5.6-sol', {
       inputTokens: 1_000,
       outputTokens: 200,
       cacheReadTokens: 500,
       cacheWriteTokens: 100,
     })
 
-    expect(cost).toBeCloseTo(0.006525, 10)
+    expect(cost).toBeCloseTo(0.0087, 10)
   })
 
   test('prefers a provider cost and leaves unknown models unpriced', () => {

@@ -19,7 +19,7 @@ const serverSchema = {
   SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
   GITNEXUS_ENABLED: booleanString.default(false),
   GITNEXUS_MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3907),
-  TECDEBT_MODEL: z.string().trim().min(1).default('claude-sonnet-5'),
+  TECDEBT_MODEL: z.string().trim().min(1).default('gpt-5.6-sol'),
 }
 
 type RuntimeEnvironment = Record<string, string | undefined>

@@ -77,7 +77,7 @@ function ScanHistoryPage() {
         eyebrow="Ledger"
         title="Scan history"
         description="Every scan run across all repositories, with the tokens it consumed and what that cost."
-        help="Token counts come straight from the model provider for every root, knowledge and scanner model step. Cost is estimated from Anthropic list prices (cache reads at 10%, cache writes at 125% of the input price); scans on a model without a known price show tokens but no cost."
+        help="Token counts come straight from the model provider for every root, knowledge and scanner model step. Cost is estimated from provider list prices (cache reads at 10%, cache writes at 125% of the input price); scans on a model without a known price show tokens but no cost."
       />
 
       <section aria-labelledby="totals-heading" className="space-y-3">
