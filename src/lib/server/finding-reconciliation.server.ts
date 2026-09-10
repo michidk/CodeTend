@@ -10,6 +10,7 @@ import {
 } from '@/db/schema'
 import {
   type EnrichedScannerFinding,
+  type FindingEventKind,
   type FindingState,
   OPEN_FINDING_STATES,
   type ScannerResult,
@@ -17,6 +18,7 @@ import {
 } from '@/lib/findings'
 import type { ScanCoverage, ScanTarget } from '@/lib/security-scans'
 import { coverageAllowsResolution } from '@/lib/security-scans'
+import { recordFindingEvent } from '@/lib/server/finding-events.server'
 
 export interface ReconciledFinding {
   readonly id: number
@@ -111,6 +113,14 @@ export async function reconcileScannerFindings(input: {
       if (!inserted) continue
       touched.add(inserted.id)
       await recordOccurrence(inserted.id, input.scanId, 'new', fresh)
+      await recordFindingEvent({
+        findingId: inserted.id,
+        scanId: input.scanId,
+        kind: 'detected',
+        actor: 'scanner',
+        fromState: null,
+        toState: 'new',
+      })
       counts.new += 1
       reconciled.push({ id: inserted.id, state: 'new', finding: fresh })
       continue
@@ -133,14 +143,26 @@ export async function reconcileScannerFindings(input: {
             updatedAt: now,
           })
           .where(eq(findings.id, previous.id))
+        const reason =
+          dispositionVerdict.dispositionAssessment ??
+          'The prior manual disposition no longer applies to the current code.'
         await recordOccurrence(
           previous.id,
           input.scanId,
           'regressed',
           fresh,
-          dispositionVerdict.dispositionAssessment ??
-            'The prior manual disposition no longer applies to the current code.',
+          reason,
         )
+        await recordFindingEvent({
+          findingId: previous.id,
+          scanId: input.scanId,
+          kind: 'disposition_invalidated',
+          actor: 'scanner',
+          fromState: previous.state,
+          toState: 'regressed',
+          disposition: previous.disposition,
+          note: reason,
+        })
         counts.regressed += 1
         reconciled.push({ id: previous.id, state: 'regressed', finding: fresh })
         continue
@@ -161,6 +183,16 @@ export async function reconcileScannerFindings(input: {
         fresh,
         `Suppressed by manual disposition: ${previous.disposition}.`,
       )
+      await recordFindingEvent({
+        findingId: previous.id,
+        scanId: input.scanId,
+        kind: 'disposition_retained',
+        actor: 'scanner',
+        fromState: previous.state,
+        toState: 'resolved',
+        disposition: previous.disposition,
+        note: dispositionVerdict?.dispositionAssessment ?? null,
+      })
       reconciled.push({ id: previous.id, state: 'resolved', finding: fresh })
       continue
     }
@@ -184,6 +216,15 @@ export async function reconcileScannerFindings(input: {
       fresh,
       verdictById.get(previous.id)?.note,
     )
+    await recordFindingEvent({
+      findingId: previous.id,
+      scanId: input.scanId,
+      kind: matchEventKind(state),
+      actor: 'scanner',
+      fromState: previous.state,
+      toState: state,
+      note: verdictById.get(previous.id)?.note ?? null,
+    })
     counts[state] += 1
     reconciled.push({ id: previous.id, state, finding: fresh })
   }
@@ -212,14 +253,26 @@ export async function reconcileScannerFindings(input: {
       })
       .where(eq(findings.id, finding.id))
     const previous = toScannerFinding(finding)
+    const reason =
+      verdictById.get(finding.id)?.dispositionAssessment ??
+      'The prior manual disposition no longer applies to the current code.'
     await recordOccurrence(
       finding.id,
       input.scanId,
       'regressed',
       previous,
-      verdictById.get(finding.id)?.dispositionAssessment ??
-        'The prior manual disposition no longer applies to the current code.',
+      reason,
     )
+    await recordFindingEvent({
+      findingId: finding.id,
+      scanId: input.scanId,
+      kind: 'disposition_invalidated',
+      actor: 'scanner',
+      fromState: finding.state,
+      toState: 'regressed',
+      disposition: finding.disposition,
+      note: reason,
+    })
     counts.regressed += 1
     reconciled.push({ id: finding.id, state: 'regressed', finding: previous })
   }
@@ -278,6 +331,15 @@ export async function reconcileScannerFindings(input: {
           note: verdictById.get(finding.id)?.note ?? null,
         })
         .onConflictDoNothing()
+      await recordFindingEvent({
+        findingId: finding.id,
+        scanId: input.scanId,
+        kind: verdict,
+        actor: 'scanner',
+        fromState: finding.state,
+        toState: verdict === 'improved' ? 'improved' : 'active',
+        note: verdictById.get(finding.id)?.note ?? null,
+      })
       counts[verdict === 'improved' ? 'improved' : 'active'] += 1
       reconciled.push({
         id: finding.id,
@@ -315,6 +377,17 @@ export async function reconcileScannerFindings(input: {
         priorityReasons: previous.priorityReasons,
         note: verdictById.get(id)?.note ?? null,
       })
+      await recordFindingEvent({
+        findingId: id,
+        scanId: input.scanId,
+        kind: 'resolved',
+        actor: 'scanner',
+        fromState: previous.state,
+        toState: 'resolved',
+        note:
+          verdictById.get(id)?.note ??
+          'Not reported by a scanner that verified every other hypothesis in a covered target.',
+      })
     }
     counts.resolved += resolvedIds.length
   }
@@ -322,6 +395,10 @@ export async function reconcileScannerFindings(input: {
   for (const id of carriedIds) {
     const previous = byId.get(id)
     if (!previous) continue
+    const carryNote =
+      verdictById.get(id)?.verdict === 'resolved'
+        ? 'Carried forward: the scan did not prove coverage of the original affected path.'
+        : 'Carried forward: the scanner did not report on this finding.'
     await db
       .update(findings)
       .set({ state: 'active', updatedAt: now })
@@ -344,12 +421,18 @@ export async function reconcileScannerFindings(input: {
         priority: previous.priority,
         priorityScore: previous.priorityScore,
         priorityReasons: previous.priorityReasons,
-        note:
-          verdictById.get(id)?.verdict === 'resolved'
-            ? 'Carried forward: the scan did not prove coverage of the original affected path.'
-            : 'Carried forward: the scanner did not report on this finding.',
+        note: carryNote,
       })
       .onConflictDoNothing()
+    await recordFindingEvent({
+      findingId: id,
+      scanId: input.scanId,
+      kind: 'carried_forward',
+      actor: 'scanner',
+      fromState: previous.state,
+      toState: 'active',
+      note: carryNote,
+    })
     counts.active += 1
     reconciled.push({
       id,
@@ -399,6 +482,19 @@ function nextStateForMatch(
   if (freshRank < previousRank) return 'regressed'
   if (verdict === 'improved' || freshRank > previousRank) return 'improved'
   return 'active'
+}
+
+function matchEventKind(state: FindingState): FindingEventKind {
+  switch (state) {
+    case 'improved':
+    case 'regressed':
+    case 'resolved':
+      return state
+    case 'new':
+      return 'detected'
+    default:
+      return 'confirmed'
+  }
 }
 
 function findingColumns(fresh: EnrichedScannerFinding) {

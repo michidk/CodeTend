@@ -5,6 +5,7 @@ import { db } from '@/db'
 import { findings } from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { FINDING_DISPOSITIONS } from '@/lib/findings'
+import { recordFindingEvent } from '@/lib/server/finding-events.server'
 
 const triageInputSchema = z
   .object({
@@ -32,12 +33,14 @@ export const setFindingDisposition = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const current = await db.query.findings.findFirst({
       where: eq(findings.id, data.findingId),
-      columns: { id: true, disposition: true },
+      columns: { id: true, state: true, disposition: true },
     })
     if (!current) throw new DomainError('not_found', 'Finding not found')
     if (data.disposition === null && current.disposition === null) {
       throw new DomainError('conflict', 'This finding is not manually triaged.')
     }
+    const editing =
+      data.disposition !== null && current.disposition === data.disposition
 
     const [updated] = await db
       .update(findings)
@@ -47,9 +50,7 @@ export const setFindingDisposition = createServerFn({ method: 'POST' })
               state: 'resolved',
               disposition: data.disposition,
               dispositionNote: data.note || null,
-              ...(current.disposition === data.disposition
-                ? {}
-                : { triagedAt: new Date() }),
+              ...(editing ? {} : { triagedAt: new Date() }),
               resolvedScanId: null,
               updatedAt: new Date(),
             }
@@ -68,6 +69,21 @@ export const setFindingDisposition = createServerFn({ method: 'POST' })
         state: findings.state,
         disposition: findings.disposition,
       })
+    const row = expectReturnedRow(updated, 'Finding')
 
-    return expectReturnedRow(updated, 'Finding')
+    await recordFindingEvent({
+      findingId: row.id,
+      actor: 'operator',
+      kind: data.disposition
+        ? editing
+          ? 'disposition_updated'
+          : 'disposition_set'
+        : 'reopened',
+      fromState: current.state,
+      toState: row.state,
+      disposition: data.disposition ?? current.disposition,
+      note: data.disposition ? data.note || null : null,
+    })
+
+    return row
   })

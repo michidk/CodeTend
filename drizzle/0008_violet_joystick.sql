@@ -1,0 +1,1 @@
+ALTER TABLE "repository_knowledge" ADD COLUMN "dependency_graph" jsonb DEFAULT '{"edges":[],"cycles":[],"cycleStatus":"unavailable","componentCount":null}'::jsonb NOT NULL;

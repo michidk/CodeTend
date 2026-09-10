@@ -34,6 +34,28 @@ export const FINDING_STATES = [
 ] as const
 export type FindingState = (typeof FINDING_STATES)[number]
 
+/**
+ * Lifecycle transitions recorded in the per-finding history log. Occurrences
+ * capture what a scan saw; events capture why the finding changed state.
+ */
+export const FINDING_EVENT_KINDS = [
+  'detected',
+  'confirmed',
+  'improved',
+  'regressed',
+  'resolved',
+  'carried_forward',
+  'disposition_set',
+  'disposition_updated',
+  'disposition_retained',
+  'disposition_invalidated',
+  'reopened',
+] as const
+export type FindingEventKind = (typeof FINDING_EVENT_KINDS)[number]
+
+export const FINDING_EVENT_ACTORS = ['scanner', 'operator'] as const
+export type FindingEventActor = (typeof FINDING_EVENT_ACTORS)[number]
+
 /** Finding states that count as still present in the repository. */
 export const OPEN_FINDING_STATES: readonly FindingState[] = [
   'new',

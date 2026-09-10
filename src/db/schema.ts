@@ -18,6 +18,8 @@ import type {
   Effort,
   FindingClassification,
   FindingDisposition,
+  FindingEventActor,
+  FindingEventKind,
   FindingLocation,
   FindingPriority,
   FindingState,
@@ -104,6 +106,16 @@ export const repositoryKnowledge = pgTable('repository_knowledge', {
     .notNull()
     .default({ languages: [], frameworks: [], subsystems: [], concepts: [] }),
   sources: jsonb('sources').$type<KnowledgeSource[]>().notNull().default([]),
+  /** Subsystem-level import graph and cycles, deterministically extracted from GitNexus. */
+  dependencyGraph: jsonb('dependency_graph')
+    .$type<SubsystemDependencyGraph>()
+    .notNull()
+    .default({
+      edges: [],
+      cycles: [],
+      cycleStatus: 'unavailable',
+      componentCount: null,
+    }),
   commitSha: text('commit_sha'),
   fileCount: integer('file_count'),
   refreshedAt: timestamp('refreshed_at', { withTimezone: true }),
@@ -141,6 +153,24 @@ export interface KnowledgeSubsystem {
   readonly name: string
   readonly paths: string[]
   readonly responsibility: string
+}
+
+export interface SubsystemDependencyEdge {
+  readonly source: string
+  readonly target: string
+  readonly weight: number
+}
+
+export interface SubsystemDependencyCycle {
+  readonly files: string[]
+  readonly subsystems: string[]
+}
+
+export interface SubsystemDependencyGraph {
+  readonly edges: SubsystemDependencyEdge[]
+  readonly cycles: SubsystemDependencyCycle[]
+  readonly cycleStatus: 'clean' | 'cycles_found' | 'unavailable'
+  readonly componentCount: number | null
 }
 
 export interface RepositoryKnowledgeSummary {
@@ -380,6 +410,32 @@ export const findingValidations = pgTable(
   (table) => [index('finding_validations_finding_idx').on(table.findingId)],
 )
 
+/**
+ * Append-only history of why a finding changed: scanner verdicts, operator
+ * dispositions and their later retention or invalidation. `scanId` is null
+ * for operator actions taken outside a scan.
+ */
+export const findingEvents = pgTable(
+  'finding_events',
+  {
+    id: serial('id').primaryKey(),
+    findingId: integer('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    scanId: integer('scan_id').references(() => scans.id, {
+      onDelete: 'set null',
+    }),
+    kind: text('kind').$type<FindingEventKind>().notNull(),
+    actor: text('actor').$type<FindingEventActor>().notNull(),
+    fromState: text('from_state').$type<FindingState>(),
+    toState: text('to_state').$type<FindingState>().notNull(),
+    disposition: text('disposition').$type<FindingDisposition>(),
+    note: text('note'),
+    createdAt,
+  },
+  (table) => [index('finding_events_finding_idx').on(table.findingId)],
+)
+
 export const scanArtifacts = pgTable(
   'scan_artifacts',
   {
@@ -507,6 +563,7 @@ export const findingsRelations = relations(findings, ({ one, many }) => ({
   occurrences: many(findingOccurrences),
   validations: many(findingValidations),
   patches: many(findingPatches),
+  events: many(findingEvents),
 }))
 
 export const findingOccurrencesRelations = relations(
@@ -548,6 +605,17 @@ export const findingPatchesRelations = relations(findingPatches, ({ one }) => ({
   }),
 }))
 
+export const findingEventsRelations = relations(findingEvents, ({ one }) => ({
+  finding: one(findings, {
+    fields: [findingEvents.findingId],
+    references: [findings.id],
+  }),
+  scan: one(scans, {
+    fields: [findingEvents.scanId],
+    references: [scans.id],
+  }),
+}))
+
 export const scanArtifactsRelations = relations(scanArtifacts, ({ one }) => ({
   scan: one(scans, {
     fields: [scanArtifacts.scanId],
@@ -565,4 +633,5 @@ export type RepositorySecurityProfile =
   typeof repositorySecurityProfiles.$inferSelect
 export type FindingValidationRecord = typeof findingValidations.$inferSelect
 export type FindingPatch = typeof findingPatches.$inferSelect
+export type FindingEvent = typeof findingEvents.$inferSelect
 export type ScanArtifact = typeof scanArtifacts.$inferSelect

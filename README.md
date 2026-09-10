@@ -227,7 +227,11 @@ then derives states from *our persisted results* (never Git history):
 | operator reopens a manually triaged finding | `active`; the next scan resumes normal reconciliation |
 
 Every observation is stored as a `finding_occurrences` row, which powers the
-"active findings over time" chart.
+"active findings over time" chart. Every state change is additionally appended
+to `finding_events` with the actor (scanner or operator), the scan, the
+disposition involved and the reason. The finding card shows this as a history
+log, and a finding whose ignore context the scanner invalidated is flagged
+"reopened by scanner" with the scanner's assessment until someone acts on it.
 
 ## Repository knowledge
 

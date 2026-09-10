@@ -77,6 +77,7 @@ try {
   }
 
   const requiredTables = [
+    'finding_events',
     'finding_patches',
     'finding_validations',
     'github_webhook_deliveries',
