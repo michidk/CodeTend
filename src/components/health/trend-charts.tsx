@@ -11,13 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart'
 import { formatShortDate } from '@/lib/format'
-import { enabledScanners } from '@/lib/scanners'
 
 export interface TimelinePoint {
   readonly scanId: number
@@ -27,20 +24,6 @@ export interface TimelinePoint {
   readonly scanners: Record<string, number | null>
 }
 
-const SCANNER_COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-  'var(--grade-a)',
-  'var(--grade-d)',
-  'var(--deep)',
-  'var(--warning)',
-  'var(--positive)',
-  'var(--destructive)',
-]
-
 const overallConfig: ChartConfig = {
   overallScore: { label: 'Overall score', color: 'var(--chart-1)' },
 }
@@ -48,16 +31,6 @@ const overallConfig: ChartConfig = {
 const findingsConfig: ChartConfig = {
   activeFindings: { label: 'Active findings', color: 'var(--chart-3)' },
 }
-
-const scannerConfig: ChartConfig = Object.fromEntries(
-  enabledScanners.map((scanner, index) => [
-    scanner.id,
-    {
-      label: scanner.shortName,
-      color: SCANNER_COLORS[index % SCANNER_COLORS.length],
-    },
-  ]),
-)
 
 function labelFor(point: TimelinePoint): string {
   return `${formatShortDate(point.at)} · #${point.scanId}`
@@ -70,7 +43,6 @@ export function TrendCharts({
 }) {
   const data = timeline.map((point) => ({
     ...point,
-    ...point.scanners,
     label: labelFor(point),
   }))
   const tooFew = timeline.length < 2
@@ -152,43 +124,6 @@ export function TrendCharts({
                   isAnimationActive={false}
                 />
               </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle as="h3">Scanner scores</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={scannerConfig}
-              className="h-[280px] w-full aspect-auto"
-            >
-              <LineChart data={data} margin={{ left: -12, right: 12, top: 8 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  minTickGap={24}
-                />
-                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent />} />
-                {enabledScanners.map((scanner) => (
-                  <Line
-                    key={scanner.id}
-                    type="monotone"
-                    dataKey={scanner.id}
-                    stroke={`var(--color-${scanner.id})`}
-                    strokeWidth={1.75}
-                    dot={false}
-                    connectNulls
-                    isAnimationActive={false}
-                  />
-                ))}
-              </LineChart>
             </ChartContainer>
           </CardContent>
         </Card>
