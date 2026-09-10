@@ -163,7 +163,6 @@
     --grade-c-text: #8a5d16;
     --grade-d-text: #9a3412;
     --grade-f-text: #9f1239;
-    --page-texture: url("/paper-grain-light.svg");
     --deep-shadow: 0 8px 24px -18px rgb(28 36 48 / 40%);
     --deep-shadow-strong: 0 10px 30px -18px rgb(28 36 48 / 50%);
     --control-shadow:
@@ -231,7 +230,6 @@
     --grade-c-text: #fcd34d;
     --grade-d-text: #fdba74;
     --grade-f-text: #fda4af;
-    --page-texture: url("/paper-grain-dark.svg");
     --deep-shadow: 0 8px 24px -18px rgb(0 0 0 / 55%);
     --deep-shadow-strong: 0 10px 30px -18px rgb(0 0 0 / 65%);
     --control-shadow:
@@ -264,8 +262,6 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
-    background-image: var(--page-texture);
-    background-attachment: fixed;
   }
 
   h1,
