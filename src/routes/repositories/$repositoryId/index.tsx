@@ -12,7 +12,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
 import { FindingCard } from '@/components/health/finding-card'
@@ -54,6 +54,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { FindingCounts } from '@/db/schema'
+import { useActivityRefresh } from '@/hooks/use-activity-refresh'
 import { getErrorMessage } from '@/lib/error-message'
 import {
   formatDateTime,
@@ -63,7 +64,7 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { enabledScanners } from '@/lib/scanners'
-import { describeCron } from '@/lib/schedule'
+import { describeCron } from '@/lib/schedule-presets'
 import { GRADE_DESCRIPTIONS, type Grade } from '@/lib/scoring'
 import { cancelScan, deleteRepository } from '@/lib/server/repositories'
 import {
@@ -83,8 +84,6 @@ export const Route = createFileRoute('/repositories/$repositoryId/')({
   ),
 })
 
-const REFRESH_WHILE_SCANNING_MS = 4_000
-
 function RepositoryPage() {
   const detail = Route.useLoaderData()
   const router = useRouter()
@@ -92,15 +91,14 @@ function RepositoryPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
   const running = detail?.runningScan ?? null
-
-  useEffect(() => {
-    if (!running) return
-    const timer = window.setInterval(
-      () => void router.invalidate(),
-      REFRESH_WHILE_SCANNING_MS,
-    )
-    return () => window.clearInterval(timer)
-  }, [running, router])
+  const generating =
+    detail?.openFindings.some(
+      (finding) => finding.patches[0]?.status === 'generating',
+    ) ?? false
+  useActivityRefresh(
+    { kind: 'repository', repositoryId: detail?.repository.id ?? 0 },
+    detail !== null && (running !== null || generating),
+  )
 
   if (!detail)
     return (

@@ -61,8 +61,18 @@ bun run dev                              # terminal 2: app on :3000, migrations 
 ```
 
 `scripts/start-dev.sh` supervises both processes with `.env` loaded under one
-managed VibePod preview. `scripts/start-eve.sh` remains available when Eve is
-run separately.
+managed VibePod preview; Eve is restarted in place when it exits so the Vite
+dev server (and every open tab) survives Eve rebuilds. `scripts/start-eve.sh`
+remains available when Eve is run separately.
+
+For a preview that people look at rather than code against, serve the
+production build instead: `scripts/start-preview.sh --build` builds the app,
+applies migrations and runs `.output/server/index.mjs` next to Eve. Nothing
+reloads the page when the server restarts and pages render in tens of
+milliseconds instead of seconds. Set `TECDEBT_BASIC_AUTH_PASSWORD` in `.env`
+first: the production server fails closed without it. Rebuild with
+`bun run build` after changing the app. Set `TECDEBT_DEVTOOLS=true` to enable
+the TanStack devtools overlay in `vite dev`.
 
 ## Quick start (Docker Compose)
 
@@ -263,6 +273,7 @@ scripts/                   migrate, dev migrations plugin, import-boundary check
 
 ```bash
 bun run dev              # app with automatic migrations
+bun run preview:serve    # production build + Eve, for a stable shared preview
 bun run check            # Biome + import boundaries
 bun run test             # focused pricing and usage-accounting tests
 bun run test:database    # migrated-schema and active-scan constraint smoke test

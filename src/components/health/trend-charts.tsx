@@ -1,19 +1,5 @@
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
+import { TimeseriesChart } from '@/components/ui/timeseries-chart'
 import { formatShortDate } from '@/lib/format'
 
 export interface TimelinePoint {
@@ -24,15 +10,7 @@ export interface TimelinePoint {
   readonly scanners: Record<string, number | null>
 }
 
-const overallConfig: ChartConfig = {
-  overallScore: { label: 'Overall score', color: 'var(--chart-1)' },
-}
-
-const findingsConfig: ChartConfig = {
-  activeFindings: { label: 'Active findings', color: 'var(--chart-3)' },
-}
-
-function labelFor(point: TimelinePoint): string {
+function labelFor(point: { readonly at: string; readonly scanId: number }) {
   return `${formatShortDate(point.at)} · #${point.scanId}`
 }
 
@@ -41,10 +19,6 @@ export function TrendCharts({
 }: {
   readonly timeline: readonly TimelinePoint[]
 }) {
-  const data = timeline.map((point) => ({
-    ...point,
-    label: labelFor(point),
-  }))
   const tooFew = timeline.length < 2
 
   return (
@@ -65,32 +39,16 @@ export function TrendCharts({
             <CardTitle as="h3">Overall score</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={overallConfig}
-              className="h-[200px] w-full aspect-auto"
-            >
-              <LineChart data={data} margin={{ left: -12, right: 12, top: 8 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  minTickGap={24}
-                />
-                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line
-                  type="monotone"
-                  dataKey="overallScore"
-                  stroke="var(--color-overallScore)"
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ChartContainer>
+            <TimeseriesChart
+              kind="line"
+              seriesLabel="Overall score"
+              domain={[0, 100]}
+              color="var(--chart-1)"
+              points={timeline.map((point) => ({
+                label: labelFor(point),
+                value: point.overallScore,
+              }))}
+            />
           </CardContent>
         </Card>
         <Card>
@@ -98,33 +56,16 @@ export function TrendCharts({
             <CardTitle as="h3">Active findings</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={findingsConfig}
-              className="h-[200px] w-full aspect-auto"
-            >
-              <BarChart data={data} margin={{ left: -12, right: 12, top: 8 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  minTickGap={24}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="activeFindings"
-                  fill="var(--color-activeFindings)"
-                  radius={6}
-                  isAnimationActive={false}
-                />
-              </BarChart>
-            </ChartContainer>
+            <TimeseriesChart
+              kind="bar"
+              seriesLabel="Active findings"
+              color="var(--chart-3)"
+              formatValue={(value) => String(Math.round(value))}
+              points={timeline.map((point) => ({
+                label: labelFor(point),
+                value: point.activeFindings,
+              }))}
+            />
           </CardContent>
         </Card>
       </div>
@@ -139,34 +80,12 @@ export function ScannerScoreChart({
   readonly runs: readonly { scanId: number; at: string; score: number | null }[]
   readonly label: string
 }) {
-  const config: ChartConfig = { score: { label, color: 'var(--chart-1)' } }
-  const data = runs.map((run) => ({
-    ...run,
-    label: `${formatShortDate(run.at)} · #${run.scanId}`,
-  }))
   return (
-    <ChartContainer config={config} className="h-[200px] w-full aspect-auto">
-      <LineChart data={data} margin={{ left: -12, right: 12, top: 8 }}>
-        <CartesianGrid vertical={false} />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          tickMargin={8}
-          minTickGap={24}
-        />
-        <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Line
-          type="monotone"
-          dataKey="score"
-          stroke="var(--color-score)"
-          strokeWidth={2.5}
-          dot={{ r: 3 }}
-          connectNulls
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ChartContainer>
+    <TimeseriesChart
+      kind="line"
+      seriesLabel={label}
+      domain={[0, 100]}
+      points={runs.map((run) => ({ label: labelFor(run), value: run.score }))}
+    />
   )
 }

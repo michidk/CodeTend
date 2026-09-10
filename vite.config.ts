@@ -6,13 +6,25 @@ import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite'
 import { devMigrations } from './scripts/vite-dev-migrations.ts'
 
+// The devtools plugin injects source-location attributes into every element
+// and opens an SSE channel per tab; opt in with TECDEBT_DEVTOOLS=true.
+const devtoolsEnabled = process.env.TECDEBT_DEVTOOLS === 'true'
+
 const config = defineConfig({
   // Dev/preview servers run behind sandbox proxies that forward arbitrary
   // hostnames, which Vite's host check would otherwise reject.
   server: {
     allowedHosts: true,
     // Scan checkouts live under data/; they must never trigger dev reloads.
-    watch: { ignored: ['**/data/**', '**/eve/**'] },
+    watch: {
+      ignored: [
+        '**/data/**',
+        '**/eve/**',
+        '**/drizzle/**',
+        '**/.output/**',
+        '**/.tanstack/**',
+      ],
+    },
   },
   preview: { allowedHosts: true },
   resolve: {
@@ -20,6 +32,8 @@ const config = defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
+    // Everything the client can reach is listed so Vite never discovers a
+    // dependency mid-session; each discovery re-bundles and reloads the page.
     include: [
       'react',
       'react-dom',
@@ -39,11 +53,21 @@ const config = defineConfig({
       '@tanstack/router-core',
       '@tanstack/router-core/isServer',
       '@tanstack/router-core/ssr/client',
+      '@tanstack/react-devtools',
+      'class-variance-authority',
+      'clsx',
+      'lucide-react',
+      'react-markdown',
+      'remark-gfm',
       'seroval',
+      'sonner',
+      'tailwind-merge',
+      'zustand',
+      'zustand/middleware',
     ],
   },
   plugins: [
-    devtools(),
+    ...(devtoolsEnabled ? [devtools()] : []),
     devMigrations(),
     tailwindcss(),
     tanstackStart({

@@ -1,4 +1,27 @@
 import { createOpenAI } from '@ai-sdk/openai'
+import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai'
+
+/**
+ * Drops reasoning parts from assistant history before each call. Sessions that
+ * started on an Anthropic model carry Anthropic reasoning signatures which the
+ * OpenAI Responses provider cannot replay; it logged a warning per part on
+ * every turn and still sent the surrounding message.
+ */
+export const stripForeignReasoning: LanguageModelMiddleware = {
+  transformParams: async ({ params }) => ({
+    ...params,
+    prompt: params.prompt.map((message) =>
+      message.role === 'assistant'
+        ? {
+            ...message,
+            content: message.content.filter(
+              (part) => part.type !== 'reasoning',
+            ),
+          }
+        : message,
+    ),
+  }),
+}
 
 /**
  * All agents use an OpenAI-compatible endpoint directly through the AI SDK,
@@ -16,7 +39,10 @@ export function scannerModel() {
         : `${normalizedBaseURL}/v1`
       : undefined,
   })
-  return openai.responses(process.env.TECDEBT_MODEL ?? 'gpt-5.6-sol')
+  return wrapLanguageModel({
+    model: openai.responses(process.env.TECDEBT_MODEL ?? 'gpt-5.6-sol'),
+    middleware: stripForeignReasoning,
+  })
 }
 
 export const MODEL_CONTEXT_WINDOW_TOKENS = 1_050_000

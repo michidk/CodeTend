@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { Check, Download, Hammer, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,13 +24,8 @@ export function FindingPatchControls({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const latest = patches[0] ?? null
+  // Progress is refreshed by the page-level activity poll, not per card.
   const generating = latest?.status === 'generating'
-
-  useEffect(() => {
-    if (!generating) return
-    const timer = window.setInterval(() => void router.invalidate(), 4_000)
-    return () => window.clearInterval(timer)
-  }, [generating, router])
 
   const generate = async () => {
     setBusy(true)

@@ -21,6 +21,16 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { getErrorDisplayState, toDisplayableError } from '@/lib/error-display'
 import { usePreferencesStore } from '@/lib/preferences-store'
 
+const FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap'
+
+/**
+ * Applies the stored theme before first paint. `ThemeHydrator` takes over
+ * after hydration; without this every full load flashed the light theme.
+ * Mirrors the zustand persist key/shape from `@/lib/preferences-store`.
+ */
+const THEME_BOOT_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem('tecdebt-preferences')||'null');var t=s&&s.state&&s.state.theme;var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light'}catch(e){}})()`
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -31,7 +41,17 @@ export const Route = createRootRoute({
       },
       { title: 'tecdebt' },
     ],
-    links: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+    links: [
+      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+      {
+        rel: 'preconnect',
+        href: 'https://fonts.gstatic.com',
+        crossOrigin: 'anonymous',
+      },
+      { rel: 'stylesheet', href: FONTS_HREF },
+    ],
+    scripts: [{ children: THEME_BOOT_SCRIPT }],
   }),
   component: RootComponent,
   shellComponent: RootDocument,

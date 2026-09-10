@@ -1,6 +1,5 @@
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { History } from 'lucide-react'
-import { useEffect } from 'react'
 import { EmptyState } from '@/components/empty-state'
 import { formatScore, scoreTextClass } from '@/components/health/grade-badge'
 import { ScanStatusBadge } from '@/components/health/scan-status'
@@ -17,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useActivityRefresh } from '@/hooks/use-activity-refresh'
 import {
   formatCostUsd,
   formatDateTime,
@@ -34,23 +34,12 @@ export const Route = createFileRoute('/scans/')({
   errorComponent: ({ error }) => <RouteError error={error} />,
 })
 
-const REFRESH_WHILE_SCANNING_MS = 5_000
-
 function ScanHistoryPage() {
   const { scans, totals } = Route.useLoaderData()
-  const router = useRouter()
   const scanning = scans.some(
     (scan) => scan.status === 'queued' || scan.status === 'running',
   )
-
-  useEffect(() => {
-    if (!scanning) return
-    const timer = window.setInterval(
-      () => void router.invalidate(),
-      REFRESH_WHILE_SCANNING_MS,
-    )
-    return () => window.clearInterval(timer)
-  }, [scanning, router])
+  useActivityRefresh({ kind: 'all' }, scanning)
 
   const totalTokens =
     totals.inputTokens +

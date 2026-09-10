@@ -12,8 +12,7 @@
     "src/components/ui/card.tsx": ["exports"],
     "src/components/ui/table.tsx": ["exports"],
     "src/components/ui/tooltip.tsx": ["exports"],
-    "src/components/ui/dialog.tsx": ["exports"],
-    "src/components/ui/chart-content.tsx": ["exports"]
+    "src/components/ui/dialog.tsx": ["exports"]
   },
   "ignoreExportsUsedInFile": true
 }

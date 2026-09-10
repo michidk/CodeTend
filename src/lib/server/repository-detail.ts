@@ -1,12 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
 import {
   findingOccurrences,
-  findingPatches,
   findings,
-  findingValidations,
   repositories,
   repositoryKnowledge,
   scannerRuns,
@@ -18,10 +16,42 @@ import {
   SEVERITY_ORDER,
 } from '@/lib/findings'
 import { enabledScanners } from '@/lib/scanners'
+import {
+  FINDING_SUMMARY_COLUMNS,
+  FINDING_SUMMARY_RELATIONS,
+} from '@/lib/server/finding-detail'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
 const HISTORY_LIMIT = 60
+
+/** Scan columns the history table and timeline render; excludes large JSON. */
+const SCAN_HISTORY_COLUMNS = {
+  id: true,
+  repositoryId: true,
+  status: true,
+  trigger: true,
+  mode: true,
+  cancellationRequestedAt: true,
+  commitSha: true,
+  branch: true,
+  fileCount: true,
+  phase: true,
+  gitnexusUsed: true,
+  overallScore: true,
+  grade: true,
+  counts: true,
+  model: true,
+  inputTokens: true,
+  outputTokens: true,
+  cacheReadTokens: true,
+  cacheWriteTokens: true,
+  estimatedCostUsd: true,
+  modelCalls: true,
+  startedAt: true,
+  finishedAt: true,
+  createdAt: true,
+} as const
 
 /**
  * Everything the repository page needs: the latest scored scan with its
@@ -41,13 +71,13 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       where: eq(scans.repositoryId, repositoryId),
       orderBy: [desc(scans.createdAt)],
       limit: HISTORY_LIMIT,
+      columns: SCAN_HISTORY_COLUMNS,
       with: {
         scannerRuns: {
           columns: {
             scannerId: true,
             score: true,
             status: true,
-            summary: true,
           },
         },
       },
@@ -68,16 +98,8 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
           eq(findings.repositoryId, repositoryId),
           inArray(findings.state, [...OPEN_FINDING_STATES]),
         ),
-        with: {
-          validations: {
-            orderBy: [desc(findingValidations.createdAt)],
-            limit: 1,
-          },
-          patches: {
-            orderBy: [desc(findingPatches.createdAt)],
-            limit: 3,
-          },
-        },
+        columns: FINDING_SUMMARY_COLUMNS,
+        with: FINDING_SUMMARY_RELATIONS,
       }),
       db.query.findings.findMany({
         where: and(
@@ -85,16 +107,8 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
           isNotNull(findings.disposition),
         ),
         orderBy: [desc(findings.triagedAt)],
-        with: {
-          validations: {
-            orderBy: [desc(findingValidations.createdAt)],
-            limit: 1,
-          },
-          patches: {
-            orderBy: [desc(findingPatches.createdAt)],
-            limit: 3,
-          },
-        },
+        columns: FINDING_SUMMARY_COLUMNS,
+        with: FINDING_SUMMARY_RELATIONS,
       }),
       db.query.repositoryKnowledge.findFirst({
         where: eq(repositoryKnowledge.repositoryId, repositoryId),
@@ -212,9 +226,6 @@ export const getScannerDetail = createServerFn({ method: 'GET' })
         scanId: scannerRuns.scanId,
         score: scannerRuns.score,
         status: scannerRuns.status,
-        summary: scannerRuns.summary,
-        fixPrompt: scannerRuns.fixPrompt,
-        error: scannerRuns.error,
         finishedAt: scannerRuns.finishedAt,
         scanCreatedAt: scans.createdAt,
         scanStatus: scans.status,
@@ -231,34 +242,31 @@ export const getScannerDetail = createServerFn({ method: 'GET' })
       .orderBy(desc(scans.createdAt))
       .limit(HISTORY_LIMIT)
 
-    const latestRun =
+    const latestRunRow =
       runs.find((run) => run.status === 'completed') ?? runs[0] ?? null
+    // The summary and fix prompt are large; load them for the shown run only.
+    const latestRunText = latestRunRow
+      ? await db.query.scannerRuns.findFirst({
+          where: eq(scannerRuns.id, latestRunRow.id),
+          columns: { summary: true, fixPrompt: true, error: true },
+        })
+      : null
+    const latestRun = latestRunRow
+      ? {
+          ...latestRunRow,
+          summary: latestRunText?.summary ?? null,
+          fixPrompt: latestRunText?.fixPrompt ?? null,
+          error: latestRunText?.error ?? null,
+        }
+      : null
 
     const scannerFindings = await db.query.findings.findMany({
       where: and(
         eq(findings.repositoryId, data.repositoryId),
         eq(findings.scannerId, data.scannerId),
       ),
-      with: {
-        occurrences: {
-          orderBy: [asc(findingOccurrences.createdAt)],
-          columns: {
-            scanId: true,
-            state: true,
-            severity: true,
-            note: true,
-            createdAt: true,
-          },
-        },
-        validations: {
-          orderBy: [desc(findingValidations.createdAt)],
-          limit: 1,
-        },
-        patches: {
-          orderBy: [desc(findingPatches.createdAt)],
-          limit: 3,
-        },
-      },
+      columns: FINDING_SUMMARY_COLUMNS,
+      with: FINDING_SUMMARY_RELATIONS,
     })
 
     const open = scannerFindings
@@ -294,45 +302,40 @@ export const getScanDetail = createServerFn({ method: 'GET' })
   .handler(async ({ data: scanId }) => {
     const scan = await db.query.scans.findFirst({
       where: eq(scans.id, scanId),
-      with: { repository: true, scannerRuns: true, artifacts: true },
+      columns: { manifest: false },
+      with: {
+        repository: { columns: { id: true, name: true } },
+        // Summaries render in the table; fix prompts only on the scanner page.
+        scannerRuns: { columns: { fixPrompt: false, eveSessionId: false } },
+        artifacts: { columns: { kind: true, sha256: true } },
+      },
     })
     if (!scan) return null
     const occurrences = await db.query.findingOccurrences.findMany({
       where: eq(findingOccurrences.scanId, scanId),
+      columns: {
+        id: true,
+        findingId: true,
+        state: true,
+        severity: true,
+        confidence: true,
+        priority: true,
+        priorityScore: true,
+      },
       with: {
         finding: {
-          with: {
-            patches: {
-              orderBy: [desc(findingPatches.createdAt)],
-              limit: 3,
-            },
-          },
+          columns: FINDING_SUMMARY_COLUMNS,
+          with: FINDING_SUMMARY_RELATIONS,
         },
       },
     })
-    const occurrenceIds = occurrences.map((occurrence) => occurrence.id)
-    const validations =
-      occurrenceIds.length > 0
-        ? await db.query.findingValidations.findMany({
-            where: inArray(findingValidations.occurrenceId, occurrenceIds),
-            orderBy: [desc(findingValidations.createdAt)],
-          })
-        : []
     occurrences.sort(
       (a, b) =>
         priorityRank(a.priority) - priorityRank(b.priority) ||
         SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
         a.finding.title.localeCompare(b.finding.title),
     )
-    return {
-      ...scan,
-      occurrences: occurrences.map((occurrence) => ({
-        ...occurrence,
-        validations: validations.filter(
-          (validation) => validation.occurrenceId === occurrence.id,
-        ),
-      })),
-    }
+    return { ...scan, occurrences }
   })
 
 function priorityRank(priority: keyof typeof PRIORITY_ORDER | null): number {

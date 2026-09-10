@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, Download, Square } from 'lucide-react'
-import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
 import { FindingCard } from '@/components/health/finding-card'
@@ -31,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useActivityRefresh } from '@/hooks/use-activity-refresh'
 import { getErrorMessage } from '@/lib/error-message'
 import {
   formatDateTime,
@@ -58,12 +58,14 @@ function ScanPage() {
   const scan = Route.useLoaderData()
   const router = useRouter()
   const active = scan?.status === 'queued' || scan?.status === 'running'
-
-  useEffect(() => {
-    if (!active) return
-    const timer = window.setInterval(() => void router.invalidate(), 4_000)
-    return () => window.clearInterval(timer)
-  }, [active, router])
+  const generating =
+    scan?.occurrences.some(
+      (occurrence) => occurrence.finding.patches[0]?.status === 'generating',
+    ) ?? false
+  useActivityRefresh(
+    { kind: 'scan', scanId: scan?.id ?? 0 },
+    scan !== null && (active || generating),
+  )
 
   if (!scan)
     return (
@@ -357,21 +359,13 @@ function ScanPage() {
             {scan.occurrences.map((occurrence) => (
               <FindingCard
                 key={occurrence.id}
-                finding={{
-                  ...occurrence.finding,
+                finding={occurrence.finding}
+                snapshot={{
                   state: occurrence.state,
                   severity: occurrence.severity,
-                  classification: occurrence.classification,
-                  securityContext: occurrence.securityContext,
-                  rootCause: occurrence.rootCause,
-                  codeEvidence: occurrence.codeEvidence,
-                  attackPath: occurrence.attackPath,
-                  validationPlan: occurrence.validationPlan,
-                  vulnerability: occurrence.vulnerability,
+                  confidence: occurrence.confidence,
                   priority: occurrence.priority,
                   priorityScore: occurrence.priorityScore,
-                  priorityReasons: occurrence.priorityReasons,
-                  validations: occurrence.validations,
                 }}
                 showScanner
               />

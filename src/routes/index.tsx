@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { FolderGit2, Play } from 'lucide-react'
-import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import {
@@ -16,9 +15,10 @@ import { ListPending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useActivityRefresh } from '@/hooks/use-activity-refresh'
 import { getErrorMessage } from '@/lib/error-message'
 import { formatRelative } from '@/lib/format'
-import { describeCron } from '@/lib/schedule'
+import { describeCron } from '@/lib/schedule-presets'
 import {
   type DashboardRow,
   getDashboard,
@@ -33,21 +33,11 @@ export const Route = createFileRoute('/')({
   errorComponent: ({ error }) => <RouteError error={error} />,
 })
 
-const REFRESH_WHILE_SCANNING_MS = 5_000
-
 function DashboardPage() {
   const rows = Route.useLoaderData()
   const router = useRouter()
   const scanning = rows.some((row) => row.runningScan !== null)
-
-  useEffect(() => {
-    if (!scanning) return
-    const timer = window.setInterval(
-      () => void router.invalidate(),
-      REFRESH_WHILE_SCANNING_MS,
-    )
-    return () => window.clearInterval(timer)
-  }, [scanning, router])
+  useActivityRefresh({ kind: 'all' }, scanning)
 
   const scanNow = async (row: DashboardRow) => {
     try {
