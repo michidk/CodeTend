@@ -73,7 +73,3 @@ export const getScanHistory = createServerFn({ method: 'GET' }).handler(
     }
   },
 )
-
-export type ScanHistoryRow = Awaited<
-  ReturnType<typeof getScanHistory>
->['scans'][number]

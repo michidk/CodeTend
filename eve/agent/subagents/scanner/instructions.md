@@ -42,6 +42,12 @@ Return the structured result exactly as requested and only through it: put no an
 - `recommendation`: the root-cause fix expressed as a target state a coding agent could implement: which concept to introduce or remove, where it should live, which call sites move, following the repository's existing conventions. Prefer one decisive recommendation over a menu of options; mention an alternative only when the choice depends on information you do not have.
 - `effort`: `trivial` (minutes, one place), `small` (an hour or two, a few files), `medium` (a day or two, one subsystem), `large` (multi-day, cross-cutting or needs a migration).
 - `locations`: the most relevant files, repository-relative (`src/auth/session.rs`, never the sandbox path), with line ranges and symbol names where you read them. Put the primary location first and include only locations you inspected; a finding is not more convincing because it lists more files.
+- `classification` and `securityContext`: use these only for Security Hygiene findings. Add applicable MITRE CWE identifiers and OWASP category labels, but omit any classification you cannot support. Record source-grounded reachability, exposure and data sensitivity; use `unknown` when the repository does not establish them. The app derives contextual priority from this evidence.
+- `rootCause`, `codeEvidence` and `attackPath`: use these for Security Hygiene findings. Trace attacker-controlled input through relevant controls to the dangerous sink, name the broken invariant, list realistic preconditions, and distinguish observed code from assumptions. Every evidence location must have an explicit source/control/sink/supporting/test role.
+- `validationPlan`: include this for a Security Hygiene finding only when a bounded command can materially confirm or disprove it without credentials, production access, or network access. Commands run in order, non-interactively, in one disposable network-denied workspace. Setup commands must precede one final reproducer; that final command must exit 0 only when it observes the claimed vulnerable behavior and nonzero when it does not. Never install packages, contact a service, mutate external state, use a real secret, or target anything outside the checkout. Omit the plan when static evidence is strongest or execution would be unsafe.
+- `remediationTests` and `preventiveControls`: for Security Hygiene findings, state the focused regression behavior that should fail before and pass after a fix, and identify nearby controls a patch must not weaken.
+
+Never invent or propose a CVE, CVSS score, EPSS value or CISA KEV status. A separate deterministic dependency audit matches exact locked package versions against OSV and adds those published signals after your scan. Source-code issues remain CWE/OWASP findings even when they resemble a known vulnerability class.
 
 ## Hypotheses
 
@@ -61,5 +67,7 @@ Check your result against this list and fix what fails:
 2. No two findings share a root cause; hypotheses you confirmed are not duplicated as new findings.
 3. Every location is repository-relative and was actually opened; line numbers match what you read.
 4. Severity reflects consequence for this repository; confidence reflects evidence, not conviction.
-5. Every hypothesis has exactly one verdict and confirmed/improved ones have an updated finding.
-6. The `summary` is two to five sentences of plain prose stating what you inspected, what is healthy and what the main problems are; it contains no markup and no finding you did not return.
+5. Security findings include supported CWE/OWASP and exploit-context evidence; non-security findings omit those fields.
+6. Coverage names what you actually reviewed and what remains deferred, excluded or uncertain. It never claims completeness merely because no additional findings were found.
+6. Every hypothesis has exactly one verdict and confirmed/improved ones have an updated finding.
+7. The `summary` is two to five sentences of plain prose stating what you inspected, what is healthy and what the main problems are; it contains no markup and no finding you did not return.

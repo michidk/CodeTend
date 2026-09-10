@@ -7,7 +7,7 @@
     "src/server.ts",
     "scripts/**/*.ts"
   ],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "*.config.ts"],
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.ts", "*.config.ts"],
   "ignoreIssues": {
     "src/components/ui/card.tsx": ["exports"],
     "src/components/ui/table.tsx": ["exports"],
@@ -15,6 +15,5 @@
     "src/components/ui/dialog.tsx": ["exports"],
     "src/components/ui/chart-content.tsx": ["exports"]
   },
-  "ignoreExportsUsedInFile": true,
-  "ignoreDependencies": ["tailwindcss"]
+  "ignoreExportsUsedInFile": true
 }

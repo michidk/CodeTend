@@ -8,7 +8,7 @@ import { parseIdParam } from '@/lib/route-params'
 import { updateRepository } from '@/lib/server/repositories'
 import { getRepositoryDetail } from '@/lib/server/repository-detail'
 
-export const Route = createFileRoute('/repositories/$repositoryId/edit')({
+export const Route = createFileRoute('/repositories/$repositoryId/edit/')({
   loader: ({ params }) =>
     getRepositoryDetail({ data: parseIdParam(params.repositoryId) }),
   component: EditRepositoryPage,

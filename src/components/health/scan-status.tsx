@@ -9,6 +9,7 @@ const STATUS_CLASSES: Record<ScanStatus, string> = {
   completed: 'border-transparent bg-positive/15 text-positive-text',
   partial: 'border-transparent bg-warning/15 text-warning-text',
   failed: 'border-transparent bg-destructive/15 text-destructive-text',
+  cancelled: 'border-transparent bg-muted text-muted-foreground',
 }
 
 export function ScanStatusBadge({

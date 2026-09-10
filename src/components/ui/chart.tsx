@@ -1,8 +1,6 @@
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
 import {
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart-content'
@@ -136,11 +134,4 @@ ${colorConfig
 }
 
 export type { ChartConfig }
-export {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartStyle,
-  ChartTooltip,
-  ChartTooltipContent,
-}
+export { ChartContainer, ChartStyle, ChartTooltip, ChartTooltipContent }

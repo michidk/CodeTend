@@ -17,6 +17,13 @@ export const resultsDir = () => `${dataDir()}/results`
 export const gitnexusHome = () => `${dataDir()}/gitnexus`
 export const usageDir = () => `${dataDir()}/usage`
 
+export function patchWorkspaceName(
+  repositoryId: number,
+  patchId: number,
+): string {
+  return `repo-${repositoryId}-patch-${patchId}`
+}
+
 export function workspaceName(repositoryId: number, scanId: number): string {
   return `repo-${repositoryId}-scan-${scanId}`
 }

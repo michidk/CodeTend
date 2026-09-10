@@ -11,14 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as RepositoriesNewRouteImport } from './routes/repositories/new'
 import { Route as ScannersIndexRouteImport } from './routes/scanners/index'
 import { Route as ScansIndexRouteImport } from './routes/scans/index'
-import { Route as ScansScanIdRouteImport } from './routes/scans/$scanId'
 import { Route as RepositoriesRepositoryIdIndexRouteImport } from './routes/repositories/$repositoryId/index'
-import { Route as RepositoriesRepositoryIdEditRouteImport } from './routes/repositories/$repositoryId/edit'
-import { Route as RepositoriesRepositoryIdKnowledgeRouteImport } from './routes/repositories/$repositoryId/knowledge'
-import { Route as RepositoriesRepositoryIdScannersScannerIdRouteImport } from './routes/repositories/$repositoryId/scanners/$scannerId'
+import { Route as RepositoriesNewIndexRouteImport } from './routes/repositories/new/index'
+import { Route as ScansScanIdIndexRouteImport } from './routes/scans/$scanId/index'
+import { Route as ApiPatchesPatchIdIndexRouteImport } from './routes/api/patches/$patchId/index'
+import { Route as ApiWebhooksGithubIndexRouteImport } from './routes/api/webhooks/github/index'
+import { Route as RepositoriesRepositoryIdEditIndexRouteImport } from './routes/repositories/$repositoryId/edit/index'
+import { Route as RepositoriesRepositoryIdKnowledgeIndexRouteImport } from './routes/repositories/$repositoryId/knowledge/index'
+import { Route as RepositoriesRepositoryIdSecurityIndexRouteImport } from './routes/repositories/$repositoryId/security/index'
+import { Route as RepositoriesRepositoryIdScannersScannerIdIndexRouteImport } from './routes/repositories/$repositoryId/scanners/$scannerId/index'
+import { Route as ApiScansScanIdArtifactsKindIndexRouteImport } from './routes/api/scans/$scanId/artifacts/$kind/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,11 +32,6 @@ const IndexRoute = IndexRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RepositoriesNewRoute = RepositoriesNewRouteImport.update({
-  id: '/repositories/new',
-  path: '/repositories/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScannersIndexRoute = ScannersIndexRouteImport.update({
@@ -45,123 +44,178 @@ const ScansIndexRoute = ScansIndexRouteImport.update({
   path: '/scans/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ScansScanIdRoute = ScansScanIdRouteImport.update({
-  id: '/scans/$scanId',
-  path: '/scans/$scanId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const RepositoriesRepositoryIdIndexRoute =
   RepositoriesRepositoryIdIndexRouteImport.update({
     id: '/repositories/$repositoryId/',
     path: '/repositories/$repositoryId/',
     getParentRoute: () => rootRouteImport,
   } as any)
-const RepositoriesRepositoryIdEditRoute =
-  RepositoriesRepositoryIdEditRouteImport.update({
-    id: '/repositories/$repositoryId/edit',
-    path: '/repositories/$repositoryId/edit',
+const RepositoriesNewIndexRoute = RepositoriesNewIndexRouteImport.update({
+  id: '/repositories/new/',
+  path: '/repositories/new/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScansScanIdIndexRoute = ScansScanIdIndexRouteImport.update({
+  id: '/scans/$scanId/',
+  path: '/scans/$scanId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPatchesPatchIdIndexRoute = ApiPatchesPatchIdIndexRouteImport.update({
+  id: '/api/patches/$patchId/',
+  path: '/api/patches/$patchId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksGithubIndexRoute = ApiWebhooksGithubIndexRouteImport.update({
+  id: '/api/webhooks/github/',
+  path: '/api/webhooks/github/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RepositoriesRepositoryIdEditIndexRoute =
+  RepositoriesRepositoryIdEditIndexRouteImport.update({
+    id: '/repositories/$repositoryId/edit/',
+    path: '/repositories/$repositoryId/edit/',
     getParentRoute: () => rootRouteImport,
   } as any)
-const RepositoriesRepositoryIdKnowledgeRoute =
-  RepositoriesRepositoryIdKnowledgeRouteImport.update({
-    id: '/repositories/$repositoryId/knowledge',
-    path: '/repositories/$repositoryId/knowledge',
+const RepositoriesRepositoryIdKnowledgeIndexRoute =
+  RepositoriesRepositoryIdKnowledgeIndexRouteImport.update({
+    id: '/repositories/$repositoryId/knowledge/',
+    path: '/repositories/$repositoryId/knowledge/',
     getParentRoute: () => rootRouteImport,
   } as any)
-const RepositoriesRepositoryIdScannersScannerIdRoute =
-  RepositoriesRepositoryIdScannersScannerIdRouteImport.update({
-    id: '/repositories/$repositoryId/scanners/$scannerId',
-    path: '/repositories/$repositoryId/scanners/$scannerId',
+const RepositoriesRepositoryIdSecurityIndexRoute =
+  RepositoriesRepositoryIdSecurityIndexRouteImport.update({
+    id: '/repositories/$repositoryId/security/',
+    path: '/repositories/$repositoryId/security/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const RepositoriesRepositoryIdScannersScannerIdIndexRoute =
+  RepositoriesRepositoryIdScannersScannerIdIndexRouteImport.update({
+    id: '/repositories/$repositoryId/scanners/$scannerId/',
+    path: '/repositories/$repositoryId/scanners/$scannerId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiScansScanIdArtifactsKindIndexRoute =
+  ApiScansScanIdArtifactsKindIndexRouteImport.update({
+    id: '/api/scans/$scanId/artifacts/$kind/',
+    path: '/api/scans/$scanId/artifacts/$kind/',
     getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
-  '/repositories/new': typeof RepositoriesNewRoute
-  '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
-  '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
-  '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
-  '/repositories/$repositoryId/scanners/$scannerId': typeof RepositoriesRepositoryIdScannersScannerIdRoute
+  '/repositories/new/': typeof RepositoriesNewIndexRoute
+  '/scans/$scanId/': typeof ScansScanIdIndexRoute
+  '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
+  '/api/webhooks/github/': typeof ApiWebhooksGithubIndexRoute
+  '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
+  '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
+  '/repositories/$repositoryId/security/': typeof RepositoriesRepositoryIdSecurityIndexRoute
+  '/repositories/$repositoryId/scanners/$scannerId/': typeof RepositoriesRepositoryIdScannersScannerIdIndexRoute
+  '/api/scans/$scanId/artifacts/$kind/': typeof ApiScansScanIdArtifactsKindIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
-  '/repositories/new': typeof RepositoriesNewRoute
-  '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners': typeof ScannersIndexRoute
   '/scans': typeof ScansIndexRoute
-  '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
-  '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId': typeof RepositoriesRepositoryIdIndexRoute
-  '/repositories/$repositoryId/scanners/$scannerId': typeof RepositoriesRepositoryIdScannersScannerIdRoute
+  '/repositories/new': typeof RepositoriesNewIndexRoute
+  '/scans/$scanId': typeof ScansScanIdIndexRoute
+  '/api/patches/$patchId': typeof ApiPatchesPatchIdIndexRoute
+  '/api/webhooks/github': typeof ApiWebhooksGithubIndexRoute
+  '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditIndexRoute
+  '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
+  '/repositories/$repositoryId/security': typeof RepositoriesRepositoryIdSecurityIndexRoute
+  '/repositories/$repositoryId/scanners/$scannerId': typeof RepositoriesRepositoryIdScannersScannerIdIndexRoute
+  '/api/scans/$scanId/artifacts/$kind': typeof ApiScansScanIdArtifactsKindIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
-  '/repositories/new': typeof RepositoriesNewRoute
-  '/scans/$scanId': typeof ScansScanIdRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
-  '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditRoute
-  '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
-  '/repositories/$repositoryId/scanners/$scannerId': typeof RepositoriesRepositoryIdScannersScannerIdRoute
+  '/repositories/new/': typeof RepositoriesNewIndexRoute
+  '/scans/$scanId/': typeof ScansScanIdIndexRoute
+  '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
+  '/api/webhooks/github/': typeof ApiWebhooksGithubIndexRoute
+  '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
+  '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
+  '/repositories/$repositoryId/security/': typeof RepositoriesRepositoryIdSecurityIndexRoute
+  '/repositories/$repositoryId/scanners/$scannerId/': typeof RepositoriesRepositoryIdScannersScannerIdIndexRoute
+  '/api/scans/$scanId/artifacts/$kind/': typeof ApiScansScanIdArtifactsKindIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/api/health'
-    | '/repositories/new'
-    | '/scans/$scanId'
     | '/scanners/'
     | '/scans/'
-    | '/repositories/$repositoryId/edit'
-    | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId/'
-    | '/repositories/$repositoryId/scanners/$scannerId'
+    | '/repositories/new/'
+    | '/scans/$scanId/'
+    | '/api/patches/$patchId/'
+    | '/api/webhooks/github/'
+    | '/repositories/$repositoryId/edit/'
+    | '/repositories/$repositoryId/knowledge/'
+    | '/repositories/$repositoryId/security/'
+    | '/repositories/$repositoryId/scanners/$scannerId/'
+    | '/api/scans/$scanId/artifacts/$kind/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/api/health'
-    | '/repositories/new'
-    | '/scans/$scanId'
     | '/scanners'
     | '/scans'
+    | '/repositories/$repositoryId'
+    | '/repositories/new'
+    | '/scans/$scanId'
+    | '/api/patches/$patchId'
+    | '/api/webhooks/github'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
-    | '/repositories/$repositoryId'
+    | '/repositories/$repositoryId/security'
     | '/repositories/$repositoryId/scanners/$scannerId'
+    | '/api/scans/$scanId/artifacts/$kind'
   id:
     | '__root__'
     | '/'
     | '/api/health'
-    | '/repositories/new'
-    | '/scans/$scanId'
     | '/scanners/'
     | '/scans/'
-    | '/repositories/$repositoryId/edit'
-    | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId/'
-    | '/repositories/$repositoryId/scanners/$scannerId'
+    | '/repositories/new/'
+    | '/scans/$scanId/'
+    | '/api/patches/$patchId/'
+    | '/api/webhooks/github/'
+    | '/repositories/$repositoryId/edit/'
+    | '/repositories/$repositoryId/knowledge/'
+    | '/repositories/$repositoryId/security/'
+    | '/repositories/$repositoryId/scanners/$scannerId/'
+    | '/api/scans/$scanId/artifacts/$kind/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiHealthRoute: typeof ApiHealthRoute
-  RepositoriesNewRoute: typeof RepositoriesNewRoute
-  ScansScanIdRoute: typeof ScansScanIdRoute
   ScannersIndexRoute: typeof ScannersIndexRoute
   ScansIndexRoute: typeof ScansIndexRoute
-  RepositoriesRepositoryIdEditRoute: typeof RepositoriesRepositoryIdEditRoute
-  RepositoriesRepositoryIdKnowledgeRoute: typeof RepositoriesRepositoryIdKnowledgeRoute
   RepositoriesRepositoryIdIndexRoute: typeof RepositoriesRepositoryIdIndexRoute
-  RepositoriesRepositoryIdScannersScannerIdRoute: typeof RepositoriesRepositoryIdScannersScannerIdRoute
+  RepositoriesNewIndexRoute: typeof RepositoriesNewIndexRoute
+  ScansScanIdIndexRoute: typeof ScansScanIdIndexRoute
+  ApiPatchesPatchIdIndexRoute: typeof ApiPatchesPatchIdIndexRoute
+  ApiWebhooksGithubIndexRoute: typeof ApiWebhooksGithubIndexRoute
+  RepositoriesRepositoryIdEditIndexRoute: typeof RepositoriesRepositoryIdEditIndexRoute
+  RepositoriesRepositoryIdKnowledgeIndexRoute: typeof RepositoriesRepositoryIdKnowledgeIndexRoute
+  RepositoriesRepositoryIdSecurityIndexRoute: typeof RepositoriesRepositoryIdSecurityIndexRoute
+  RepositoriesRepositoryIdScannersScannerIdIndexRoute: typeof RepositoriesRepositoryIdScannersScannerIdIndexRoute
+  ApiScansScanIdArtifactsKindIndexRoute: typeof ApiScansScanIdArtifactsKindIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -180,13 +234,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/repositories/new': {
-      id: '/repositories/new'
-      path: '/repositories/new'
-      fullPath: '/repositories/new'
-      preLoaderRoute: typeof RepositoriesNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/scanners/': {
       id: '/scanners/'
       path: '/scanners'
@@ -201,13 +248,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScansIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/scans/$scanId': {
-      id: '/scans/$scanId'
-      path: '/scans/$scanId'
-      fullPath: '/scans/$scanId'
-      preLoaderRoute: typeof ScansScanIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/repositories/$repositoryId/': {
       id: '/repositories/$repositoryId/'
       path: '/repositories/$repositoryId'
@@ -215,25 +255,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RepositoriesRepositoryIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/repositories/$repositoryId/edit': {
-      id: '/repositories/$repositoryId/edit'
+    '/repositories/new/': {
+      id: '/repositories/new/'
+      path: '/repositories/new'
+      fullPath: '/repositories/new/'
+      preLoaderRoute: typeof RepositoriesNewIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scans/$scanId/': {
+      id: '/scans/$scanId/'
+      path: '/scans/$scanId'
+      fullPath: '/scans/$scanId/'
+      preLoaderRoute: typeof ScansScanIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/patches/$patchId/': {
+      id: '/api/patches/$patchId/'
+      path: '/api/patches/$patchId'
+      fullPath: '/api/patches/$patchId/'
+      preLoaderRoute: typeof ApiPatchesPatchIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/github/': {
+      id: '/api/webhooks/github/'
+      path: '/api/webhooks/github'
+      fullPath: '/api/webhooks/github/'
+      preLoaderRoute: typeof ApiWebhooksGithubIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/repositories/$repositoryId/edit/': {
+      id: '/repositories/$repositoryId/edit/'
       path: '/repositories/$repositoryId/edit'
-      fullPath: '/repositories/$repositoryId/edit'
-      preLoaderRoute: typeof RepositoriesRepositoryIdEditRouteImport
+      fullPath: '/repositories/$repositoryId/edit/'
+      preLoaderRoute: typeof RepositoriesRepositoryIdEditIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/repositories/$repositoryId/knowledge': {
-      id: '/repositories/$repositoryId/knowledge'
+    '/repositories/$repositoryId/knowledge/': {
+      id: '/repositories/$repositoryId/knowledge/'
       path: '/repositories/$repositoryId/knowledge'
-      fullPath: '/repositories/$repositoryId/knowledge'
-      preLoaderRoute: typeof RepositoriesRepositoryIdKnowledgeRouteImport
+      fullPath: '/repositories/$repositoryId/knowledge/'
+      preLoaderRoute: typeof RepositoriesRepositoryIdKnowledgeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/repositories/$repositoryId/scanners/$scannerId': {
-      id: '/repositories/$repositoryId/scanners/$scannerId'
+    '/repositories/$repositoryId/security/': {
+      id: '/repositories/$repositoryId/security/'
+      path: '/repositories/$repositoryId/security'
+      fullPath: '/repositories/$repositoryId/security/'
+      preLoaderRoute: typeof RepositoriesRepositoryIdSecurityIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/repositories/$repositoryId/scanners/$scannerId/': {
+      id: '/repositories/$repositoryId/scanners/$scannerId/'
       path: '/repositories/$repositoryId/scanners/$scannerId'
-      fullPath: '/repositories/$repositoryId/scanners/$scannerId'
-      preLoaderRoute: typeof RepositoriesRepositoryIdScannersScannerIdRouteImport
+      fullPath: '/repositories/$repositoryId/scanners/$scannerId/'
+      preLoaderRoute: typeof RepositoriesRepositoryIdScannersScannerIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/scans/$scanId/artifacts/$kind/': {
+      id: '/api/scans/$scanId/artifacts/$kind/'
+      path: '/api/scans/$scanId/artifacts/$kind'
+      fullPath: '/api/scans/$scanId/artifacts/$kind/'
+      preLoaderRoute: typeof ApiScansScanIdArtifactsKindIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -242,16 +324,22 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiHealthRoute: ApiHealthRoute,
-  RepositoriesNewRoute: RepositoriesNewRoute,
-  ScansScanIdRoute: ScansScanIdRoute,
   ScannersIndexRoute: ScannersIndexRoute,
   ScansIndexRoute: ScansIndexRoute,
-  RepositoriesRepositoryIdEditRoute: RepositoriesRepositoryIdEditRoute,
-  RepositoriesRepositoryIdKnowledgeRoute:
-    RepositoriesRepositoryIdKnowledgeRoute,
   RepositoriesRepositoryIdIndexRoute: RepositoriesRepositoryIdIndexRoute,
-  RepositoriesRepositoryIdScannersScannerIdRoute:
-    RepositoriesRepositoryIdScannersScannerIdRoute,
+  RepositoriesNewIndexRoute: RepositoriesNewIndexRoute,
+  ScansScanIdIndexRoute: ScansScanIdIndexRoute,
+  ApiPatchesPatchIdIndexRoute: ApiPatchesPatchIdIndexRoute,
+  ApiWebhooksGithubIndexRoute: ApiWebhooksGithubIndexRoute,
+  RepositoriesRepositoryIdEditIndexRoute:
+    RepositoriesRepositoryIdEditIndexRoute,
+  RepositoriesRepositoryIdKnowledgeIndexRoute:
+    RepositoriesRepositoryIdKnowledgeIndexRoute,
+  RepositoriesRepositoryIdSecurityIndexRoute:
+    RepositoriesRepositoryIdSecurityIndexRoute,
+  RepositoriesRepositoryIdScannersScannerIdIndexRoute:
+    RepositoriesRepositoryIdScannersScannerIdIndexRoute,
+  ApiScansScanIdArtifactsKindIndexRoute: ApiScansScanIdArtifactsKindIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

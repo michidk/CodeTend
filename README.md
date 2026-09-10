@@ -3,10 +3,11 @@
 **Continuous, language-agnostic health evaluation of entire source-code
 repositories, performed by specialized LLM agents.**
 
-tecdebt is not a pull-request review bot. It registers repositories, and on a
-schedule (or on demand) it makes a fresh checkout of the configured branch,
-runs a registry of specialized scanner agents over the *whole* repository,
-turns their structured findings into deterministic scores and grades, tracks
+tecdebt is not an autonomous pull-request-writing bot. It registers
+repositories, and on a schedule, webhook, or on demand it makes a fresh
+checkout of the configured branch. It runs specialized scanner agents over a
+repository, selected paths, or a committed push/PR diff, turns their structured
+findings into deterministic scores and grades, tracks
 every finding across scans (new → active → improved → resolved → regressed),
 and generates copy-pasteable fix prompts for coding agents.
 
@@ -15,7 +16,7 @@ and generates copy-pasteable fix prompts for coding agents.
 ## How it works
 
 ```text
-schedule / "Scan now" / (future) webhook
+schedule / "Scan now" / signed GitHub push or pull-request webhook
         │
         ▼
  app creates a scan row, writes data/requests/scan-<id>.json
@@ -24,11 +25,14 @@ schedule / "Scan now" / (future) webhook
  Eve root agent ──► run_scan workflow tool (durable)
         │   1. fresh shallow clone of the branch      ("use step")
         │   2. optional GitNexus index                 ("use step")
-        │   3. repository-knowledge refresh            (knowledge subagent, only if stale)
-        │   4. one scanner subagent per scanner        (parallel, structured output)
-        │   5. write data/results/scan-<id>.json       ("use step")
+        │   3. OSV lockfile dependency audit            (exact package versions)
+        │   4. repository-knowledge refresh             (knowledge subagent, only if stale)
+        │   5. threat-model-aware candidate discovery   (parallel, structured output)
+        │   6. bounded deep passes (deep mode only)     (convergence limited)
+        │   7. isolated executable validation           (fail closed when unavailable)
+        │   8. write data/results/scan-<id>.json        ("use step")
         ▼
- app reconciles findings, scores, aggregates provider usage, persists, updates UI
+ app enriches, prioritizes, reconciles, scores, persists and seals portable artifacts
 ```
 
 | Layer | Choice |
@@ -42,12 +46,13 @@ schedule / "Scan now" / (future) webhook
 ## Quick start (local)
 
 Prerequisites: Bun 1.4, Node 24 (for Eve), Git, PostgreSQL (Docker is fine),
-an OpenAI API key. Optionally GitNexus: `npm i -g gitnexus` or
+an OpenAI API key, and [OSV Scanner](https://google.github.io/osv-scanner/installation/)
+for dependency auditing. The Docker image includes OSV Scanner. Optionally GitNexus: `npm i -g gitnexus` or
 `mkdir -p .tools && (cd .tools && npm i gitnexus)` (the app looks in both
 places, or at `GITNEXUS_BIN`).
 
 ```bash
-cp .env.example .env               # set ANTHROPIC_API_KEY, EVE_PASSWORD, DATABASE_URL
+cp .env.example .env               # set OPENAI_API_KEY, passwords and DATABASE_URL
 bun install && (cd eve && npm install)
 
 docker compose up -d postgres      # or point DATABASE_URL at your own database
@@ -62,18 +67,22 @@ run separately.
 ## Quick start (Docker Compose)
 
 ```bash
-cp .env.example .env               # set ANTHROPIC_API_KEY and EVE_PASSWORD
+cp .env.example .env               # replace every change-me value
 docker compose up --build
 ```
 
 Compose starts PostgreSQL, applies migrations, starts the Eve runtime and the
-app on <http://localhost:3000>. The `scan_data` volume is shared between the app
-(requests/results/usage) and Eve (checkouts).
+app on <http://localhost:3000>. Sign in with the configured HTTP Basic
+credentials. The `scan_data` volume is shared between the app and Eve;
+transient requests, results, usage records, checkouts and GitNexus indexes are
+removed after each scan is persisted.
 
 ## Using it
 
 1. **Add repository**: URL, branch, cron schedule (UTC), enabled switch.
-2. **Scan now** on the dashboard or repository page, or wait for `nextScanAt`.
+2. **Scan now** on the repository page. Choose standard or bounded deep mode,
+   whole-repository or selected-path scope, and an optional cost ceiling. You
+   can also wait for `nextScanAt` or configure the signed GitHub webhook below.
 3. Watch the scan phase update live (cloning → indexing → knowledge → scanning →
    reconciling).
 4. The repository page shows the overall score and A–F grade, score delta,
@@ -82,6 +91,13 @@ app on <http://localhost:3000>. The `scan_data` volume is shared between the app
    **Scans** page shows usage across every repository.
 5. Each scanner page shows its score trend, findings with evidence and
    recommendations, and the aggregated **fix prompt** with a Copy button.
+6. Security findings include root cause, role-tagged source/control/sink
+   evidence, attack path, validation results and proof gaps, remediation tests,
+   and preventive controls. Scan pages expose manifest, findings, coverage,
+   Markdown and SARIF downloads.
+7. Expand a finding to mark it **false positive** or **accepted risk** with an
+   audit note. That operator disposition stays suppressed across scans until
+   someone explicitly reopens it; it is never presented as a code fix.
 
 ## Scanners
 
@@ -94,7 +110,7 @@ Architecture & Modularity · Duplication & Abstraction · Dead & Obsolete Code �
 Complexity & Maintainability · Tests & Testability · Reliability & Error
 Handling · Documentation & Understandability · Domain & API Design · Type
 Safety & Data Contracts · Consistency / Vibe Debt · Dependencies & Build Health
-· Security Hygiene
+· Vulnerable Dependencies · Security Hygiene
 
 Each scanner's `prompt` names what it owns, which neighbouring dimensions own
 the adjacent concerns ("Not yours"), and how to calibrate severity, so the same
@@ -123,18 +139,67 @@ finding (critical 30, high 16, medium 8, low 3; confidence high ×1, medium
 grades are A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, else F. The model never proposes
 numbers.
 
+## Vulnerability enrichment and priority
+
+The deterministic **Vulnerable Dependencies** scanner runs Google's OSV
+Scanner over supported lockfiles and manifests. OSV supplies exact ecosystem,
+package and version matches (plus purl when published), advisory aliases and
+fixed versions. tecdebt calculates published CVSS 2.0, 3.0, 3.1 and 4.0
+vectors locally, fetches FIRST EPSS probabilities, and joins the CISA Known
+Exploited Vulnerabilities catalog. An unavailable EPSS or KEV feed is reported
+in the scanner summary but never discards an OSV result.
+
+Raw severity and contextual priority are deliberately separate. Dependency
+priority combines CVSS, EPSS, KEV and fix availability; a KEV entry always
+becomes critical priority. The Security Hygiene agent classifies source-code
+findings with CWE/OWASP and records evidenced reachability, exposure and data
+sensitivity, which drive their separate contextual priority. It never assigns
+CVEs or CVSS to source findings. The dashboard retains exact match evidence and
+snapshots all enrichment on each finding occurrence.
+
+## Security review pipeline
+
+Security Hygiene follows a staged review: editable repository security context
+and threat model → candidate discovery → safe isolated validation → attack-path
+and impact analysis → contextual ranking → coverage-aware lifecycle. Deep mode
+uses a small configurable worker pool, a hard run ceiling, and convergence
+stopping; it does not launch one agent per file.
+
+Executable validation is fail closed. Commands run sequentially in a disposable
+Docker container with no network, all capabilities dropped,
+`no-new-privileges`, CPU/memory/PID limits, a read-only source mount, and a
+throwaway writable copy. If isolation is unavailable, tecdebt records an
+explicit proof gap and never executes repository code on the app or Eve host.
+The bundled Compose topology deliberately has no Docker socket, so validation
+is unavailable there unless Eve is deployed with a separate authorized
+Docker-capable execution boundary.
+
+Lifecycle resolution is coverage aware: an omitted finding is not marked fixed
+unless its original path was inside a complete reviewed target. Path and diff
+scans cannot silently resolve findings outside their scope. Manual dispositions
+are re-evaluated and reopen as regressions when their rationale no longer fits.
+
+For an active finding, **Generate patch** starts a separate one-finding fixer.
+It works against the exact source revision in a disposable clone, returns a
+text-only unified diff, and must pass path/symlink/binary restrictions plus
+`git apply --check`. When the finding has an executable reproducer, the patched
+clone is rerun through the same isolated validator; a patch is marked verified
+only when the vulnerable behavior no longer reproduces. Reviewers explicitly
+approve or reject the stored diff. Approval is an audit decision only: tecdebt
+does not modify the registered checkout, push a branch, or open a pull request.
+
 ## Token and cost tracking
 
 Eve hooks record the provider-reported input, output, cache-read and cache-write
-tokens for the root agent, knowledge agent and every scanner step. They append
-usage-only JSON lines under `data/usage/`; prompts and model responses are never
-logged. After a scan settles, the app deduplicates and aggregates those records,
-stores scan and per-scanner totals in PostgreSQL, and removes the temporary file.
+tokens for root, knowledge, scanner and fixer steps. They append usage-only JSON
+lines under `data/usage/`; prompts and model responses are never logged. After a
+scan or patch settles, the app deduplicates and aggregates those records, stores
+scan, per-scanner or patch totals in PostgreSQL, and removes the temporary file.
 
 Costs are estimates based on the configured model's provider list price. A
 provider-reported cost takes precedence when available. Unknown models still
 show token counts and model calls, but their cost is shown as unavailable rather
-than guessed.
+than guessed. The UTC-day admission budget includes both scans and fixer jobs.
 
 ## Finding lifecycle
 
@@ -153,6 +218,8 @@ then derives states from *our persisted results* (never Git history):
 | open finding returned with higher severity, or a resolved finding reappears | `regressed` |
 | scanner verdict `resolved`, or the scanner verified every other hypothesis and omitted this one | `resolved` |
 | open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
+| operator marks a finding false positive or accepted risk | `resolved` with a durable manual disposition; future matches stay suppressed |
+| operator reopens a manually triaged finding | `active`; the next scan resumes normal reconciliation |
 
 Every observation is stored as a `finding_occurrences` row, which powers the
 "active findings over time" chart.
@@ -189,8 +256,10 @@ scripts/                   migrate, dev migrations plugin, import-boundary check
 bun run dev              # app with automatic migrations
 bun run check            # Biome + import boundaries
 bun run test             # focused pricing and usage-accounting tests
+bun run test:database    # migrated-schema and active-scan constraint smoke test
 bun run typecheck
 bun run build
+bun run verify           # format/lint, tests, types, build, Eve types and dead code
 bun run eve:typecheck    # type-check the Eve agent
 bun run eve:build        # compile the Eve agent
 bun run eve:start        # serve the compiled Eve agent
@@ -205,37 +274,70 @@ bun run scripts/cli.ts add <name> <url> [branch] [cron]   # scripting helpers
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `TECDEBT_DATA_DIR` | Shared directory for scan requests/results, checkouts and GitNexus indexes |
+| `TECDEBT_BASIC_AUTH_USERNAME`, `TECDEBT_BASIC_AUTH_PASSWORD` | App HTTP Basic credentials; production fails closed without a password |
+| `TECDEBT_ALLOWED_GIT_HOSTS` | Comma-separated exact clone-host allowlist (default `github.com`) |
+| `TECDEBT_ALLOW_LOCAL_REPOSITORIES`, `TECDEBT_ALLOW_INSECURE_GIT` | Explicit development-only escape hatches, both off by default |
+| `TECDEBT_MAX_ACTIVE_SCANS`, `TECDEBT_MAX_ACTIVE_PATCHES`, `TECDEBT_MAX_DAILY_COST_USD`, `TECDEBT_DEFAULT_SCAN_COST_USD` | Global scan/patch concurrency, UTC-day AI cost cap, and optional per-scan default |
+| `TECDEBT_DEEP_WORKERS`, `TECDEBT_DEEP_MAX_RUNS`, `TECDEBT_DEEP_STOP_AFTER_NO_NEW` | Bounded deep-scan fan-out and convergence |
+| `TECDEBT_VALIDATION_ENABLED`, `TECDEBT_VALIDATION_RUNNER`, `TECDEBT_VALIDATION_IMAGE` | Fail-closed isolated validation controls |
+| `TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS` | Per-repository manual scan cooldown |
 | `EVE_URL`, `EVE_USERNAME`, `EVE_PASSWORD` | Eve runtime endpoint and HTTP Basic credentials |
 | `SCHEDULER_INTERVAL_SECONDS` | How often the app looks for due repositories |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `TECDEBT_MODEL` | Model access for the Eve agents |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TECDEBT_MODEL` | OpenAI Responses API access for Eve agents |
+| `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION`, `TECDEBT_SCANNER_CONCURRENCY` | Per-session token ceiling and bounded scanner fan-out |
+| `GITHUB_TOKEN` | Optional short-lived GitHub App installation token for private HTTPS clones |
+| `GITHUB_WEBHOOK_SECRET` | Optional secret authenticating GitHub push and pull-request deliveries to `/api/webhooks/github` |
 | `GITNEXUS_ENABLED`, `GITNEXUS_MCP_PORT` | Optional code-intelligence layer |
+| `OSV_SCANNER_BIN` | Optional OSV Scanner path override for local Eve runs; Docker includes it |
 
 ## Repository access
 
-The PoC clones with the credentials already available on the host that runs
-the Eve runtime. For `github.com` URLs it asks the local **GitHub CLI**
-(`gh auth git-credential`) when `gh auth status` succeeds; otherwise it falls
-back to the Git credential helpers configured on the host. Public repositories
-need nothing. The logic lives in a single function,
-[`eve/agent/lib/git-auth.ts`](eve/agent/lib/git-auth.ts), so a later version
-can swap in GitHub App installation tokens (per-repository `x-access-token`
-credentials) without changing the clone step. That is also where the future
-GitHub push webhook trigger will plug into `startScan(repositoryId, 'webhook')`.
+Clone locations are checked against `TECDEBT_ALLOWED_GIT_HOSTS` before they
+cross into the credentialed Eve runtime. Plain HTTP, embedded URL credentials,
+`file://` URLs and absolute local paths are rejected by default. Public
+repositories need no credential. Private GitHub HTTPS clones prefer the
+short-lived token in `GITHUB_TOKEN` (for example a GitHub App installation
+token), then local `gh auth git-credential`, then configured Git credential
+helpers.
+
+To scan GitHub pushes and pull requests, set a random
+`GITHUB_WEBHOOK_SECRET`, restart the app, and configure a repository webhook targeting
+`https://<your-host>/api/webhooks/github` with JSON content, that same secret,
+and push plus pull-request events enabled. Pushes scan `before…after`; reviewable
+pull requests scan base-to-head. Only enabled repositories whose GitHub
+`owner/name` and configured base branch match are selected. SHA-256 signatures
+are mandatory; delivery IDs are retained for 30 days to reject replays. The
+webhook never writes comments or mutates GitHub.
+
+## Operating and security
+
+The built-in HTTP Basic boundary is intended for a private, single-tenant
+deployment behind TLS. See [Operations](docs/OPERATIONS.md),
+[Security policy](SECURITY.md), and [Data handling](PRIVACY.md) before exposing
+the service. CI verifies the application, Eve runtime, migrations, production
+dependency audits and both Docker targets on every proposed change.
 
 ## Limitations
 
-- Repository access uses local `gh`/Git credentials; a GitHub App integration
-  is planned but not part of the PoC.
-- Scans interrupted by an app restart are marked failed even though Eve's
-  durable session may finish; results are not re-attached.
+- The built-in authentication boundary is single-tenant. A multi-customer SaaS
+  still needs an external identity provider, organizations and repository-level
+  authorization.
+- GitHub App token generation and rotation belong to the hosting control plane;
+  tecdebt accepts a short-lived installation token for clones.
+- Running scans are re-attached after an app restart when Eve writes their
+  result within the recovery window; older orphaned scans are failed cleanly.
+- Executable finding validation is disabled by default. When enabled, Eve must
+  have Docker access; commands run only in disposable, network-denied,
+  capability-dropped containers and never fall back to the Eve host. The
+  bundled Compose deployment deliberately does not mount the Docker socket.
 - The sandbox is `just-bash` (virtual shell, no real toolchains, no network).
   Switch `eve/agent/sandbox/sandbox.ts` to `docker()` when scanners must run
-  real language tooling.
+  real language tooling. OSV runs as a separate trusted workflow step outside
+  that agent sandbox and uses its public vulnerability service.
 - Scanners sample large repositories; very large monorepos may exceed a single
   scan's context and should be split.
 - GitNexus supports a fixed set of languages; other languages are analyzed
   from the filesystem only.
-- No authentication in front of the app. Put a proxy in front for anything
-  beyond local use.
-- The automated suite currently covers pricing and usage accounting; the wider
-  scan and reconciliation pipeline still relies on integration verification.
+- The full LLM scan remains an external-service integration test; deterministic
+  vulnerability parsing, priority, repository access, accounting and database
+  invariants are covered without spending model credits.

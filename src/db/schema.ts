@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
   index,
@@ -12,12 +12,29 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type {
+  AttackPath,
+  CodeEvidence,
   Confidence,
   Effort,
+  FindingClassification,
+  FindingDisposition,
   FindingLocation,
+  FindingPriority,
   FindingState,
+  SecurityContext,
   Severity,
+  ValidationCommandResult,
+  ValidationPlan,
+  ValidationStatus,
+  VulnerabilityMetadata,
 } from '@/lib/findings'
+import type {
+  ScanCoverage,
+  ScanManifest,
+  ScanMode,
+  ScanTarget,
+  SecurityProfile,
+} from '@/lib/security-scans'
 
 const createdAt = timestamp('created_at', { withTimezone: true })
   .notNull()
@@ -32,6 +49,7 @@ export const SCAN_STATUSES = [
   'completed',
   'partial',
   'failed',
+  'cancelled',
 ] as const
 export type ScanStatus = (typeof SCAN_STATUSES)[number]
 
@@ -43,6 +61,7 @@ export const SCANNER_RUN_STATUSES = [
   'running',
   'completed',
   'failed',
+  'cancelled',
 ] as const
 export type ScannerRunStatus = (typeof SCANNER_RUN_STATUSES)[number]
 
@@ -57,6 +76,13 @@ export const repositories = pgTable('repositories', {
   lastScanAt: timestamp('last_scan_at', { withTimezone: true }),
   createdAt,
   updatedAt,
+})
+
+/** GitHub delivery IDs already accepted, retained to reject signed replays. */
+export const githubWebhookDeliveries = pgTable('github_webhook_deliveries', {
+  deliveryId: text('delivery_id').primaryKey(),
+  event: text('event').notNull(),
+  createdAt,
 })
 
 /**
@@ -85,6 +111,27 @@ export const repositoryKnowledge = pgTable('repository_knowledge', {
   updatedAt,
 })
 
+/** Editable, security-specific context used by discovery and prioritization. */
+export const repositorySecurityProfiles = pgTable(
+  'repository_security_profiles',
+  {
+    id: serial('id').primaryKey(),
+    repositoryId: integer('repository_id')
+      .notNull()
+      .references(() => repositories.id, { onDelete: 'cascade' })
+      .unique(),
+    profile: jsonb('profile').$type<SecurityProfile>().notNull(),
+    version: integer('version').notNull().default(1),
+    source: text('source')
+      .$type<'generated' | 'operator' | 'repository'>()
+      .notNull()
+      .default('generated'),
+    generatedAt: timestamp('generated_at', { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+)
+
 export interface KnowledgeSource {
   readonly path: string
   readonly hash: string
@@ -112,6 +159,15 @@ export const scans = pgTable(
       .references(() => repositories.id, { onDelete: 'cascade' }),
     status: text('status').$type<ScanStatus>().notNull().default('queued'),
     trigger: text('trigger').$type<ScanTrigger>().notNull().default('manual'),
+    mode: text('mode').$type<ScanMode>().notNull().default('standard'),
+    target: jsonb('target')
+      .$type<ScanTarget>()
+      .notNull()
+      .default({ kind: 'repository' }),
+    maxCostUsd: real('max_cost_usd'),
+    cancellationRequestedAt: timestamp('cancellation_requested_at', {
+      withTimezone: true,
+    }),
     commitSha: text('commit_sha'),
     branch: text('branch'),
     fileCount: integer('file_count'),
@@ -133,6 +189,8 @@ export const scans = pgTable(
     estimatedCostUsd: real('estimated_cost_usd'),
     /** Number of model calls (root turn plus every subagent step). */
     modelCalls: integer('model_calls'),
+    coverage: jsonb('coverage').$type<ScanCoverage>(),
+    manifest: jsonb('manifest').$type<ScanManifest>(),
     error: text('error'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
@@ -143,6 +201,9 @@ export const scans = pgTable(
       table.repositoryId,
       table.createdAt,
     ),
+    uniqueIndex('scans_repository_active_idx')
+      .on(table.repositoryId)
+      .where(sql`${table.status} in ('queued', 'running')`),
   ],
 )
 
@@ -214,6 +275,25 @@ export const findings = pgTable(
       .$type<FindingLocation[]>()
       .notNull()
       .default([]),
+    classification: jsonb('classification').$type<FindingClassification>(),
+    securityContext: jsonb('security_context').$type<SecurityContext>(),
+    rootCause: text('root_cause'),
+    codeEvidence: jsonb('code_evidence').$type<CodeEvidence[]>(),
+    attackPath: jsonb('attack_path').$type<AttackPath>(),
+    validationPlan: jsonb('validation_plan').$type<ValidationPlan>(),
+    remediationTests: jsonb('remediation_tests').$type<string[]>(),
+    preventiveControls: jsonb('preventive_controls').$type<string[]>(),
+    vulnerability: jsonb('vulnerability').$type<VulnerabilityMetadata>(),
+    priority: text('priority').$type<FindingPriority>(),
+    priorityScore: real('priority_score'),
+    priorityReasons: jsonb('priority_reasons')
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Manual operator decision; null means lifecycle state comes from scans. */
+    disposition: text('disposition').$type<FindingDisposition>(),
+    dispositionNote: text('disposition_note'),
+    triagedAt: timestamp('triaged_at', { withTimezone: true }),
     firstSeenScanId: integer('first_seen_scan_id').references(() => scans.id, {
       onDelete: 'set null',
     }),
@@ -250,6 +330,19 @@ export const findingOccurrences = pgTable(
     state: text('state').$type<FindingState>().notNull(),
     severity: text('severity').$type<Severity>().notNull(),
     confidence: text('confidence').$type<Confidence>().notNull(),
+    classification: jsonb('classification').$type<FindingClassification>(),
+    securityContext: jsonb('security_context').$type<SecurityContext>(),
+    rootCause: text('root_cause'),
+    codeEvidence: jsonb('code_evidence').$type<CodeEvidence[]>(),
+    attackPath: jsonb('attack_path').$type<AttackPath>(),
+    validationPlan: jsonb('validation_plan').$type<ValidationPlan>(),
+    vulnerability: jsonb('vulnerability').$type<VulnerabilityMetadata>(),
+    priority: text('priority').$type<FindingPriority>(),
+    priorityScore: real('priority_score'),
+    priorityReasons: jsonb('priority_reasons')
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     note: text('note'),
     createdAt,
   },
@@ -262,6 +355,99 @@ export const findingOccurrences = pgTable(
   ],
 )
 
+export const findingValidations = pgTable(
+  'finding_validations',
+  {
+    id: serial('id').primaryKey(),
+    findingId: integer('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    occurrenceId: integer('occurrence_id').references(
+      () => findingOccurrences.id,
+      { onDelete: 'set null' },
+    ),
+    status: text('status').$type<ValidationStatus>().notNull(),
+    method: text('method').notNull(),
+    summary: text('summary').notNull(),
+    commands: jsonb('commands')
+      .$type<ValidationCommandResult[]>()
+      .notNull()
+      .default([]),
+    proofGaps: jsonb('proof_gaps').$type<string[]>().notNull().default([]),
+    runner: text('runner').notNull(),
+    createdAt,
+  },
+  (table) => [index('finding_validations_finding_idx').on(table.findingId)],
+)
+
+export const scanArtifacts = pgTable(
+  'scan_artifacts',
+  {
+    id: serial('id').primaryKey(),
+    scanId: integer('scan_id')
+      .notNull()
+      .references(() => scans.id, { onDelete: 'cascade' }),
+    kind: text('kind')
+      .$type<'manifest' | 'findings' | 'coverage' | 'report' | 'sarif'>()
+      .notNull(),
+    contentType: text('content_type').notNull(),
+    sha256: text('sha256').notNull(),
+    contents: text('contents').notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('scan_artifacts_scan_kind_idx').on(table.scanId, table.kind),
+  ],
+)
+
+export const findingPatches = pgTable(
+  'finding_patches',
+  {
+    id: serial('id').primaryKey(),
+    findingId: integer('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    sourceScanId: integer('source_scan_id').references(() => scans.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status')
+      .$type<
+        | 'generating'
+        | 'proposed'
+        | 'accepted'
+        | 'rejected'
+        | 'verified'
+        | 'failed'
+      >()
+      .notNull()
+      .default('proposed'),
+    diff: text('diff').notNull(),
+    summary: text('summary').notNull(),
+    verification: jsonb('verification').$type<{
+      status: ValidationStatus
+      commands: ValidationCommandResult[]
+      proofGaps: string[]
+    }>(),
+    /** Eve root session used to generate this patch, for usage attribution. */
+    eveSessionId: text('eve_session_id'),
+    model: text('model'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWriteTokens: integer('cache_write_tokens'),
+    estimatedCostUsd: real('estimated_cost_usd'),
+    modelCalls: integer('model_calls'),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index('finding_patches_finding_idx').on(table.findingId),
+    uniqueIndex('finding_patches_active_idx')
+      .on(table.findingId)
+      .where(sql`${table.status} in ('generating', 'proposed', 'verified')`),
+  ],
+)
+
 export const repositoriesRelations = relations(
   repositories,
   ({ many, one }) => ({
@@ -270,6 +456,10 @@ export const repositoriesRelations = relations(
     knowledge: one(repositoryKnowledge, {
       fields: [repositories.id],
       references: [repositoryKnowledge.repositoryId],
+    }),
+    securityProfile: one(repositorySecurityProfiles, {
+      fields: [repositories.id],
+      references: [repositorySecurityProfiles.repositoryId],
     }),
   }),
 )
@@ -284,6 +474,16 @@ export const repositoryKnowledgeRelations = relations(
   }),
 )
 
+export const repositorySecurityProfilesRelations = relations(
+  repositorySecurityProfiles,
+  ({ one }) => ({
+    repository: one(repositories, {
+      fields: [repositorySecurityProfiles.repositoryId],
+      references: [repositories.id],
+    }),
+  }),
+)
+
 export const scansRelations = relations(scans, ({ one, many }) => ({
   repository: one(repositories, {
     fields: [scans.repositoryId],
@@ -291,6 +491,8 @@ export const scansRelations = relations(scans, ({ one, many }) => ({
   }),
   scannerRuns: many(scannerRuns),
   occurrences: many(findingOccurrences),
+  artifacts: many(scanArtifacts),
+  patches: many(findingPatches),
 }))
 
 export const scannerRunsRelations = relations(scannerRuns, ({ one }) => ({
@@ -303,6 +505,8 @@ export const findingsRelations = relations(findings, ({ one, many }) => ({
     references: [repositories.id],
   }),
   occurrences: many(findingOccurrences),
+  validations: many(findingValidations),
+  patches: many(findingPatches),
 }))
 
 export const findingOccurrencesRelations = relations(
@@ -319,9 +523,46 @@ export const findingOccurrencesRelations = relations(
   }),
 )
 
+export const findingValidationsRelations = relations(
+  findingValidations,
+  ({ one }) => ({
+    finding: one(findings, {
+      fields: [findingValidations.findingId],
+      references: [findings.id],
+    }),
+    occurrence: one(findingOccurrences, {
+      fields: [findingValidations.occurrenceId],
+      references: [findingOccurrences.id],
+    }),
+  }),
+)
+
+export const findingPatchesRelations = relations(findingPatches, ({ one }) => ({
+  finding: one(findings, {
+    fields: [findingPatches.findingId],
+    references: [findings.id],
+  }),
+  sourceScan: one(scans, {
+    fields: [findingPatches.sourceScanId],
+    references: [scans.id],
+  }),
+}))
+
+export const scanArtifactsRelations = relations(scanArtifacts, ({ one }) => ({
+  scan: one(scans, {
+    fields: [scanArtifacts.scanId],
+    references: [scans.id],
+  }),
+}))
+
 export type Repository = typeof repositories.$inferSelect
 export type Scan = typeof scans.$inferSelect
 export type ScannerRun = typeof scannerRuns.$inferSelect
 export type Finding = typeof findings.$inferSelect
 export type FindingOccurrence = typeof findingOccurrences.$inferSelect
 export type RepositoryKnowledge = typeof repositoryKnowledge.$inferSelect
+export type RepositorySecurityProfile =
+  typeof repositorySecurityProfiles.$inferSelect
+export type FindingValidationRecord = typeof findingValidations.$inferSelect
+export type FindingPatch = typeof findingPatches.$inferSelect
+export type ScanArtifact = typeof scanArtifacts.$inferSelect

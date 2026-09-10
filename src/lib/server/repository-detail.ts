@@ -4,13 +4,19 @@ import { z } from 'zod'
 import { db } from '@/db'
 import {
   findingOccurrences,
+  findingPatches,
   findings,
+  findingValidations,
   repositories,
   repositoryKnowledge,
   scannerRuns,
   scans,
 } from '@/db/schema'
-import { OPEN_FINDING_STATES, SEVERITY_ORDER } from '@/lib/findings'
+import {
+  OPEN_FINDING_STATES,
+  PRIORITY_ORDER,
+  SEVERITY_ORDER,
+} from '@/lib/findings'
 import { enabledScanners } from '@/lib/scanners'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
@@ -62,6 +68,16 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
           eq(findings.repositoryId, repositoryId),
           inArray(findings.state, [...OPEN_FINDING_STATES]),
         ),
+        with: {
+          validations: {
+            orderBy: [desc(findingValidations.createdAt)],
+            limit: 1,
+          },
+          patches: {
+            orderBy: [desc(findingPatches.createdAt)],
+            limit: 3,
+          },
+        },
       }),
       db.query.repositoryKnowledge.findFirst({
         where: eq(repositoryKnowledge.repositoryId, repositoryId),
@@ -97,6 +113,7 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
 
     openFindings.sort(
       (a, b) =>
+        priorityRank(a.priority) - priorityRank(b.priority) ||
         SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
         a.title.localeCompare(b.title),
     )
@@ -215,12 +232,24 @@ export const getScannerDetail = createServerFn({ method: 'GET' })
             createdAt: true,
           },
         },
+        validations: {
+          orderBy: [desc(findingValidations.createdAt)],
+          limit: 1,
+        },
+        patches: {
+          orderBy: [desc(findingPatches.createdAt)],
+          limit: 3,
+        },
       },
     })
 
     const open = scannerFindings
       .filter((finding) => OPEN_FINDING_STATES.includes(finding.state))
-      .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
+      .sort(
+        (a, b) =>
+          priorityRank(a.priority) - priorityRank(b.priority) ||
+          SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+      )
     const resolved = scannerFindings
       .filter((finding) => finding.state === 'resolved')
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
@@ -247,18 +276,47 @@ export const getScanDetail = createServerFn({ method: 'GET' })
   .handler(async ({ data: scanId }) => {
     const scan = await db.query.scans.findFirst({
       where: eq(scans.id, scanId),
-      with: { repository: true, scannerRuns: true },
+      with: { repository: true, scannerRuns: true, artifacts: true },
     })
     if (!scan) return null
     const occurrences = await db.query.findingOccurrences.findMany({
       where: eq(findingOccurrences.scanId, scanId),
-      with: { finding: true },
+      with: {
+        finding: {
+          with: {
+            patches: {
+              orderBy: [desc(findingPatches.createdAt)],
+              limit: 3,
+            },
+          },
+        },
+      },
     })
+    const occurrenceIds = occurrences.map((occurrence) => occurrence.id)
+    const validations =
+      occurrenceIds.length > 0
+        ? await db.query.findingValidations.findMany({
+            where: inArray(findingValidations.occurrenceId, occurrenceIds),
+            orderBy: [desc(findingValidations.createdAt)],
+          })
+        : []
     occurrences.sort(
       (a, b) =>
-        SEVERITY_ORDER[a.finding.severity] -
-          SEVERITY_ORDER[b.finding.severity] ||
+        priorityRank(a.priority) - priorityRank(b.priority) ||
+        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
         a.finding.title.localeCompare(b.finding.title),
     )
-    return { ...scan, occurrences }
+    return {
+      ...scan,
+      occurrences: occurrences.map((occurrence) => ({
+        ...occurrence,
+        validations: validations.filter(
+          (validation) => validation.occurrenceId === occurrence.id,
+        ),
+      })),
+    }
   })
+
+function priorityRank(priority: keyof typeof PRIORITY_ORDER | null): number {
+  return priority ? PRIORITY_ORDER[priority] : 4
+}

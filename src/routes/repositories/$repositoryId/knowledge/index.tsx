@@ -12,7 +12,7 @@ import { formatRelative, shortSha } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { getRepositoryKnowledge } from '@/lib/server/knowledge'
 
-export const Route = createFileRoute('/repositories/$repositoryId/knowledge')({
+export const Route = createFileRoute('/repositories/$repositoryId/knowledge/')({
   loader: ({ params }) =>
     getRepositoryKnowledge({ data: parseIdParam(params.repositoryId) }),
   component: KnowledgePage,

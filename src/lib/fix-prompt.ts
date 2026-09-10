@@ -1,5 +1,11 @@
-import type { FindingLocation, Severity } from '@/lib/findings'
-import { SEVERITY_ORDER } from '@/lib/findings'
+import type {
+  FindingClassification,
+  FindingLocation,
+  FindingPriority,
+  Severity,
+  VulnerabilityMetadata,
+} from '@/lib/findings'
+import { PRIORITY_ORDER, SEVERITY_ORDER } from '@/lib/findings'
 import type { ScannerDefinition } from '@/lib/scanners'
 
 export interface FixPromptFinding {
@@ -11,6 +17,11 @@ export interface FixPromptFinding {
   readonly recommendation: string
   readonly effort: string
   readonly locations: readonly FindingLocation[]
+  readonly classification?: FindingClassification
+  readonly vulnerability?: VulnerabilityMetadata
+  readonly priority?: FindingPriority
+  readonly priorityScore?: number
+  readonly priorityReasons?: readonly string[]
 }
 
 export interface FixPromptInput {
@@ -43,7 +54,9 @@ export function formatLocation(location: FindingLocation): string {
  */
 export function buildFixPrompt(input: FixPromptInput): string {
   const sorted = [...input.findings].sort(
-    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+    (a, b) =>
+      priorityRank(a.priority) - priorityRank(b.priority) ||
+      SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   )
   const lines: string[] = [
     `# ${input.scanner.fixPromptTitle}`,
@@ -83,12 +96,19 @@ export function buildFixPrompt(input: FixPromptInput): string {
   }
 
   sorted.forEach((finding, index) => {
+    const metadata = findingMetadataLines(finding)
     lines.push(
       '',
       `### ${index + 1}. ${finding.title}`,
       '',
       `- Severity: ${finding.severity} · Confidence: ${finding.confidence} · Estimated effort: ${finding.effort}`,
+      ...(finding.priority
+        ? [
+            `- Priority: ${finding.priority}${finding.priorityScore !== undefined ? ` (${finding.priorityScore}/100)` : ''}${finding.priorityReasons?.length ? ` · ${finding.priorityReasons.join(' · ')}` : ''}`,
+          ]
+        : []),
       `- Locations: ${finding.locations.map(formatLocation).join(', ')}`,
+      ...metadata,
       '',
       `**Problem.** ${finding.description}`,
       '',
@@ -99,4 +119,44 @@ export function buildFixPrompt(input: FixPromptInput): string {
   })
 
   return lines.join('\n')
+}
+
+function priorityRank(priority: FindingPriority | undefined): number {
+  return priority ? PRIORITY_ORDER[priority] : 4
+}
+
+function findingMetadataLines(finding: FixPromptFinding): string[] {
+  const lines: string[] = []
+  const classifications = [
+    ...(finding.classification?.cwes ?? []),
+    ...(finding.classification?.owasp ?? []),
+  ]
+  if (classifications.length > 0) {
+    lines.push(`- Classification: ${classifications.join(', ')}`)
+  }
+  const vulnerability = finding.vulnerability
+  if (!vulnerability) return lines
+  const packageId = `${vulnerability.package.ecosystem}/${vulnerability.package.name}@${vulnerability.package.version}`
+  lines.push(
+    `- Vulnerable package: ${packageId}${vulnerability.package.purl ? ` · ${vulnerability.package.purl}` : ''}`,
+    `- Advisories: ${vulnerability.advisories.map((advisory) => advisory.id).join(', ')}`,
+    `- Match: ${vulnerability.match.confidence} confidence via ${vulnerability.match.method} · ${vulnerability.match.evidence.join(' · ')}`,
+  )
+  if (vulnerability.cvss[0]) {
+    const cvss = vulnerability.cvss[0]
+    lines.push(
+      `- CVSS ${cvss.version}: ${cvss.score.toFixed(1)} · ${cvss.vector}`,
+    )
+  }
+  if (vulnerability.epss[0]) {
+    lines.push(
+      `- EPSS: ${(vulnerability.epss[0].probability * 100).toFixed(2)}% probability · ${(vulnerability.epss[0].percentile * 100).toFixed(1)}th percentile`,
+    )
+  }
+  if (vulnerability.kev[0]) {
+    lines.push(
+      `- CISA KEV: added ${vulnerability.kev[0].dateAdded} · remediation due ${vulnerability.kev[0].dueDate}`,
+    )
+  }
+  return lines
 }

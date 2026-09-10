@@ -3,7 +3,7 @@ import { Page, PageHeader } from '@/components/page-layout'
 import { RepositoryForm } from '@/components/repository-form'
 import { createRepository } from '@/lib/server/repositories'
 
-export const Route = createFileRoute('/repositories/new')({
+export const Route = createFileRoute('/repositories/new/')({
   component: NewRepositoryPage,
 })
 

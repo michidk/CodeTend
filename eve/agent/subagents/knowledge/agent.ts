@@ -1,5 +1,9 @@
 import { defineAgent } from 'eve'
-import { MODEL_CONTEXT_WINDOW_TOKENS, scannerModel } from '../../lib/model'
+import {
+  MAX_INPUT_TOKENS_PER_SESSION,
+  MODEL_CONTEXT_WINDOW_TOKENS,
+  scannerModel,
+} from '../../lib/model'
 
 export default defineAgent({
   description:
@@ -7,5 +11,5 @@ export default defineAgent({
   model: scannerModel(),
   modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
   compaction: { thresholdPercent: 0.8 },
-  limits: { maxInputTokensPerSession: false },
+  limits: { maxInputTokensPerSession: MAX_INPUT_TOKENS_PER_SESSION },
 })

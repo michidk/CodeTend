@@ -9,17 +9,19 @@ import {
   findings,
 } from '@/db/schema'
 import {
+  type EnrichedScannerFinding,
   type FindingState,
   OPEN_FINDING_STATES,
-  type ScannerFinding,
   type ScannerResult,
   SEVERITY_ORDER,
 } from '@/lib/findings'
+import type { ScanCoverage, ScanTarget } from '@/lib/security-scans'
+import { coverageAllowsResolution } from '@/lib/security-scans'
 
 export interface ReconciledFinding {
   readonly id: number
   readonly state: FindingState
-  readonly finding: ScannerFinding
+  readonly finding: EnrichedScannerFinding
 }
 
 export interface ReconciliationOutcome {
@@ -51,7 +53,15 @@ export async function reconcileScannerFindings(input: {
   repositoryId: number
   scanId: number
   scannerId: string
-  result: ScannerResult
+  result: Omit<ScannerResult, 'findings'> & {
+    readonly findings: readonly EnrichedScannerFinding[]
+  }
+  /** A deterministic complete inventory can positively resolve omitted rows. */
+  authoritative?: boolean
+  /** Coverage gates resolution so an unreviewed path never looks fixed. */
+  coverage?: ScanCoverage
+  target?: ScanTarget
+  targetFiles?: readonly string[]
 }): Promise<ReconciliationOutcome> {
   const existing = await db.query.findings.findMany({
     where: and(
@@ -107,6 +117,54 @@ export async function reconcileScannerFindings(input: {
     }
 
     touched.add(previous.id)
+    if (previous.disposition) {
+      const dispositionVerdict = verdictById.get(previous.id)
+      if (dispositionVerdict?.dispositionStillApplies === false) {
+        await db
+          .update(findings)
+          .set({
+            state: 'regressed',
+            disposition: null,
+            dispositionNote: null,
+            triagedAt: null,
+            ...findingColumns(fresh),
+            lastSeenScanId: input.scanId,
+            resolvedScanId: null,
+            updatedAt: now,
+          })
+          .where(eq(findings.id, previous.id))
+        await recordOccurrence(
+          previous.id,
+          input.scanId,
+          'regressed',
+          fresh,
+          dispositionVerdict.dispositionAssessment ??
+            'The prior manual disposition no longer applies to the current code.',
+        )
+        counts.regressed += 1
+        reconciled.push({ id: previous.id, state: 'regressed', finding: fresh })
+        continue
+      }
+      await db
+        .update(findings)
+        .set({
+          state: 'resolved',
+          ...findingColumns(fresh),
+          lastSeenScanId: input.scanId,
+          updatedAt: now,
+        })
+        .where(eq(findings.id, previous.id))
+      await recordOccurrence(
+        previous.id,
+        input.scanId,
+        'resolved',
+        fresh,
+        `Suppressed by manual disposition: ${previous.disposition}.`,
+      )
+      reconciled.push({ id: previous.id, state: 'resolved', finding: fresh })
+      continue
+    }
+
     const verdict = verdictById.get(previous.id)?.verdict
     const state = nextStateForMatch(previous, fresh, verdict)
     await db
@@ -130,6 +188,42 @@ export async function reconcileScannerFindings(input: {
     reconciled.push({ id: previous.id, state, finding: fresh })
   }
 
+  // A manual disposition is durable, but scanners can explicitly prove that
+  // its original rationale no longer matches the current code even when they
+  // cannot produce a replacement finding payload.
+  const invalidatedDispositions = existing.filter(
+    (finding) =>
+      !touched.has(finding.id) &&
+      finding.disposition !== null &&
+      verdictById.get(finding.id)?.dispositionStillApplies === false,
+  )
+  for (const finding of invalidatedDispositions) {
+    touched.add(finding.id)
+    await db
+      .update(findings)
+      .set({
+        state: 'regressed',
+        disposition: null,
+        dispositionNote: null,
+        triagedAt: null,
+        lastSeenScanId: input.scanId,
+        resolvedScanId: null,
+        updatedAt: now,
+      })
+      .where(eq(findings.id, finding.id))
+    const previous = toScannerFinding(finding)
+    await recordOccurrence(
+      finding.id,
+      input.scanId,
+      'regressed',
+      previous,
+      verdictById.get(finding.id)?.dispositionAssessment ??
+        'The prior manual disposition no longer applies to the current code.',
+    )
+    counts.regressed += 1
+    reconciled.push({ id: finding.id, state: 'regressed', finding: previous })
+  }
+
   // Open findings the scanner neither returned nor explicitly resolved.
   // Resolving them needs positive evidence: either a `resolved` verdict, or a
   // scanner that verified every other hypothesis and therefore demonstrably
@@ -140,13 +234,17 @@ export async function reconcileScannerFindings(input: {
       !touched.has(finding.id) && OPEN_FINDING_STATES.includes(finding.state),
   )
   const verifiedAll =
-    untouchedOpen.length > 0 &&
-    untouchedOpen.every((finding) => verdictById.has(finding.id))
+    input.authoritative === true ||
+    (untouchedOpen.length > 0 &&
+      untouchedOpen.every((finding) => verdictById.has(finding.id)))
   const resolvedIds: number[] = []
   const carriedIds: number[] = []
   for (const finding of untouchedOpen) {
     const verdict = verdictById.get(finding.id)?.verdict
-    if (verdict === 'resolved' || (verifiedAll && verdict === undefined)) {
+    if (
+      (verdict === 'resolved' || (verifiedAll && verdict === undefined)) &&
+      resolutionIsCovered(input, finding)
+    ) {
       resolvedIds.push(finding.id)
     } else if (verdict === 'confirmed' || verdict === 'improved') {
       // Verified but no updated finding returned: keep the previous content.
@@ -167,6 +265,16 @@ export async function reconcileScannerFindings(input: {
           state: verdict === 'improved' ? 'improved' : 'active',
           severity: finding.severity,
           confidence: finding.confidence,
+          classification: finding.classification,
+          securityContext: finding.securityContext,
+          rootCause: finding.rootCause,
+          codeEvidence: finding.codeEvidence,
+          attackPath: finding.attackPath,
+          validationPlan: finding.validationPlan,
+          vulnerability: finding.vulnerability,
+          priority: finding.priority,
+          priorityScore: finding.priorityScore,
+          priorityReasons: finding.priorityReasons,
           note: verdictById.get(finding.id)?.note ?? null,
         })
         .onConflictDoNothing()
@@ -195,6 +303,16 @@ export async function reconcileScannerFindings(input: {
         state: 'resolved',
         severity: previous.severity,
         confidence: previous.confidence,
+        classification: previous.classification,
+        securityContext: previous.securityContext,
+        rootCause: previous.rootCause,
+        codeEvidence: previous.codeEvidence,
+        attackPath: previous.attackPath,
+        validationPlan: previous.validationPlan,
+        vulnerability: previous.vulnerability,
+        priority: previous.priority,
+        priorityScore: previous.priorityScore,
+        priorityReasons: previous.priorityReasons,
         note: verdictById.get(id)?.note ?? null,
       })
     }
@@ -216,7 +334,20 @@ export async function reconcileScannerFindings(input: {
         state: 'active',
         severity: previous.severity,
         confidence: previous.confidence,
-        note: 'Carried forward: the scanner did not report on this finding.',
+        classification: previous.classification,
+        securityContext: previous.securityContext,
+        rootCause: previous.rootCause,
+        codeEvidence: previous.codeEvidence,
+        attackPath: previous.attackPath,
+        validationPlan: previous.validationPlan,
+        vulnerability: previous.vulnerability,
+        priority: previous.priority,
+        priorityScore: previous.priorityScore,
+        priorityReasons: previous.priorityReasons,
+        note:
+          verdictById.get(id)?.verdict === 'resolved'
+            ? 'Carried forward: the scan did not prove coverage of the original affected path.'
+            : 'Carried forward: the scanner did not report on this finding.',
       })
       .onConflictDoNothing()
     counts.active += 1
@@ -230,7 +361,7 @@ export async function reconcileScannerFindings(input: {
   return { findings: reconciled, counts }
 }
 
-function toScannerFinding(finding: Finding): ScannerFinding {
+function toScannerFinding(finding: Finding): EnrichedScannerFinding {
   return {
     fingerprint: finding.fingerprint,
     title: finding.title,
@@ -241,13 +372,25 @@ function toScannerFinding(finding: Finding): ScannerFinding {
     recommendation: finding.recommendation,
     effort: finding.effort,
     locations: finding.locations,
+    classification: finding.classification ?? undefined,
+    securityContext: finding.securityContext ?? undefined,
+    rootCause: finding.rootCause ?? undefined,
+    codeEvidence: finding.codeEvidence ?? undefined,
+    attackPath: finding.attackPath ?? undefined,
+    validationPlan: finding.validationPlan ?? undefined,
+    remediationTests: finding.remediationTests ?? undefined,
+    preventiveControls: finding.preventiveControls ?? undefined,
+    vulnerability: finding.vulnerability ?? undefined,
+    priority: finding.priority ?? undefined,
+    priorityScore: finding.priorityScore ?? undefined,
+    priorityReasons: finding.priorityReasons,
     previousFindingId: finding.id,
   }
 }
 
 function nextStateForMatch(
   previous: Finding,
-  fresh: ScannerFinding,
+  fresh: EnrichedScannerFinding,
   verdict: 'confirmed' | 'improved' | 'resolved' | undefined,
 ): FindingState {
   const previousRank = SEVERITY_ORDER[previous.severity]
@@ -258,7 +401,7 @@ function nextStateForMatch(
   return 'active'
 }
 
-function findingColumns(fresh: ScannerFinding) {
+function findingColumns(fresh: EnrichedScannerFinding) {
   return {
     title: fresh.title,
     severity: fresh.severity,
@@ -268,6 +411,18 @@ function findingColumns(fresh: ScannerFinding) {
     recommendation: fresh.recommendation,
     effort: fresh.effort,
     locations: fresh.locations,
+    classification: fresh.classification ?? null,
+    securityContext: fresh.securityContext ?? null,
+    rootCause: fresh.rootCause ?? null,
+    codeEvidence: fresh.codeEvidence ?? null,
+    attackPath: fresh.attackPath ?? null,
+    validationPlan: fresh.validationPlan ?? null,
+    remediationTests: fresh.remediationTests ?? null,
+    preventiveControls: fresh.preventiveControls ?? null,
+    vulnerability: fresh.vulnerability ?? null,
+    priority: fresh.priority ?? null,
+    priorityScore: fresh.priorityScore ?? null,
+    priorityReasons: [...(fresh.priorityReasons ?? [])],
   }
 }
 
@@ -275,7 +430,7 @@ async function recordOccurrence(
   findingId: number,
   scanId: number,
   state: FindingState,
-  fresh: ScannerFinding,
+  fresh: EnrichedScannerFinding,
   note?: string,
 ) {
   await db
@@ -286,15 +441,25 @@ async function recordOccurrence(
       state,
       severity: fresh.severity,
       confidence: fresh.confidence,
+      classification: fresh.classification ?? null,
+      securityContext: fresh.securityContext ?? null,
+      rootCause: fresh.rootCause ?? null,
+      codeEvidence: fresh.codeEvidence ?? null,
+      attackPath: fresh.attackPath ?? null,
+      validationPlan: fresh.validationPlan ?? null,
+      vulnerability: fresh.vulnerability ?? null,
+      priority: fresh.priority ?? null,
+      priorityScore: fresh.priorityScore ?? null,
+      priorityReasons: [...(fresh.priorityReasons ?? [])],
       note: note ?? null,
     })
     .onConflictDoNothing()
 }
 
 function dedupeByFingerprint(
-  list: readonly ScannerFinding[],
-): ScannerFinding[] {
-  const seen = new Map<string, ScannerFinding>()
+  list: readonly EnrichedScannerFinding[],
+): EnrichedScannerFinding[] {
+  const seen = new Map<string, EnrichedScannerFinding>()
   for (const finding of list) {
     const current = seen.get(finding.fingerprint)
     if (
@@ -305,6 +470,21 @@ function dedupeByFingerprint(
     }
   }
   return [...seen.values()]
+}
+
+function resolutionIsCovered(
+  input: {
+    authoritative?: boolean
+    coverage?: ScanCoverage
+    target?: ScanTarget
+    targetFiles?: readonly string[]
+  },
+  finding: Finding,
+): boolean {
+  return coverageAllowsResolution({
+    ...input,
+    findingPaths: finding.locations.map((location) => location.path),
+  })
 }
 
 export function sumCounts(list: readonly FindingCounts[]): FindingCounts {

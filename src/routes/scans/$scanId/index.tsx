@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Download, Square } from 'lucide-react'
 import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
 import { FindingCard } from '@/components/health/finding-card'
 import {
@@ -20,6 +21,7 @@ import { Page, PageHeader, SectionHeading } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -29,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { getErrorMessage } from '@/lib/error-message'
 import {
   formatDateTime,
   formatDuration,
@@ -37,9 +40,11 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { enabledScanners } from '@/lib/scanners'
+import type { ScanTarget } from '@/lib/security-scans'
+import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
 
-export const Route = createFileRoute('/scans/$scanId')({
+export const Route = createFileRoute('/scans/$scanId/')({
   loader: ({ params }) => getScanDetail({ data: parseIdParam(params.scanId) }),
   staleTime: 5_000,
   component: ScanPage,
@@ -71,6 +76,16 @@ function ScanPage() {
       ? null
       : scan.cacheReadTokens + (scan.cacheWriteTokens ?? 0)
 
+  const stop = async () => {
+    try {
+      await cancelScan({ data: scan.id })
+      toast.success('Cancellation requested')
+      await router.invalidate()
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not cancel the scan'))
+    }
+  }
+
   return (
     <Page>
       <PageHeader
@@ -94,10 +109,25 @@ function ScanPage() {
             {formatDuration(scan.startedAt, scan.finishedAt)}
             {scan.gitnexusUsed ? ' · GitNexus' : ''}
             {scan.knowledgeRefreshed ? ' · knowledge refreshed' : ''}
+            {' · '}
+            <span className="capitalize">{scan.mode}</span> ·{' '}
+            {describeTarget(scan.target)}
           </>
         }
         size="compact"
         leading={<GradeBadge grade={scan.grade} size="lg" />}
+        actions={
+          active ? (
+            <Button
+              variant="outline"
+              onClick={() => void stop()}
+              disabled={scan.cancellationRequestedAt !== null}
+            >
+              <Square className="size-4" aria-hidden="true" />
+              {scan.cancellationRequestedAt ? 'Cancelling…' : 'Stop scan'}
+            </Button>
+          ) : undefined
+        }
       />
 
       {scan.error ? (
@@ -110,6 +140,71 @@ function ScanPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <section aria-labelledby="coverage-heading" className="space-y-3">
+        <SectionHeading id="coverage-heading" color="bg-candy-mint">
+          Security review coverage
+        </SectionHeading>
+        <Card>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="capitalize">
+                {scan.coverage?.completeness ?? 'unknown'} coverage
+              </Badge>
+              <span className="text-muted-foreground">
+                {scan.coverage?.reviewed.length ?? 0} reviewed surfaces ·{' '}
+                {scan.coverage?.deferred.length ?? 0} deferred ·{' '}
+                {scan.coverage?.excluded.length ?? 0} excluded
+              </span>
+            </div>
+            {scan.coverage?.reviewed.length ? (
+              <StringList title="Reviewed" values={scan.coverage.reviewed} />
+            ) : null}
+            {scan.coverage?.deferred.length ? (
+              <StringList
+                title="Deferred"
+                values={scan.coverage.deferred.map(
+                  (entry) => `${entry.path}: ${entry.reason}`,
+                )}
+              />
+            ) : null}
+            {scan.coverage?.openQuestions.length ? (
+              <StringList
+                title="Open questions"
+                values={scan.coverage.openQuestions}
+              />
+            ) : null}
+            {scan.artifacts.length > 0 ? (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {scan.artifacts.map((artifact) => (
+                  <Button
+                    key={artifact.kind}
+                    variant="outline"
+                    size="sm"
+                    asChild
+                  >
+                    <a
+                      href={`/api/scans/${scan.id}/artifacts/${artifact.kind}`}
+                      download
+                    >
+                      <Download className="size-3.5" aria-hidden="true" />
+                      {artifact.kind === 'sarif'
+                        ? 'SARIF'
+                        : artifact.kind.replace(/^./, (value) =>
+                            value.toUpperCase(),
+                          )}
+                    </a>
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Content-hashed artifacts appear when the scan finishes.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       <section aria-labelledby="usage-heading" className="space-y-3">
         <SectionHeading id="usage-heading" color="bg-candy-sun">
@@ -266,6 +361,17 @@ function ScanPage() {
                   ...occurrence.finding,
                   state: occurrence.state,
                   severity: occurrence.severity,
+                  classification: occurrence.classification,
+                  securityContext: occurrence.securityContext,
+                  rootCause: occurrence.rootCause,
+                  codeEvidence: occurrence.codeEvidence,
+                  attackPath: occurrence.attackPath,
+                  validationPlan: occurrence.validationPlan,
+                  vulnerability: occurrence.vulnerability,
+                  priority: occurrence.priority,
+                  priorityScore: occurrence.priorityScore,
+                  priorityReasons: occurrence.priorityReasons,
+                  validations: occurrence.validations,
                 }}
                 showScanner
               />
@@ -279,5 +385,32 @@ function ScanPage() {
         {scan.eveSessionId ? ` · Eve session ${scan.eveSessionId}` : ''}
       </p>
     </Page>
+  )
+}
+
+function describeTarget(target: ScanTarget): string {
+  if (target.kind === 'repository') return 'entire repository'
+  if (target.kind === 'paths') return `${target.paths.length} selected path(s)`
+  return `diff ${shortSha(target.base)}…${shortSha(target.head)}`
+}
+
+function StringList({
+  title,
+  values,
+}: {
+  readonly title: string
+  readonly values: readonly string[]
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-muted-foreground">
+        {values.map((value) => (
+          <li key={value}>{value}</li>
+        ))}
+      </ul>
+    </div>
   )
 }

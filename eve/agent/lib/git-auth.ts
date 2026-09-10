@@ -11,12 +11,23 @@
 export interface GitAuth {
   /** Extra `git -c key=value` settings for the clone command. */
   readonly gitConfig: readonly string[]
-  readonly source: 'gh-cli' | 'git-config'
+  readonly source: 'github-token' | 'gh-cli' | 'git-config'
 }
 
 export async function resolveGitAuth(repositoryUrl: string): Promise<GitAuth> {
   if (!/^https:\/\/([^/]*\.)?github\.com\//i.test(repositoryUrl)) {
     return { gitConfig: [], source: 'git-config' }
+  }
+  if (process.env.GITHUB_TOKEN) {
+    return {
+      // The secret is expanded by Git's credential-helper subprocess, never
+      // interpolated into the clone command or logged by tecdebt.
+      gitConfig: [
+        'credential.https://github.com.helper=',
+        'credential.https://github.com.helper=!f() { test "$1" = get && echo username=x-access-token && echo "password=$GITHUB_TOKEN"; }; f',
+      ],
+      source: 'github-token',
+    }
   }
   const gh = await ghCliBinary()
   if (!gh) return { gitConfig: [], source: 'git-config' }

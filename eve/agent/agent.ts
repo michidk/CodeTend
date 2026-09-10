@@ -1,5 +1,9 @@
 import { defineAgent } from 'eve'
-import { MODEL_CONTEXT_WINDOW_TOKENS, scannerModel } from './lib/model'
+import {
+  MAX_INPUT_TOKENS_PER_SESSION,
+  MODEL_CONTEXT_WINDOW_TOKENS,
+  scannerModel,
+} from './lib/model'
 
 /**
  * Root orchestrator. It never analyzes code itself: the tecdebt app sends one
@@ -10,7 +14,7 @@ export default defineAgent({
   modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
   defaultTools: false,
   limits: {
-    maxInputTokensPerSession: false,
+    maxInputTokensPerSession: MAX_INPUT_TOKENS_PER_SESSION,
     sessionTimeoutMs: 2 * 24 * 60 * 60 * 1_000,
   },
 })

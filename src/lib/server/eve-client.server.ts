@@ -62,7 +62,35 @@ export async function startEveScanSession(
   const { response } = await client.sessions.create({
     message: `Run scan ${scanId}.`,
   })
+  return responseSession(response)
+}
 
+export async function startEvePatchSession(
+  patchId: number,
+): Promise<EveScanSession> {
+  const client = getEveClient()
+  const { response } = await client.sessions.create({
+    message: `Generate patch ${patchId}.`,
+  })
+  return responseSession(response)
+}
+
+/** Cooperatively cancels the active Eve turn and every task it spawned. */
+export async function cancelEveScanSession(
+  sessionId: string,
+): Promise<'accepted' | 'no_active_turn'> {
+  const result = await getEveClient()
+    .sessions.attach(sessionId)
+    .cancel({ tasks: true })
+  return result.status
+}
+
+interface StreamResponse
+  extends AsyncIterable<{ readonly type: string; readonly data?: unknown }> {
+  readonly sessionId: string
+}
+
+function responseSession(response: StreamResponse): EveScanSession {
   return {
     sessionId: response.sessionId,
     settle: async (onPhase) => {

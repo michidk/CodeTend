@@ -13,6 +13,39 @@ const booleanString = z
 const serverSchema = {
   DATABASE_URL: z.string().trim().min(1),
   TECDEBT_DATA_DIR: z.string().trim().min(1).default('./data'),
+  TECDEBT_BASIC_AUTH_USERNAME: z.string().trim().min(1).default('tecdebt'),
+  TECDEBT_BASIC_AUTH_PASSWORD: optionalString,
+  TECDEBT_ALLOWED_GIT_HOSTS: z.string().trim().min(1).default('github.com'),
+  TECDEBT_ALLOW_LOCAL_REPOSITORIES: booleanString.default(false),
+  TECDEBT_ALLOW_INSECURE_GIT: booleanString.default(false),
+  TECDEBT_MAX_ACTIVE_SCANS: z.coerce.number().int().min(1).max(32).default(2),
+  TECDEBT_MAX_ACTIVE_PATCHES: z.coerce.number().int().min(1).max(32).default(1),
+  TECDEBT_MAX_DAILY_COST_USD: z.coerce.number().positive().optional(),
+  TECDEBT_DEFAULT_SCAN_COST_USD: z.coerce.number().positive().optional(),
+  TECDEBT_DEEP_WORKERS: z.coerce.number().int().min(1).max(4).default(2),
+  TECDEBT_DEEP_MAX_RUNS: z.coerce.number().int().min(1).max(12).default(6),
+  TECDEBT_DEEP_STOP_AFTER_NO_NEW: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(6)
+    .default(2),
+  TECDEBT_VALIDATION_ENABLED: booleanString.default(false),
+  TECDEBT_VALIDATION_RUNNER: z
+    .enum(['auto', 'docker', 'disabled'])
+    .default('auto'),
+  TECDEBT_VALIDATION_IMAGE: z
+    .string()
+    .trim()
+    .min(1)
+    .default('node:24-bookworm-slim'),
+  TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400)
+    .default(60),
+  GITHUB_WEBHOOK_SECRET: optionalString,
   EVE_URL: z.url().default('http://127.0.0.1:2000'),
   EVE_USERNAME: z.string().trim().min(1).default('tecdebt'),
   EVE_PASSWORD: optionalString,
@@ -56,6 +89,29 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
     runtimeEnvStrict: {
       DATABASE_URL: runtimeEnvironment.DATABASE_URL,
       TECDEBT_DATA_DIR: runtimeEnvironment.TECDEBT_DATA_DIR,
+      TECDEBT_BASIC_AUTH_USERNAME:
+        runtimeEnvironment.TECDEBT_BASIC_AUTH_USERNAME,
+      TECDEBT_BASIC_AUTH_PASSWORD:
+        runtimeEnvironment.TECDEBT_BASIC_AUTH_PASSWORD,
+      TECDEBT_ALLOWED_GIT_HOSTS: runtimeEnvironment.TECDEBT_ALLOWED_GIT_HOSTS,
+      TECDEBT_ALLOW_LOCAL_REPOSITORIES:
+        runtimeEnvironment.TECDEBT_ALLOW_LOCAL_REPOSITORIES,
+      TECDEBT_ALLOW_INSECURE_GIT: runtimeEnvironment.TECDEBT_ALLOW_INSECURE_GIT,
+      TECDEBT_MAX_ACTIVE_SCANS: runtimeEnvironment.TECDEBT_MAX_ACTIVE_SCANS,
+      TECDEBT_MAX_ACTIVE_PATCHES: runtimeEnvironment.TECDEBT_MAX_ACTIVE_PATCHES,
+      TECDEBT_MAX_DAILY_COST_USD: runtimeEnvironment.TECDEBT_MAX_DAILY_COST_USD,
+      TECDEBT_DEFAULT_SCAN_COST_USD:
+        runtimeEnvironment.TECDEBT_DEFAULT_SCAN_COST_USD,
+      TECDEBT_DEEP_WORKERS: runtimeEnvironment.TECDEBT_DEEP_WORKERS,
+      TECDEBT_DEEP_MAX_RUNS: runtimeEnvironment.TECDEBT_DEEP_MAX_RUNS,
+      TECDEBT_DEEP_STOP_AFTER_NO_NEW:
+        runtimeEnvironment.TECDEBT_DEEP_STOP_AFTER_NO_NEW,
+      TECDEBT_VALIDATION_ENABLED: runtimeEnvironment.TECDEBT_VALIDATION_ENABLED,
+      TECDEBT_VALIDATION_RUNNER: runtimeEnvironment.TECDEBT_VALIDATION_RUNNER,
+      TECDEBT_VALIDATION_IMAGE: runtimeEnvironment.TECDEBT_VALIDATION_IMAGE,
+      TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS:
+        runtimeEnvironment.TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS,
+      GITHUB_WEBHOOK_SECRET: runtimeEnvironment.GITHUB_WEBHOOK_SECRET,
       EVE_URL: runtimeEnvironment.EVE_URL,
       EVE_USERNAME: runtimeEnvironment.EVE_USERNAME,
       EVE_PASSWORD: runtimeEnvironment.EVE_PASSWORD,

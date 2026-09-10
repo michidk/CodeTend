@@ -2,11 +2,23 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
-import { findings, repositories, scans } from '@/db/schema'
+import { findingPatches, findings, repositories, scans } from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
+import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
+import { validateRepositoryLocation } from '@/lib/repository-access'
 import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
-import { startScan } from '@/lib/server/scan-pipeline.server'
+import { SCAN_MODES, scanTargetSchema } from '@/lib/security-scans'
+import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
+import {
+  removeScanArtifacts,
+  removeScanWorkspace,
+} from '@/lib/server/scan-files.server'
+import {
+  requestScanCancellation,
+  startScan,
+} from '@/lib/server/scan-pipeline.server'
+import { removeScanUsage } from '@/lib/server/scan-usage.server'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
@@ -35,6 +47,16 @@ const repositoryInputSchema = z.object({
 })
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>
+
+function assertRepositoryAccess(url: string): void {
+  const env = getServerEnv()
+  const error = validateRepositoryLocation(url, {
+    allowedHosts: env.TECDEBT_ALLOWED_GIT_HOSTS.split(','),
+    allowLocal: env.TECDEBT_ALLOW_LOCAL_REPOSITORIES,
+    allowInsecureHttp: env.TECDEBT_ALLOW_INSECURE_GIT,
+  })
+  if (error) throw new DomainError('validation', error)
+}
 
 /**
  * Dashboard rows: every repository with its latest completed scan, the scan
@@ -127,6 +149,7 @@ export type DashboardRow = Awaited<ReturnType<typeof getDashboard>>[number]
 export const createRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema)
   .handler(async ({ data }) => {
+    assertRepositoryAccess(data.url)
     const [row] = await db
       .insert(repositories)
       .values({
@@ -142,6 +165,7 @@ export const createRepository = createServerFn({ method: 'POST' })
 export const updateRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema.extend({ id: positiveId }))
   .handler(async ({ data }) => {
+    assertRepositoryAccess(data.url)
     const { id, ...values } = data
     const current = await db.query.repositories.findFirst({
       where: eq(repositories.id, id),
@@ -181,15 +205,91 @@ export const deleteRepository = createServerFn({ method: 'POST' })
         'Wait for the running scan to finish before deleting.',
       )
     }
+    const [generatingPatch] = await db
+      .select({ id: findingPatches.id })
+      .from(findingPatches)
+      .innerJoin(findings, eq(findingPatches.findingId, findings.id))
+      .where(
+        and(
+          eq(findings.repositoryId, id),
+          eq(findingPatches.status, 'generating'),
+        ),
+      )
+      .limit(1)
+    if (generatingPatch) {
+      throw new DomainError(
+        'conflict',
+        'Wait for the running patch job to finish before deleting.',
+      )
+    }
+    const repositoryScans = await db.query.scans.findMany({
+      where: eq(scans.repositoryId, id),
+      columns: { id: true, eveSessionId: true },
+    })
     await db.delete(repositories).where(eq(repositories.id, id))
+    const cleanup = await Promise.allSettled(
+      repositoryScans.flatMap((scan) => [
+        removeGitNexusIndex(`repo-${id}-scan-${scan.id}`),
+        removeScanWorkspace(id, scan.id),
+        removeScanArtifacts(scan.id),
+        ...(scan.eveSessionId ? [removeScanUsage(scan.eveSessionId)] : []),
+      ]),
+    )
+    const cleanupFailures = cleanup.filter(
+      (result) => result.status === 'rejected',
+    ).length
+    if (cleanupFailures > 0) {
+      console.warn(
+        `[tecdebt] repository ${id} deleted with ${cleanupFailures} artifact cleanup failures`,
+      )
+    }
     return { id }
   })
 
 export const triggerScan = createServerFn({ method: 'POST' })
-  .validator(positiveId)
-  .handler(async ({ data: repositoryId }) => {
+  .validator(
+    z.object({
+      repositoryId: positiveId,
+      mode: z.enum(SCAN_MODES).default('standard'),
+    }),
+  )
+  .handler(async ({ data }) => {
     ensureScheduler()
-    const scanId = await startScan(repositoryId, 'manual')
+    const scanId = await startScan(data.repositoryId, 'manual', {
+      mode: data.mode,
+    })
+    if (scanId === null) {
+      throw new DomainError(
+        'conflict',
+        'A scan is already running for this repository.',
+      )
+    }
+    return { scanId }
+  })
+
+export const cancelScan = createServerFn({ method: 'POST' })
+  .validator(positiveId)
+  .handler(async ({ data: scanId }) => {
+    await requestScanCancellation(scanId)
+    return { scanId }
+  })
+
+export const triggerConfiguredScan = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      repositoryId: positiveId,
+      mode: z.enum(SCAN_MODES),
+      target: scanTargetSchema,
+      maxCostUsd: z.number().positive().max(10_000).nullable(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    ensureScheduler()
+    const scanId = await startScan(data.repositoryId, 'manual', {
+      mode: data.mode,
+      target: data.target,
+      maxCostUsd: data.maxCostUsd,
+    })
     if (scanId === null) {
       throw new DomainError(
         'conflict',

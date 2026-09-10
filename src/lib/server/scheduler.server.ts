@@ -2,12 +2,18 @@ import '@tanstack/react-start/server-only'
 
 import { and, eq, isNotNull, lte } from 'drizzle-orm'
 import { db } from '@/db'
-import { repositories } from '@/db/schema'
+import { findingPatches, repositories } from '@/db/schema'
 import { getServerEnv } from '@/lib/env.server'
+import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
+import {
+  pruneTransientPatchArtifacts,
+  pruneTransientScanArtifacts,
+} from '@/lib/server/scan-files.server'
 import {
   recoverInterruptedScans,
   startScan,
 } from '@/lib/server/scan-pipeline.server'
+import { pruneTransientUsageFiles } from '@/lib/server/scan-usage.server'
 
 const SCHEDULER_KEY = Symbol.for('tecdebt.scheduler')
 
@@ -33,11 +39,43 @@ export function ensureScheduler(): void {
   }
   globalState[SCHEDULER_KEY] = state
 
-  void recoverInterruptedScans()
+  void Promise.all([recoverInterruptedScans(), recoverInterruptedPatches()])
     .catch((error) =>
       console.error('[tecdebt] failed to recover interrupted scans', error),
     )
-    .then(() => tick(state))
+    .then(async () => {
+      const active = await db.query.scans.findMany({
+        where: (table, { inArray }) =>
+          inArray(table.status, ['queued', 'running']),
+        columns: { id: true, eveSessionId: true },
+      })
+      const generatingPatches = await db.query.findingPatches.findMany({
+        where: eq(findingPatches.status, 'generating'),
+        columns: { id: true, eveSessionId: true },
+      })
+      const [scanFiles, patchFiles, usageFiles] = await Promise.all([
+        pruneTransientScanArtifacts(new Set(active.map((scan) => scan.id))),
+        pruneTransientPatchArtifacts(
+          new Set(generatingPatches.map((patch) => patch.id)),
+        ),
+        pruneTransientUsageFiles(
+          new Set(
+            [...active, ...generatingPatches]
+              .map((job) => job.eveSessionId)
+              .filter((id): id is string => id !== null),
+          ),
+        ),
+      ])
+      if (scanFiles + patchFiles + usageFiles > 0) {
+        console.info(
+          `[tecdebt] removed ${scanFiles} stale scan files, ${patchFiles} stale patch files and ${usageFiles} usage files`,
+        )
+      }
+      await tick(state)
+    })
+    .catch((error) =>
+      console.error('[tecdebt] scheduler initialization failed', error),
+    )
 }
 
 async function tick(state: SchedulerState) {

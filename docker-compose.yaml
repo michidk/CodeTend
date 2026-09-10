@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: tecdebt
       POSTGRES_USER: tecdebt
-      POSTGRES_PASSWORD: tecdebt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -26,7 +26,7 @@ services:
     command: ["bun", "run", "db:migrate"]
     restart: "no"
     environment:
-      DATABASE_URL: postgresql://tecdebt:tecdebt@postgres:5432/tecdebt
+      DATABASE_URL: postgresql://tecdebt:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/tecdebt
 
   eve:
     build:
@@ -43,6 +43,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       TECDEBT_MODEL: ${TECDEBT_MODEL:-gpt-5.6-sol}
+      TECDEBT_MAX_INPUT_TOKENS_PER_SESSION: ${TECDEBT_MAX_INPUT_TOKENS_PER_SESSION:-250000}
+      TECDEBT_SCANNER_CONCURRENCY: ${TECDEBT_SCANNER_CONCURRENCY:-4}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITNEXUS_MCP_URL: ${GITNEXUS_MCP_URL:-}
     volumes:
       - scan_data:/data
@@ -59,10 +62,28 @@ services:
       eve:
         condition: service_started
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://tecdebt:tecdebt@postgres:5432/tecdebt
+      DATABASE_URL: postgresql://tecdebt:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/tecdebt
       TECDEBT_DATA_DIR: /data
+      TECDEBT_BASIC_AUTH_USERNAME: ${TECDEBT_BASIC_AUTH_USERNAME:-tecdebt}
+      TECDEBT_BASIC_AUTH_PASSWORD: ${TECDEBT_BASIC_AUTH_PASSWORD:?Set TECDEBT_BASIC_AUTH_PASSWORD in .env}
+      TECDEBT_ALLOWED_GIT_HOSTS: ${TECDEBT_ALLOWED_GIT_HOSTS:-github.com}
+      TECDEBT_ALLOW_LOCAL_REPOSITORIES: ${TECDEBT_ALLOW_LOCAL_REPOSITORIES:-false}
+      TECDEBT_ALLOW_INSECURE_GIT: ${TECDEBT_ALLOW_INSECURE_GIT:-false}
+      TECDEBT_MAX_ACTIVE_SCANS: ${TECDEBT_MAX_ACTIVE_SCANS:-2}
+      TECDEBT_MAX_ACTIVE_PATCHES: ${TECDEBT_MAX_ACTIVE_PATCHES:-1}
+      TECDEBT_MAX_DAILY_COST_USD: ${TECDEBT_MAX_DAILY_COST_USD:-}
+      TECDEBT_DEFAULT_SCAN_COST_USD: ${TECDEBT_DEFAULT_SCAN_COST_USD:-}
+      TECDEBT_DEEP_WORKERS: ${TECDEBT_DEEP_WORKERS:-2}
+      TECDEBT_DEEP_MAX_RUNS: ${TECDEBT_DEEP_MAX_RUNS:-6}
+      TECDEBT_DEEP_STOP_AFTER_NO_NEW: ${TECDEBT_DEEP_STOP_AFTER_NO_NEW:-2}
+      # Eve has no Docker socket/daemon in this topology by design.
+      TECDEBT_VALIDATION_ENABLED: ${TECDEBT_VALIDATION_ENABLED:-false}
+      TECDEBT_VALIDATION_RUNNER: ${TECDEBT_VALIDATION_RUNNER:-auto}
+      TECDEBT_VALIDATION_IMAGE: ${TECDEBT_VALIDATION_IMAGE:-node:24-bookworm-slim}
+      TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS: ${TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS:-60}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       EVE_URL: http://eve:2000
       EVE_USERNAME: tecdebt
       EVE_PASSWORD: ${EVE_PASSWORD:?Set EVE_PASSWORD in .env}
@@ -71,6 +92,17 @@ services:
       GITNEXUS_ENABLED: ${GITNEXUS_ENABLED:-false}
     volumes:
       - scan_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const r=await fetch('http://127.0.0.1:3000/api/health');process.exit(r.ok?0:1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

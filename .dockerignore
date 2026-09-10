@@ -16,5 +16,6 @@ Dockerfile
 .env*
 .artifacts/
 .claude/
+.tools/
 logs/
 data/

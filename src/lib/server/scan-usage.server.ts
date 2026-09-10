@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { readFile, rm } from 'node:fs/promises'
+import { readdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -113,6 +113,26 @@ export function aggregateScanUsage(
 
 export async function removeScanUsage(rootSessionId: string): Promise<void> {
   await rm(join(usageDir(), `${rootSessionId}.jsonl`), { force: true })
+}
+
+export async function pruneTransientUsageFiles(
+  protectedSessionIds: ReadonlySet<string>,
+): Promise<number> {
+  let entries: string[]
+  try {
+    entries = await readdir(usageDir())
+  } catch {
+    return 0
+  }
+  let removed = 0
+  for (const entry of entries) {
+    if (!entry.endsWith('.jsonl')) continue
+    const sessionId = entry.slice(0, -'.jsonl'.length)
+    if (protectedSessionIds.has(sessionId)) continue
+    await rm(join(usageDir(), entry), { force: true })
+    removed += 1
+  }
+  return removed
 }
 
 function emptyTotals(): UsageTotals {

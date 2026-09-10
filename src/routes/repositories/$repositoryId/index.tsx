@@ -4,7 +4,14 @@ import {
   useNavigate,
   useRouter,
 } from '@tanstack/react-router'
-import { ChevronRight, Pencil, Play, Trash2 } from 'lucide-react'
+import {
+  ChevronRight,
+  Pencil,
+  Play,
+  Shield,
+  Square,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
@@ -58,11 +65,12 @@ import { parseIdParam } from '@/lib/route-params'
 import { enabledScanners } from '@/lib/scanners'
 import { describeCron } from '@/lib/schedule'
 import { GRADE_DESCRIPTIONS, type Grade } from '@/lib/scoring'
-import { deleteRepository, triggerScan } from '@/lib/server/repositories'
+import { cancelScan, deleteRepository } from '@/lib/server/repositories'
 import {
   getRepositoryDetail,
   type RepositoryDetail,
 } from '@/lib/server/repository-detail'
+import { ScanDialog } from './-components/scan-dialog'
 
 export const Route = createFileRoute('/repositories/$repositoryId/')({
   loader: ({ params }) =>
@@ -82,6 +90,7 @@ function RepositoryPage() {
   const router = useRouter()
   const navigate = useNavigate()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [scanDialogOpen, setScanDialogOpen] = useState(false)
   const running = detail?.runningScan ?? null
 
   useEffect(() => {
@@ -121,13 +130,14 @@ function RepositoryPage() {
       ? Math.round((latestScan.overallScore - previous.overallScore) * 10) / 10
       : null
 
-  const scanNow = async () => {
+  const stopScan = async () => {
+    if (!running) return
     try {
-      await triggerScan({ data: repository.id })
-      toast.success('Scan started')
+      await cancelScan({ data: running.id })
+      toast.success('Cancellation requested')
       await router.invalidate()
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Could not start the scan'))
+      toast.error(getErrorMessage(error, 'Could not cancel the scan'))
     }
   }
 
@@ -165,9 +175,21 @@ function RepositoryPage() {
         leading={<GradeBadge grade={latestScan?.grade} size="lg" />}
         actions={
           <>
-            <Button onClick={() => void scanNow()} disabled={running !== null}>
+            <Button
+              onClick={() => setScanDialogOpen(true)}
+              disabled={running !== null}
+            >
               <Play className="size-4" aria-hidden="true" />
               {running ? 'Scanning…' : 'Scan now'}
+            </Button>
+            <Button variant="outline" asChild>
+              <Link
+                to="/repositories/$repositoryId/security"
+                params={{ repositoryId: String(repository.id) }}
+              >
+                <Shield className="size-4" aria-hidden="true" />
+                Security context
+              </Link>
             </Button>
             <Button variant="outline" asChild>
               <Link
@@ -198,6 +220,15 @@ function RepositoryPage() {
               {formatRelative(running.startedAt ?? running.createdAt)}. This
               page refreshes automatically.
             </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void stopScan()}
+              disabled={running.cancellationRequestedAt !== null}
+            >
+              <Square className="size-3.5" aria-hidden="true" />
+              {running.cancellationRequestedAt ? 'Cancelling…' : 'Stop'}
+            </Button>
           </CardContent>
         </Card>
       ) : null}
@@ -398,6 +429,12 @@ function RepositoryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ScanDialog
+        repositoryId={repository.id}
+        open={scanDialogOpen}
+        onOpenChange={setScanDialogOpen}
+        onStarted={() => router.invalidate()}
+      />
     </Page>
   )
 }

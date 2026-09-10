@@ -19,7 +19,7 @@ import { getScanner } from '@/lib/scanners'
 import { getScannerDetail } from '@/lib/server/repository-detail'
 
 export const Route = createFileRoute(
-  '/repositories/$repositoryId/scanners/$scannerId',
+  '/repositories/$repositoryId/scanners/$scannerId/',
 )({
   loader: ({ params }) => {
     if (!getScanner(params.scannerId)) throw notFound()

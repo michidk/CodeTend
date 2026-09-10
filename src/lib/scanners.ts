@@ -8,6 +8,8 @@
 export interface ScannerDefinition {
   readonly id: string
   readonly name: string
+  /** Agent scanners review source; dependency-audit is produced by OSV. */
+  readonly kind?: 'agent' | 'dependency-audit'
   /** Short label for compact UI such as chart legends. */
   readonly shortName: string
   readonly description: string
@@ -191,6 +193,23 @@ Not yours: dead application code (Dead & Obsolete Code owns unused source; you o
 Calibrate: group findings by concern (one finding for "competing HTTP clients", not one per import), name the canonical choice the repository should converge on, and reserve high severity for problems that break or silently change builds.`,
   },
   {
+    id: 'vulnerabilities',
+    name: 'Vulnerable Dependencies',
+    shortName: 'Vulnerabilities',
+    kind: 'dependency-audit',
+    description:
+      'Exact vulnerable package versions from OSV, enriched with CVSS, EPSS and CISA KEV.',
+    weight: 1.5,
+    enabled: true,
+    fixPromptTitle: 'Remediate Vulnerable Dependencies',
+    fixGuidance: `- Confirm the installed version and dependency path with the repository package manager before changing it.
+- Prefer the smallest compatible upgrade that reaches a fixed version and regenerate the lockfile; do not hand-edit it.
+- Run the affected package's tests and the full repository checks. If the package is transitive, update the direct dependency or resolution mechanism that controls it.
+- CISA KEV means exploitation has been observed in the wild. Treat those findings as urgent even when raw CVSS is lower.`,
+    prompt:
+      'This scanner is deterministic and is populated by OSV Scanner; it is not handed to an agent.',
+  },
+  {
     id: 'security',
     name: 'Security Hygiene',
     shortName: 'Security',
@@ -219,6 +238,9 @@ export const scannersById: ReadonlyMap<string, ScannerDefinition> = new Map(
 export const enabledScanners: readonly ScannerDefinition[] = SCANNERS.filter(
   (scanner) => scanner.enabled,
 )
+
+export const agentScanners: readonly ScannerDefinition[] =
+  enabledScanners.filter((scanner) => scanner.kind !== 'dependency-audit')
 
 export function getScanner(id: string): ScannerDefinition | undefined {
   return scannersById.get(id)

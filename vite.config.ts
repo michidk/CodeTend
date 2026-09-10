@@ -4,7 +4,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite'
-import { devMigrations } from './scripts/vite-dev-migrations'
+import { devMigrations } from './scripts/vite-dev-migrations.ts'
 
 const config = defineConfig({
   // Dev/preview servers run behind sandbox proxies that forward arbitrary

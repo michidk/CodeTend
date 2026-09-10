@@ -91,3 +91,23 @@ function resolveGitNexusBinary(): string {
   ].filter((candidate): candidate is string => Boolean(candidate))
   return candidates.find((candidate) => existsSync(candidate)) ?? 'gitnexus'
 }
+
+/** Removes the per-scan registry entry after scanners no longer need it. */
+export async function removeGitNexusIndex(name: string): Promise<void> {
+  if (!getServerEnv().GITNEXUS_ENABLED) return
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = spawn(resolveGitNexusBinary(), ['remove', name], {
+      env: {
+        ...process.env,
+        GITNEXUS_HOME: gitnexusHome(),
+        GITNEXUS_NO_UPDATE_NOTIFIER: '1',
+      },
+      stdio: 'ignore',
+    })
+    child.once('error', reject)
+    child.once('exit', (code) => {
+      if (code === 0) resolvePromise()
+      else reject(new Error(`GitNexus remove exited with code ${code ?? -1}`))
+    })
+  })
+}
