@@ -95,9 +95,10 @@ removed after each scan is persisted.
    evidence, attack path, validation results and proof gaps, remediation tests,
    and preventive controls. Scan pages expose manifest, findings, coverage,
    Markdown and SARIF downloads.
-7. Expand a finding to mark it **false positive** or **accepted risk** with an
-   audit note. That operator disposition stays suppressed across scans until
-   someone explicitly reopens it; it is never presented as a code fix.
+7. Expand a finding to mark it **false positive** or **accepted risk** with a
+   context note (required for accepted risks). Ignored findings are listed in
+   their own section on the repository page where the context can be edited or
+   the finding reopened. The disposition is never presented as a code fix.
 
 ## Scanners
 
@@ -177,7 +178,10 @@ Docker-capable execution boundary.
 Lifecycle resolution is coverage aware: an omitted finding is not marked fixed
 unless its original path was inside a complete reviewed target. Path and diff
 scans cannot silently resolve findings outside their scope. Manual dispositions
-are re-evaluated and reopen as regressions when their rationale no longer fits.
+are durable: scanners receive the recorded context, default to keeping the
+finding suppressed, and may reopen it as a regression only when they can cite a
+concrete code change that contradicts that context. Disagreeing with the
+operator's judgement is not enough.
 
 For an active finding, **Generate patch** starts a separate one-finding fixer.
 It works against the exact source revision in a disposable clone, returns a
@@ -219,6 +223,7 @@ then derives states from *our persisted results* (never Git history):
 | scanner verdict `resolved`, or the scanner verified every other hypothesis and omitted this one | `resolved` |
 | open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
 | operator marks a finding false positive or accepted risk | `resolved` with a durable manual disposition; future matches stay suppressed |
+| scanner cites a concrete change that contradicts the recorded disposition context | `regressed`; the disposition is cleared |
 | operator reopens a manually triaged finding | `active`; the next scan resumes normal reconciliation |
 
 Every observation is stored as a `finding_occurrences` row, which powers the

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
 import {
@@ -62,12 +62,29 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
         (scan) => scan.status === 'queued' || scan.status === 'running',
       ) ?? null
 
-    const [openFindings, knowledge] = await Promise.all([
+    const [openFindings, ignoredFindings, knowledge] = await Promise.all([
       db.query.findings.findMany({
         where: and(
           eq(findings.repositoryId, repositoryId),
           inArray(findings.state, [...OPEN_FINDING_STATES]),
         ),
+        with: {
+          validations: {
+            orderBy: [desc(findingValidations.createdAt)],
+            limit: 1,
+          },
+          patches: {
+            orderBy: [desc(findingPatches.createdAt)],
+            limit: 3,
+          },
+        },
+      }),
+      db.query.findings.findMany({
+        where: and(
+          eq(findings.repositoryId, repositoryId),
+          isNotNull(findings.disposition),
+        ),
+        orderBy: [desc(findings.triagedAt)],
         with: {
           validations: {
             orderBy: [desc(findingValidations.createdAt)],
@@ -124,6 +141,7 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       runningScan: running,
       scannerRuns: latest?.scannerRuns ?? [],
       openFindings,
+      ignoredFindings,
       openFindingsByScanner: Object.fromEntries(
         enabledScanners.map((scanner) => [
           scanner.id,

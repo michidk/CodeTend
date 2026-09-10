@@ -356,14 +356,14 @@ export const hypothesisVerdictSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      'For a hypothesis with a prior manual disposition, whether its recorded reason still applies to the current code and controls.',
+      'For a hypothesis with a prior manual disposition, whether its recorded context still applies to the current code and controls. Defaults to true; only false when a concrete code change contradicts the recorded context.',
     ),
   dispositionAssessment: z
     .string()
     .max(1_000)
     .optional()
     .describe(
-      'Evidence for retaining or invalidating a prior false-positive or accepted-risk decision.',
+      'Evidence for retaining or invalidating a prior false-positive or accepted-risk decision. When invalidating, name the specific change that contradicts the recorded context.',
     ),
 })
 

@@ -18,6 +18,11 @@ import { getErrorMessage } from '@/lib/error-message'
 import type { FindingDisposition } from '@/lib/findings'
 import { setFindingDisposition } from '@/lib/server/finding-triage'
 
+const DISPOSITION_LABELS: Record<FindingDisposition, string> = {
+  false_positive: 'Marked false positive',
+  accepted_risk: 'Risk accepted',
+}
+
 export function FindingTriageControls({
   findingId,
   disposition,
@@ -31,6 +36,7 @@ export function FindingTriageControls({
   const [action, setAction] = useState<FindingDisposition | null>(null)
   const [note, setNote] = useState(dispositionNote ?? '')
   const [pending, setPending] = useState(false)
+  const editing = action !== null && action === disposition
 
   const save = async (next: FindingDisposition | null) => {
     setPending(true)
@@ -41,9 +47,9 @@ export function FindingTriageControls({
       toast.success(
         next === null
           ? 'Finding reopened'
-          : next === 'false_positive'
-            ? 'Marked as false positive'
-            : 'Risk accepted',
+          : editing
+            ? 'Context updated'
+            : DISPOSITION_LABELS[next],
       )
       setAction(null)
       await router.invalidate()
@@ -54,31 +60,102 @@ export function FindingTriageControls({
     }
   }
 
+  const dialog = (
+    <Dialog
+      open={action !== null}
+      onOpenChange={(open) => {
+        if (!open && !pending) setAction(null)
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {editing
+              ? 'Edit context'
+              : action === 'accepted_risk'
+                ? 'Accept this risk?'
+                : 'Mark as false positive?'}
+          </DialogTitle>
+          <DialogDescription>
+            This is an operator decision, not a code fix. Future scans keep the
+            finding suppressed and only reopen it when the scanner can show that
+            this context no longer matches the code, so record the controls,
+            assumptions or constraints that justify it.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <Label htmlFor={`triage-note-${findingId}`}>
+            Context{action === 'accepted_risk' ? ' (required)' : ' (optional)'}
+          </Label>
+          <textarea
+            id={`triage-note-${findingId}`}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            maxLength={2_000}
+            rows={4}
+            className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Why this is acceptable here, e.g. the endpoint is internal-only behind the VPN and rate limited at the gateway."
+          />
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => setAction(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={
+              pending || (action === 'accepted_risk' && note.trim().length < 5)
+            }
+            onClick={() => action && void save(action)}
+          >
+            {pending ? 'Saving…' : editing ? 'Save' : 'Confirm'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (disposition) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/50 p-3">
-        <div>
-          <p className="font-semibold">
-            {disposition === 'false_positive'
-              ? 'Marked false positive'
-              : 'Risk accepted'}
-          </p>
-          {dispositionNote ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {dispositionNote}
+      <>
+        <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-muted/50 p-3">
+          <div className="min-w-0">
+            <p className="font-semibold">{DISPOSITION_LABELS[disposition]}</p>
+            <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+              {dispositionNote ?? 'No context recorded.'}
             </p>
-          ) : null}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                setNote(dispositionNote ?? '')
+                setAction(disposition)
+              }}
+            >
+              Edit context
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => void save(null)}
+            >
+              Reopen
+            </Button>
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => void save(null)}
-        >
-          Reopen
-        </Button>
-      </div>
+        {dialog}
+      </>
     )
   }
 
@@ -108,61 +185,7 @@ export function FindingTriageControls({
           Accept risk
         </Button>
       </div>
-
-      <Dialog
-        open={action !== null}
-        onOpenChange={(open) => {
-          if (!open && !pending) setAction(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {action === 'accepted_risk'
-                ? 'Accept this risk?'
-                : 'Mark as false positive?'}
-            </DialogTitle>
-            <DialogDescription>
-              This is an operator decision, not a code fix. Future scans keep
-              the finding suppressed until it is reopened.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <Label htmlFor={`triage-note-${findingId}`}>
-              Reason{action === 'accepted_risk' ? ' (required)' : ' (optional)'}
-            </Label>
-            <textarea
-              id={`triage-note-${findingId}`}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              maxLength={2_000}
-              rows={4}
-              className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="Record the evidence or decision for future reviewers."
-            />
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => setAction(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={
-                pending ||
-                (action === 'accepted_risk' && note.trim().length < 5)
-              }
-              onClick={() => action && void save(action)}
-            >
-              {pending ? 'Saving…' : 'Confirm'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dialog}
     </>
   )
 }

@@ -83,7 +83,10 @@ export function FindingCard({
               ) : null}
               <SeverityBadge severity={finding.severity} />
               <ConfidenceBadge confidence={finding.confidence} />
-              <FindingStateBadge state={finding.state} />
+              <FindingStateBadge
+                state={finding.state}
+                disposition={finding.disposition}
+              />
               <Badge variant="outline" className="capitalize">
                 effort: {finding.effort}
               </Badge>

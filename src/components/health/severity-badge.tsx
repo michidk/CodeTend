@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import type {
   Confidence,
+  FindingDisposition,
   FindingPriority,
   FindingState,
   Severity,
@@ -63,7 +64,25 @@ const STATE_CLASSES: Record<FindingState, string> = {
   regressed: 'border-transparent bg-destructive/15 text-destructive-text',
 }
 
-export function FindingStateBadge({ state }: { readonly state: FindingState }) {
+const DISPOSITION_LABELS: Record<FindingDisposition, string> = {
+  false_positive: 'false positive',
+  accepted_risk: 'accepted risk',
+}
+
+export function FindingStateBadge({
+  state,
+  disposition = null,
+}: {
+  readonly state: FindingState
+  readonly disposition?: FindingDisposition | null
+}) {
+  if (disposition) {
+    return (
+      <Badge className="border-transparent bg-muted text-muted-foreground capitalize">
+        {DISPOSITION_LABELS[disposition]}
+      </Badge>
+    )
+  }
   return (
     <Badge className={cn('capitalize', STATE_CLASSES[state])}>{state}</Badge>
   )

@@ -17,12 +17,16 @@ const triageInputSchema = z
       context.addIssue({
         code: 'custom',
         path: ['note'],
-        message: 'Explain why this risk is being accepted.',
+        message: 'Explain the context in which this risk is acceptable.',
       })
     }
   })
 
-/** Records an explicit operator decision without conflating it with a code fix. */
+/**
+ * Records an explicit operator decision without conflating it with a code
+ * fix. Calling it again with the same disposition only updates the context
+ * note, so the original triage timestamp is kept.
+ */
 export const setFindingDisposition = createServerFn({ method: 'POST' })
   .validator(triageInputSchema)
   .handler(async ({ data }) => {
@@ -43,7 +47,9 @@ export const setFindingDisposition = createServerFn({ method: 'POST' })
               state: 'resolved',
               disposition: data.disposition,
               dispositionNote: data.note || null,
-              triagedAt: new Date(),
+              ...(current.disposition === data.disposition
+                ? {}
+                : { triagedAt: new Date() }),
               resolvedScanId: null,
               updatedAt: new Date(),
             }

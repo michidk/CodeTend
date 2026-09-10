@@ -115,6 +115,7 @@ function RepositoryPage() {
     latestScan,
     scannerRuns,
     openFindings,
+    ignoredFindings,
     openFindingsByScanner,
     history,
     timeline,
@@ -397,6 +398,30 @@ function RepositoryPage() {
           </div>
         )}
       </section>
+
+      {ignoredFindings.length > 0 ? (
+        <section
+          aria-labelledby="ignored-heading"
+          className="space-y-3 sm:space-y-4"
+        >
+          <SectionHeading id="ignored-heading" color="bg-candy-sand">
+            Ignored findings{' '}
+            <Badge variant="outline" className="ml-1 align-middle">
+              {ignoredFindings.length}
+            </Badge>
+          </SectionHeading>
+          <p className="text-sm text-muted-foreground">
+            Accepted risks and false positives with their recorded context. They
+            stay out of the score and are only reopened when a scan shows the
+            context no longer applies.
+          </p>
+          <div className="space-y-2">
+            {ignoredFindings.map((finding) => (
+              <FindingCard key={finding.id} finding={finding} showScanner />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section
         aria-labelledby="history-heading"
