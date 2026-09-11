@@ -120,8 +120,8 @@ tools.
 Architecture & Modularity · Duplication & Abstraction · Dead & Obsolete Code ·
 Complexity & Maintainability · Tests & Testability · Reliability & Error
 Handling · Documentation & Understandability · Domain & API Design · Type
-Safety & Data Contracts · Consistency / Vibe Debt · Dependencies & Build Health
-· Vulnerable Dependencies · Security Hygiene
+Safety & Data Contracts · Consistency / Vibe Debt · AI Slop & Noise ·
+Dependencies & Build Health · Vulnerable Dependencies · Security Hygiene
 
 Each scanner's `prompt` names what it owns, which neighbouring dimensions own
 the adjacent concerns ("Not yours"), and how to calibrate severity, so the same

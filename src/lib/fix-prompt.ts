@@ -71,12 +71,13 @@ export function buildFixPrompt(input: FixPromptInput): string {
     '',
     '## How to work',
     '',
-    '1. Before changing anything, inspect the repository to confirm each finding against the current code; files may have moved since the scan. Skip a finding only if you can show it no longer applies.',
-    '2. Follow the existing conventions of this repository (structure, naming, error handling, testing style, formatting). Do not introduce new frameworks or patterns unless a finding explicitly calls for one.',
+    '1. Before changing anything, inspect the repository to confirm each finding against the current code; files may have moved since the scan. Skip a finding only if you can show it no longer applies, and say so in your summary.',
+    '2. Follow the existing conventions of this repository (structure, naming, error handling, logging, validation, testing style, formatting). Reuse the helpers, error types and patterns the repository already has; do not introduce new frameworks, dependencies or patterns unless a finding explicitly calls for one.',
     '3. Fix the root cause described in each recommendation rather than papering over symptoms. Where several findings share a cause, address the cause once.',
-    '4. Keep changes scoped to the findings. Do not refactor unrelated code.',
-    '5. Update or add tests where behavior is touched, run the repository’s existing checks (type checker, linter, tests, build) and fix what they report.',
-    '6. Finish with a short summary of what you changed per finding and anything you deliberately left alone, with the reason.',
+    '4. Make the smallest change that resolves each finding. Every changed line should trace back to a finding: do not refactor, reformat, rename or "improve" adjacent code, do not add comments that narrate the change, and do not add abstractions, options or error handling beyond what the finding requires. Remove imports, variables and helpers that your change made unused, but leave pre-existing dead code alone unless a finding names it.',
+    '5. State your assumptions. If a finding is ambiguous, if its recommendation conflicts with something you observe in the code, or if the fix would change observable behavior the finding did not call for, choose the interpretation that changes the least, say what you assumed, and stop rather than guess when the choice is a product decision.',
+    '6. Update or add tests where behavior is touched, run the repository’s existing checks (type checker, linter, tests, build) and fix what they report. Do not claim a check passed that you did not run.',
+    '7. Finish with a short summary of what you changed per finding and anything you deliberately left alone, with the reason.',
   ]
 
   if (input.scanner.fixGuidance) {
