@@ -109,6 +109,32 @@ describe('Eve usage hooks', () => {
         },
         hookContext('next-turn'),
       )
+      await hooks['step.completed'](
+        {
+          type: 'step.completed',
+          data: {
+            finishReason: 'content-filter',
+            sequence: 2,
+            stepIndex: 1,
+            turnId: 'next-turn',
+          },
+          meta: meta('refused-event'),
+        },
+        hookContext('next-turn'),
+      )
+      await hooks['step.completed'](
+        {
+          type: 'step.completed',
+          data: {
+            finishReason: 'stop',
+            sequence: 3,
+            stepIndex: 2,
+            turnId: 'next-turn',
+          },
+          meta: meta('usage-less-event'),
+        },
+        hookContext('next-turn'),
+      )
 
       const rows = (
         await readFile(
@@ -120,7 +146,7 @@ describe('Eve usage hooks', () => {
         .split('\n')
         .map((line) => JSON.parse(line))
 
-      expect(rows).toHaveLength(2)
+      expect(rows).toHaveLength(3)
       expect(rows[0]).toMatchObject({
         eventId: 'completed-event',
         rootSessionId: 'root-session',
@@ -130,10 +156,17 @@ describe('Eve usage hooks', () => {
         outputTokens: 30,
         cacheReadTokens: 20,
         cacheWriteTokens: 10,
+        finishReason: 'stop',
       })
       expect(rows[1]).toMatchObject({
         scannerId: null,
         modelId: 'fallback-model',
+      })
+      expect(rows[2]).toMatchObject({
+        eventId: 'refused-event',
+        finishReason: 'content-filter',
+        inputTokens: 0,
+        outputTokens: 0,
       })
     } finally {
       if (previousDataDir === undefined) delete process.env.TECDEBT_DATA_DIR

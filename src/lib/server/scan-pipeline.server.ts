@@ -472,13 +472,19 @@ async function persistScanResult(
     const scanner = getScanner(outcome.scannerId)
     if (!scanner) continue
 
-    if (outcome.status !== 'completed' || !outcome.result) {
+    // A safety-classifier refusal ends the step with no content, so the
+    // structured result is either missing or empty. Treating that as a clean
+    // scan would silently resolve every open finding in the dimension.
+    const refused = (usage?.perScanner.get(scanner.id)?.refusals ?? 0) > 0
+    if (outcome.status !== 'completed' || !outcome.result || refused) {
       failedScanners += 1
       await db
         .update(scannerRuns)
         .set({
           status: 'failed',
-          error: outcome.error ?? 'Scanner failed.',
+          error: refused
+            ? 'The model declined part of this scan (provider safety filter). Findings were left unchanged.'
+            : (outcome.error ?? 'Scanner failed.'),
           startedAt: new Date(outcome.startedAt),
           finishedAt: new Date(outcome.finishedAt),
           ...usageColumns(usage?.perScanner.get(scanner.id)),

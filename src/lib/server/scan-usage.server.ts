@@ -30,12 +30,15 @@ const usageRecordSchema = z.object({
   cacheReadTokens: z.number().nonnegative(),
   cacheWriteTokens: z.number().nonnegative(),
   costUsd: z.number().nullable().optional(),
+  finishReason: z.string().optional(),
 })
 
 export interface UsageTotals extends TokenUsage {
   readonly modelCalls: number
   /** Null when at least one step used a model with no known price. */
   readonly estimatedCostUsd: number | null
+  /** Steps the provider ended with a safety-classifier refusal. */
+  readonly refusals: number
 }
 
 export interface ScanUsage {
@@ -136,7 +139,7 @@ export async function pruneTransientUsageFiles(
 }
 
 function emptyTotals(): UsageTotals {
-  return { ...ZERO_USAGE, modelCalls: 0, estimatedCostUsd: 0 }
+  return { ...ZERO_USAGE, modelCalls: 0, estimatedCostUsd: 0, refusals: 0 }
 }
 
 function stepTotals(record: z.infer<typeof usageRecordSchema>): UsageTotals {
@@ -150,6 +153,7 @@ function stepTotals(record: z.infer<typeof usageRecordSchema>): UsageTotals {
     ...usage,
     modelCalls: 1,
     estimatedCostUsd: estimateCostUsd(record.modelId, usage, record.costUsd),
+    refusals: record.finishReason === 'content-filter' ? 1 : 0,
   }
 }
 
@@ -157,6 +161,7 @@ function addTotals(a: UsageTotals, b: UsageTotals): UsageTotals {
   return {
     ...addUsage(a, b),
     modelCalls: a.modelCalls + b.modelCalls,
+    refusals: a.refusals + b.refusals,
     estimatedCostUsd:
       a.estimatedCostUsd === null || b.estimatedCostUsd === null
         ? null

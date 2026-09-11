@@ -88,6 +88,35 @@ describe('scan usage aggregation', () => {
     })
   })
 
+  test('counts safety-filter refusals per scanner', () => {
+    const raw = [
+      record({
+        eventId: 'refused',
+        sessionId: 'scanner-session',
+        turnId: 'scanner-turn',
+        agent: 'scanner',
+        scannerId: 'security',
+        inputTokens: 0,
+        outputTokens: 0,
+        finishReason: 'content-filter',
+      }),
+      record({
+        eventId: 'clean',
+        sessionId: 'other-session',
+        turnId: 'other-turn',
+        agent: 'scanner',
+        scannerId: 'tests',
+        finishReason: 'stop',
+      }),
+    ].join('\n')
+
+    const usage = aggregateScanUsage('root-session', raw)
+
+    expect(usage?.total.refusals).toBe(1)
+    expect(usage?.perScanner.get('security')?.refusals).toBe(1)
+    expect(usage?.perScanner.get('tests')?.refusals).toBe(0)
+  })
+
   test('returns no usage when a file has no valid records', () => {
     expect(aggregateScanUsage('root-session', '')).toBeNull()
     expect(aggregateScanUsage('root-session', '{"inputTokens": 1}')).toBeNull()

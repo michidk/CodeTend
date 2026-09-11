@@ -1,4 +1,5 @@
 import type { HookContext, HookEvent } from 'eve/hooks'
+import { resolveModelSettings } from './model'
 import { usageDir } from './paths'
 
 /**
@@ -23,6 +24,8 @@ export interface UsageRecord {
   readonly cacheReadTokens: number
   readonly cacheWriteTokens: number
   readonly costUsd: number | null
+  /** Provider finish reason; `content-filter` marks a safety-classifier refusal. */
+  readonly finishReason: string
   readonly at: string
 }
 
@@ -60,7 +63,9 @@ export function usageHooks(agent: string) {
       ctx: HookContext,
     ): Promise<void> {
       const usage = event.data.usage
-      if (!usage) return
+      // A refused step may report no usage; it is still recorded so the app
+      // can tell a declined scan from a genuinely empty one.
+      if (!usage && event.data.finishReason !== 'content-filter') return
       const record: UsageRecord = {
         eventId: event.meta.id,
         sessionId: ctx.session.id,
@@ -69,13 +74,13 @@ export function usageHooks(agent: string) {
         stepIndex: event.data.stepIndex,
         agent,
         scannerId: scanners.get(ctx.session.id) ?? null,
-        modelId:
-          models.get(ctx.session.id) ?? process.env.TECDEBT_MODEL ?? null,
-        inputTokens: usage.inputTokens ?? 0,
-        outputTokens: usage.outputTokens ?? 0,
-        cacheReadTokens: usage.cacheReadTokens ?? 0,
-        cacheWriteTokens: usage.cacheWriteTokens ?? 0,
-        costUsd: usage.costUsd ?? null,
+        modelId: models.get(ctx.session.id) ?? resolveModelSettings().modelId,
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        cacheReadTokens: usage?.cacheReadTokens ?? 0,
+        cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
+        costUsd: usage?.costUsd ?? null,
+        finishReason: event.data.finishReason,
         at: event.meta.at,
       }
       try {

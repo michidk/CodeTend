@@ -15,10 +15,26 @@ import {
 const fixerOutputSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'diff', 'changedFiles', 'testRecommendations'],
+  required: [
+    'outcome',
+    'summary',
+    'diff',
+    'changedFiles',
+    'testRecommendations',
+  ],
   properties: {
+    outcome: {
+      type: 'string',
+      enum: ['patched', 'not_reproduced', 'needs_decision'],
+      description:
+        'patched when the diff fixes the finding; not_reproduced when the cited code no longer has the problem; needs_decision when the fix depends on a product decision the source does not settle.',
+    },
     summary: { type: 'string', minLength: 3, maxLength: 4000 },
-    diff: { type: 'string', minLength: 1, maxLength: 500000 },
+    diff: {
+      type: 'string',
+      maxLength: 500000,
+      description: 'Unified diff for outcome patched; empty otherwise.',
+    },
     changedFiles: {
       type: 'array',
       maxItems: 50,
@@ -55,10 +71,29 @@ export default defineWorkflowTool({
         throw new Error('Fixer returned no structured patch.')
       }
       const candidate = output as {
+        outcome: 'patched' | 'not_reproduced' | 'needs_decision'
         summary: string
         diff: string
         changedFiles: string[]
         testRecommendations: string[]
+      }
+      if (candidate.outcome !== 'patched') {
+        const result: PatchResult = {
+          patchId,
+          status: 'failed',
+          summary: candidate.summary,
+          diff: '',
+          changedFiles: [],
+          testRecommendations: candidate.testRecommendations,
+          verification: null,
+          error:
+            candidate.outcome === 'not_reproduced'
+              ? 'The fixer could not reproduce the finding in the current revision.'
+              : 'The fix depends on a decision the fixer could not make from the source.',
+          finishedAt: await nowIso(),
+        }
+        await writePatchResult(result)
+        return `Patch ${patchId} not generated: ${candidate.outcome.replace('_', ' ')}.`
       }
       yield { phase: 'checking patch' }
       const applied = await applyGeneratedPatch({
@@ -132,7 +167,7 @@ function patchMessage(
     `Remediation tests: ${(request.finding.remediationTests ?? []).join('; ') || 'none stated'}`,
     `Preventive controls: ${(request.finding.preventiveControls ?? []).join('; ') || 'none stated'}`,
     '',
-    'Inspect the checkout and return one minimal unified diff plus an honest summary and test recommendations.',
+    'Inspect the checkout, decide the outcome, and return the structured result.',
   ].join('\n')
 }
 

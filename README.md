@@ -40,7 +40,7 @@ schedule / "Scan now" / signed GitHub push or pull-request webhook
 | App | Bun, TanStack Start + Router, React 19, shadcn/ui (Base UI), Tailwind v4, Recharts |
 | Persistence | PostgreSQL + Drizzle with automatic migrations (`bun run dev` applies pending migrations) |
 | Agent runtime | [Eve](https://eve.dev) (`eve/`): durable workflow tool, declared subagents, just-bash sandbox, MCP connections, structured outputs |
-| Models | OpenAI through the AI SDK provider (`TECDEBT_MODEL`, default `gpt-5.6-sol`) |
+| Models | Any OpenAI-compatible endpoint through the AI SDK provider (`TECDEBT_MODEL`, default `gpt-5.6-sol`; Claude and others via a gateway such as OpenRouter) |
 | Code intelligence | [GitNexus](https://github.com/abhigyanpatwari/GitNexus) over MCP, optional |
 
 ## Quick start (local)
@@ -303,7 +303,7 @@ bun run scripts/cli.ts add <name> <url> [branch] [cron]   # scripting helpers
 | `TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS` | Per-repository manual scan cooldown |
 | `EVE_URL`, `EVE_USERNAME`, `EVE_PASSWORD` | Eve runtime endpoint and HTTP Basic credentials |
 | `SCHEDULER_INTERVAL_SECONDS` | How often the app looks for due repositories |
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TECDEBT_MODEL` | OpenAI Responses API access for Eve agents |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TECDEBT_MODEL`, `TECDEBT_EFFORT`, `TECDEBT_MODEL_CONTEXT_WINDOW_TOKENS` | OpenAI-compatible endpoint, model id, reasoning effort and context window for Eve agents |
 | `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION`, `TECDEBT_SCANNER_CONCURRENCY` | Per-session token ceiling and bounded scanner fan-out |
 | `GITHUB_TOKEN` | Optional short-lived GitHub App installation token for private HTTPS clones |
 | `GITHUB_WEBHOOK_SECRET` | Optional secret authenticating GitHub push and pull-request deliveries to `/api/webhooks/github` |
