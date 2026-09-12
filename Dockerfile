@@ -27,7 +27,7 @@ EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
 
 # ---- Eve agent runtime (Node 24) ----
-FROM node:24-bookworm-slim AS eve
+FROM node:26-bookworm-slim AS eve
 WORKDIR /app
 ENV NODE_ENV=production
 ARG TARGETARCH
