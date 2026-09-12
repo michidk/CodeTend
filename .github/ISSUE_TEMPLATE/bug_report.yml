@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report a bug. Please do **not** report
-        security vulnerabilities here; follow [SECURITY.md](../blob/main/SECURITY.md)
-        instead.
+        security vulnerabilities here; use a
+        [private GitHub security advisory](../security/advisories/new) instead.
   - type: textarea
     id: what-happened
     attributes:
