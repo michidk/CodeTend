@@ -64,6 +64,16 @@ const REPORT = {
 }
 
 describe('OSV dependency findings', () => {
+  test('treats a repository without lockfiles as an empty audit', () => {
+    // osv-scanner --allow-no-lockfiles emits `results: null` when nothing scanned.
+    expect(
+      parseOsvDependencyReport(
+        { results: null, experimental_config: {} },
+        '/data/workspaces/repo-7-scan-12',
+      ),
+    ).toEqual([])
+  })
+
   test('normalizes exact package evidence and joins published intelligence', () => {
     const matches = parseOsvDependencyReport(
       REPORT,

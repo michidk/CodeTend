@@ -597,6 +597,9 @@ export async function auditDependencies(
           '--format',
           'json',
           '--recursive',
+          // A repository without lockfiles is a valid empty audit, not an
+          // error (osv-scanner otherwise exits 128 with "No package sources").
+          '--allow-no-lockfiles',
           workspace.hostPath,
         ],
         { timeoutMs: 15 * 60_000 },

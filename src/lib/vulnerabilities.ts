@@ -79,7 +79,9 @@ const osvReportSchema = z.object({
         packages: z.array(osvPackageSchema),
       }),
     )
-    .default([]),
+    .nullable()
+    .default([])
+    .transform((results) => results ?? []),
 })
 
 type OsvVulnerability = z.infer<typeof osvVulnerabilitySchema>
