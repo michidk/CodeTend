@@ -1,16 +1,28 @@
-name: CI
+name: Checks and Build
 
 on:
-  pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 permissions:
   contents: read
 
+concurrency:
+  group: checks-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -28,23 +40,117 @@ jobs:
     env:
       DATABASE_URL: postgresql://tecdebt:tecdebt-ci@127.0.0.1:5432/tecdebt
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
-      - uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: eve/package-lock.json
-      - run: bun install --frozen-lockfile
-      - run: npm ci
+
+      - name: Install app dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Eve dependencies
+        run: npm ci
         working-directory: eve
-      - run: bun run verify
-      - run: bun audit --production
-      - run: npm audit --omit=dev
-        working-directory: eve
-      - run: bun run db:migrate
-      - run: bun run test:database
-      - run: docker build --target app --tag tecdebt-app:ci .
-      - run: docker build --target eve --tag tecdebt-eve:ci .
+
+      - name: Check formatting, lint and import boundaries
+        run: bun run check
+
+      - name: Test units
+        run: bun run test
+
+      - name: Type check app and Eve agent
+        run: |
+          bun run typecheck
+          bun run eve:typecheck
+
+      - name: Check for dead code
+        run: bun run lint:deadcode
+
+      - name: Audit production dependencies
+        run: |
+          bun audit --production
+          (cd eve && npm audit --omit=dev)
+
+      - name: Validate Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci-password
+          EVE_PASSWORD: ci-password
+          OPENAI_API_KEY: ci-key
+          TECDEBT_BASIC_AUTH_PASSWORD: ci-password
+        run: docker compose config --quiet
+
+      - name: Apply database migrations
+        run: bun run db:migrate
+
+      - name: Test database invariants
+        run: bun run test:database
+
+      - name: Build production assets
+        run: bun run build
+
+      - name: Check generated route tree
+        run: git diff --exit-code -- src/routeTree.gen.ts
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: checks
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: app
+            suffix: ''
+          - target: eve
+            suffix: -eve
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.target }} image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
