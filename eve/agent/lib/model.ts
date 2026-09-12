@@ -145,8 +145,15 @@ const configuredSessionLimit = Number.parseInt(
   10,
 )
 
-/** Hard cost guardrail for each root, knowledge, or scanner session. */
-export const MAX_INPUT_TOKENS_PER_SESSION =
+/**
+ * Optional guardrail for each knowledge, scanner or fixer session, counted as
+ * the sum of input tokens over every model step (cache reads included), so a
+ * scanner that re-reads a 50k-token context for ten steps has used 500k. Off
+ * unless configured: a session that hits the cap does not fail, it parks the
+ * whole scan waiting for an operator to approve more budget. Cost is bounded
+ * by the app's per-scan and daily USD caps instead.
+ */
+export const MAX_INPUT_TOKENS_PER_SESSION: number | false =
   Number.isFinite(configuredSessionLimit) && configuredSessionLimit >= 10_000
-    ? Math.min(configuredSessionLimit, MODEL_CONTEXT_WINDOW_TOKENS)
-    : 250_000
+    ? configuredSessionLimit
+    : false

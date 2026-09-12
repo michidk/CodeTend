@@ -304,7 +304,7 @@ bun run scripts/cli.ts add <name> <url> [branch] [cron]   # scripting helpers
 | `EVE_URL`, `EVE_USERNAME`, `EVE_PASSWORD` | Eve runtime endpoint and HTTP Basic credentials |
 | `SCHEDULER_INTERVAL_SECONDS` | How often the app looks for due repositories |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TECDEBT_MODEL`, `TECDEBT_EFFORT`, `TECDEBT_MODEL_CONTEXT_WINDOW_TOKENS` | OpenAI-compatible endpoint, model id, reasoning effort and context window for Eve agents |
-| `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION`, `TECDEBT_SCANNER_CONCURRENCY` | Per-session token ceiling and bounded scanner fan-out |
+| `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION`, `TECDEBT_SCANNER_CONCURRENCY` | Optional cumulative input-token ceiling per subagent session (off by default) and bounded scanner fan-out |
 | `GITHUB_TOKEN` | Optional short-lived GitHub App installation token for private HTTPS clones |
 | `GITHUB_WEBHOOK_SECRET` | Optional secret authenticating GitHub push and pull-request deliveries to `/api/webhooks/github` |
 | `GITNEXUS_ENABLED`, `GITNEXUS_MCP_PORT` | Optional code-intelligence layer |

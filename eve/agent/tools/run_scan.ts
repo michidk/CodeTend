@@ -199,11 +199,7 @@ export default defineWorkflowTool({
               if (lastError !== undefined) throw lastError
               return {
                 scannerId: scanner.id,
-                status: result ? 'completed' : 'failed',
-                result: result ?? undefined,
-                error: result
-                  ? undefined
-                  : 'Scanner returned no structured output.',
+                ...scannerOutput(result),
                 startedAt,
                 finishedAt: await nowIso(),
               }
@@ -270,11 +266,7 @@ export default defineWorkflowTool({
                 })
                 return {
                   scannerId: 'security',
-                  status: result ? ('completed' as const) : ('failed' as const),
-                  result: result ?? undefined,
-                  error: result
-                    ? undefined
-                    : 'Deep scan worker returned no output.',
+                  ...scannerOutput(result),
                   startedAt,
                   finishedAt: await nowIso(),
                 }
@@ -444,6 +436,26 @@ interface RawScannerResult {
   readonly findings?: readonly Record<string, unknown>[]
   readonly hypothesisVerdicts?: readonly Record<string, unknown>[]
   readonly coverage?: ScanCoverage
+}
+
+/**
+ * A subagent that never calls `final_output` settles with plain text (a
+ * harness message or the model's prose) instead of the structured result.
+ * Keeping that text as the error explains the failure in the UI instead of
+ * breaking the result file's schema.
+ */
+function scannerOutput(
+  result: unknown,
+): Pick<ScannerOutcome, 'status' | 'result' | 'error'> {
+  if (asScannerResult(result)) return { status: 'completed', result }
+  const text = typeof result === 'string' ? result.trim() : ''
+  return {
+    status: 'failed',
+    error:
+      text.length > 0
+        ? `Scanner returned no structured output: ${text.slice(0, 2_000)}`
+        : 'Scanner returned no structured output.',
+  }
 }
 
 function asScannerResult(value: unknown): RawScannerResult | null {
