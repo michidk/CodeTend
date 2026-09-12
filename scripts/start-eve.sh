@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Starts the Eve agent runtime with the app's .env so both share TECDEBT_DATA_DIR
-# and credentials. Used by `vibepod-preview` / local development.
+# and credentials. Used by scripts/start-dev.sh, scripts/start-preview.sh and
+# standalone local development.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; [ -f .env ] && source .env; set +a

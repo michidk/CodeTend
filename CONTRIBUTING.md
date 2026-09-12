@@ -18,7 +18,15 @@ bun run db:migrate
 bun run test:database
 ```
 
-For UI changes, reuse the managed preview and verify desktop and phone-width
-layouts in both color schemes. Do not trigger an LLM scan merely to test UI.
+For UI changes, verify desktop and phone-width layouts in both color schemes.
+Do not trigger an LLM scan merely to test UI.
+
+When you add or change a scanner in `src/lib/scanners.ts`, revisit the
+"Not yours" boundary clause of every neighbouring dimension so concerns stay
+mutually exclusive; see [docs/architecture.md](docs/architecture.md). Model
+list prices live in `src/lib/ai-pricing.ts`; check them against the provider
+pricing pages before a release.
+
 Pull requests should explain behavior changes, migration/rollback impact,
-security implications and the checks performed.
+security implications and the checks performed; the pull-request template
+asks for each. This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).

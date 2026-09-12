@@ -23,3 +23,10 @@ eve/node_modules/
 
 # Optional local tool installs (e.g. gitnexus)
 /.tools/
+
+# Local code-intelligence index and assistant state
+/.gitnexus/
+.claude/
+
+# Serena MCP tool-local state
+.serena/

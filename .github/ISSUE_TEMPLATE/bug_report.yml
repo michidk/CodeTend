@@ -1,0 +1,57 @@
+name: Bug report
+description: Something behaves incorrectly or fails.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do **not** report
+        security vulnerabilities here; follow [SECURITY.md](../blob/main/SECURITY.md)
+        instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Register repository …
+        2. Start a scan with …
+        3. Observe …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tecdebt version or commit
+      placeholder: v0.1.0 or 8730453
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Local development (bun run dev)
+        - Container images on another platform
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and endpoint
+      description: Value of `TECDEBT_MODEL` and whether `OPENAI_BASE_URL` points at a gateway.
+      placeholder: gpt-5.6-sol via api.openai.com
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: App or Eve output. Remove credentials, repository URLs and source excerpts you cannot share.
+      render: shell

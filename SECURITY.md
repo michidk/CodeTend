@@ -7,10 +7,10 @@ operators should deploy a reviewed commit rather than an unpinned image tag.
 
 ## Reporting a vulnerability
 
-Use a private GitHub security advisory after this repository is published. If
-that channel is unavailable, contact the repository owner privately. Do not
-open a public issue containing credentials, private source, exploit details or
-customer data.
+Report vulnerabilities privately through a
+[GitHub security advisory](https://github.com/michidk/tecdebt/security/advisories/new).
+If that channel is unavailable, email <michael@lohr.dev>. Do not open a public
+issue containing credentials, private source, exploit details or customer data.
 
 Include the affected commit, deployment assumptions, reproduction steps and
 impact. Remove secret values and personal data from logs. The maintainer will
