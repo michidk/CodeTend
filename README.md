@@ -208,8 +208,9 @@ because the production server fails closed without it.
 - The built-in HTTP Basic boundary is single-tenant and expects TLS in
   front. A multi-customer deployment needs an external identity provider,
   organizations and repository-level authorization.
-- GitHub App token generation and rotation belong to the hosting control
-  plane; tecdebt accepts a short-lived installation token for clones.
+- tecdebt mints and caches its own GitHub App installation tokens from
+  `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`; it
+  also accepts a plain, externally-issued `GITHUB_TOKEN` for clones.
 - Executable finding validation is disabled by default. When enabled, Eve
   must have Docker access; the bundled Compose deployment deliberately does
   not mount the Docker socket.

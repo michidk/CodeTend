@@ -21,7 +21,8 @@ affected names.
 | `TECDEBT_ALLOWED_GIT_HOSTS` | `github.com` | Comma-separated exact clone-host allowlist |
 | `TECDEBT_ALLOW_LOCAL_REPOSITORIES` | `false` | Allow `file://` URLs and absolute paths (development only) |
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
-| `GITHUB_TOKEN` | – | Optional short-lived GitHub App installation token for private HTTPS clones |
+| `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for private HTTPS clones. tecdebt mints and caches its own installation tokens; all three are required together and take precedence over `GITHUB_TOKEN` |
+| `GITHUB_TOKEN` | – | Optional plain short-lived token for private HTTPS clones, used when no GitHub App credentials are configured |
 | `GITHUB_WEBHOOK_SECRET` | – | Optional secret authenticating GitHub push and pull-request deliveries to `/api/webhooks/github`. Without it the endpoint returns `503`. |
 
 ## Cost and concurrency guardrails

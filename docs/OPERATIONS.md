@@ -10,9 +10,12 @@ Terminate TLS at a trusted reverse proxy and keep the app bound to loopback or
 a private network.
 
 Replace every `change-me` value in `.env`. Keep the app password, Eve password,
-database password, OpenAI API key and optional GitHub installation token in the
-deployment secret store. Rotate them without committing values to the
-repository.
+database password, OpenAI API key and the optional GitHub App private key (or
+plain `GITHUB_TOKEN`) in the deployment secret store. Rotate them without
+committing values to the repository; a GitHub App's installation token itself
+needs no rotation since tecdebt mints and caches a fresh one from the App
+credentials, but the private key backing it should still be rotated
+periodically like any other long-lived credential.
 
 ## GitHub push and pull-request webhook
 

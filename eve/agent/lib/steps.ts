@@ -175,7 +175,10 @@ export async function cloneRepository(
       request.repositoryUrl,
       hostPath,
     ],
-    { env: { GIT_TERMINAL_PROMPT: '0' }, timeoutMs: 10 * 60_000 },
+    {
+      env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
+      timeoutMs: 10 * 60_000,
+    },
   )
   assertOk(clone, `git clone of ${request.repositoryUrl}#${request.branch}`)
 
@@ -202,7 +205,7 @@ export async function cloneRepository(
         ],
         {
           cwd: hostPath,
-          env: { GIT_TERMINAL_PROMPT: '0' },
+          env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
           timeoutMs: 10 * 60_000,
         },
       )
@@ -260,7 +263,10 @@ export async function clonePatchRepository(
       request.repositoryUrl,
       hostPath,
     ],
-    { env: { GIT_TERMINAL_PROMPT: '0' }, timeoutMs: 10 * 60_000 },
+    {
+      env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
+      timeoutMs: 10 * 60_000,
+    },
   )
   assertOk(clone, `git clone of ${request.repositoryUrl}`)
   const fetch = await run(
@@ -276,7 +282,7 @@ export async function clonePatchRepository(
     ],
     {
       cwd: hostPath,
-      env: { GIT_TERMINAL_PROMPT: '0' },
+      env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
       timeoutMs: 10 * 60_000,
     },
   )

@@ -194,10 +194,15 @@ UTC-day admission budget includes both scans and fixer jobs.
 Clone locations are checked against `TECDEBT_ALLOWED_GIT_HOSTS` before they
 cross into the credentialed Eve runtime. Plain HTTP, embedded URL credentials,
 `file://` URLs and absolute local paths are rejected by default. Public
-repositories need no credential. Private GitHub HTTPS clones prefer the
-short-lived token in `GITHUB_TOKEN` (for example a GitHub App installation
-token), then local `gh auth git-credential`, then configured Git credential
-helpers.
+repositories need no credential. Private GitHub HTTPS clones prefer a GitHub
+App installation token that [`eve/agent/lib/github-app-auth.ts`](../eve/agent/lib/github-app-auth.ts)
+mints and caches from `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`,
+then a plain `GITHUB_TOKEN`, then local `gh auth git-credential`, then
+configured Git credential helpers. The resolved credential is carried through
+a dedicated environment variable on the spawned `git` process
+(`TECDEBT_GIT_CREDENTIAL_TOKEN`, expanded by a `credential.helper` shell
+function) rather than the clone command's arguments, so it never appears in
+`ps` output or logs.
 
 ## Project layout
 
