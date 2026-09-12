@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # ---- App build (TanStack Start on Bun) ----
-FROM oven/bun:1.4.0 AS app-builder
+FROM oven/bun:1.4.2 AS app-builder
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.4.0-slim AS app
+FROM oven/bun:1.4.2-slim AS app
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
