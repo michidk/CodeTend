@@ -1,0 +1,21 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "codetend.fullname" . }}
+  labels:
+    {{- include "codetend.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "codetend.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  policyTypes:
+    - Ingress
+  # Only the public entry port is admitted. Eve (2000) and, behind Hodor, the
+  # app (3000) are reachable solely over the Pod's own loopback.
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ ternary 8080 3000 .Values.hodor.enabled }}
+{{- end }}

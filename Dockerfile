@@ -12,16 +12,17 @@ FROM oven/bun:1.4.0-slim AS app
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  && groupadd --system --gid 1001 nodejs \
-  && useradd --system --uid 1001 --gid 1001 --create-home --shell /usr/sbin/nologin app
-COPY --from=app-builder --chown=app:nodejs /app/package.json /app/bun.lock ./
+  && rm -rf /var/lib/apt/lists/*
+# The base image's `bun` user is uid 1000, the same uid as the Eve image's
+# `node` user, so a data volume shared between the two containers needs no
+# group juggling.
+COPY --from=app-builder --chown=bun:bun /app/package.json /app/bun.lock ./
 RUN bun install --frozen-lockfile --production
-COPY --from=app-builder --chown=app:nodejs /app/.output ./.output
-COPY --from=app-builder --chown=app:nodejs /app/drizzle ./drizzle
-COPY --from=app-builder --chown=app:nodejs /app/scripts ./scripts
-RUN mkdir -p /data && chown app:nodejs /data
-USER app
+COPY --from=app-builder --chown=bun:bun /app/.output ./.output
+COPY --from=app-builder --chown=bun:bun /app/drizzle ./drizzle
+COPY --from=app-builder --chown=bun:bun /app/scripts ./scripts
+RUN mkdir -p /data && chown bun:bun /data
+USER bun
 EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
 

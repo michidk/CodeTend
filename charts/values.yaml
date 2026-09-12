@@ -1,0 +1,236 @@
+# CodeTend runs as one Pod holding three containers: the web app, the Eve
+# scanner runtime (reachable only over the Pod's loopback) and, when enabled,
+# a Hodor login gate that the Service targets instead of the app. PostgreSQL
+# is external; the cluster overlay owns it.
+
+image:
+  repository: ghcr.io/michidk/codetend
+  pullPolicy: IfNotPresent
+  tag: ""
+  # Preferred over tag: an immutable "sha256:..." digest.
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# Both the app and Eve images run as uid 1000 and share the data volume, so
+# fsGroup only has to make the freshly provisioned claim writable to them.
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+# The app only writes under TECDEBT_DATA_DIR and /tmp.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: codetend.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: "1"
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+livenessProbe:
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# /api/health reports ready only once PostgreSQL, migrations and Eve are up.
+readinessProbe:
+  httpGet:
+    path: /api/health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+startupProbe:
+  tcpSocket:
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
+
+terminationGracePeriodSeconds: 30
+
+networkPolicy:
+  enabled: true
+
+migrations:
+  enabled: true
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  hook:
+    enabled: true
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Scan exchange directory shared by the app and Eve: checkouts, request and
+# result JSON, usage records. Transient; it does not need durable backup.
+data:
+  path: /data
+  size: 20Gi
+  storageClass: ""
+
+# Cluster-local secret holding the values the app and Eve share.
+secrets:
+  existingSecret: ""
+  evePasswordKey: EVE_PASSWORD
+  openaiApiKeyKey: OPENAI_API_KEY
+  openaiBaseUrlKey: OPENAI_BASE_URL
+
+model:
+  # Any id the OpenAI-compatible endpoint serves, for example gpt-5.6-sol or
+  # anthropic/claude-opus-5 through a gateway.
+  id: gpt-5.6-sol
+  # Read OPENAI_BASE_URL from secrets.existingSecret instead of baseUrl below.
+  baseUrlFromSecret: false
+  baseUrl: ""
+  # low, medium, high, xhigh or max; empty picks the per-family default.
+  effort: ""
+  contextWindowTokens: ""
+  # Leave empty: a session that hits this cap parks the scan for approval.
+  maxInputTokensPerSession: ""
+
+scanning:
+  allowedGitHosts: github.com
+  maxActiveScans: 2
+  maxActivePatches: 1
+  # UTC-day ceiling for scan plus fixer spend; empty disables the cap.
+  maxDailyCostUsd: ""
+  defaultScanCostUsd: ""
+  manualScanCooldownSeconds: 60
+  schedulerIntervalSeconds: 30
+  scannerConcurrency: 4
+
+github:
+  # Dedicated GitHub App with read-only Contents (and Metadata) on the
+  # repositories CodeTend scans. CodeTend mints its own installation tokens.
+  appAuth:
+    existingSecret: ""
+    appIdKey: GITHUB_APP_ID
+    installationIdKey: GITHUB_APP_INSTALLATION_ID
+    privateKeyKey: GITHUB_APP_PRIVATE_KEY
+
+eve:
+  image:
+    repository: ghcr.io/michidk/codetend-eve
+    pullPolicy: IfNotPresent
+    tag: ""
+    digest: ""
+  username: codetend
+  # The Eve image runs as the node user (uid 1000) and writes its durable
+  # workflow state under /app/eve/.eve.
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
+  # Durable workflow state; Eve replays it after a restart.
+  state:
+    size: 5Gi
+    storageClass: ""
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+postgresql:
+  # The overlay supplies a Secret with the full connection URL.
+  existingSecret: ""
+  existingSecretKey: url
+  # Fallback when no existingSecret is given: build the URL from parts.
+  external:
+    url: ""
+    host: ""
+    port: "5432"
+  auth:
+    database: codetend
+    username: codetend
+    password: ""
+
+hodor:
+  enabled: true
+  existingSecret: ""
+  existingSecretPasswordKey: PASSWORD
+  existingSecretSecretKey: SECRET
+  image:
+    repository: ghcr.io/michidk/hodor
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  title: "CodeTend Login"
+  sessionTtl: "86400"
+  # Automatically enabled when ingress.tls is configured.
+  secureCookie: false
+  logFormat: "compact"
+  # Let requests from proxy CIDRs set the real client address (for example
+  # the ingress controller). Required when trustedProxyCidrs is set.
+  trustProxy: false
+  trustedProxyCidrs: []
+  # Clients whose real address falls in these CIDRs skip the login gate
+  # entirely (for example a private tailnet).
+  bypassCidrs: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1001
+  resources:
+    limits:
+      cpu: 100m
+      memory: 64Mi
+    requests:
+      cpu: 10m
+      memory: 32Mi

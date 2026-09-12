@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "codetend.fullname" . }}
+  labels:
+    {{- include "codetend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      {{- if .Values.hodor.enabled }}
+      targetPort: gate
+      {{- else }}
+      targetPort: http
+      {{- end }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "codetend.selectorLabels" . | nindent 4 }}

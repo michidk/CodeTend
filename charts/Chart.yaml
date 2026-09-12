@@ -1,0 +1,18 @@
+apiVersion: v2
+name: codetend
+description: Continuous repository health scanning with Eve scanner agents and Hodor authentication
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/michidk/CodeTend
+icon: https://raw.githubusercontent.com/michidk/CodeTend/main/public/favicon.svg
+sources:
+  - https://github.com/michidk/CodeTend
+maintainers:
+  - name: michidk
+    url: https://github.com/michidk
+keywords:
+  - code-quality
+  - technical-debt
+  - security-scanning
+  - self-hosted

@@ -1,0 +1,241 @@
+{{- if not .Values.secrets.existingSecret -}}
+{{- fail "secrets.existingSecret is required: it must hold the Eve password and the OpenAI API key" -}}
+{{- end -}}
+{{- if and .Values.hodor.trustedProxyCidrs (not .Values.hodor.trustProxy) -}}
+{{- fail "hodor.trustProxy must be true when hodor.trustedProxyCidrs is set, because Hodor rejects the combination at startup" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "codetend.fullname" . }}
+  labels:
+    {{- include "codetend.labels" . | nindent 4 }}
+spec:
+  # The app and Eve share one ReadWriteOnce data volume and Eve keeps durable
+  # workflow state, so exactly one Pod runs at a time.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "codetend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "codetend.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "codetend.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: app
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "codetend.image" (dict "image" .Values.image "appVersion" .Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            {{- include "codetend.databaseUrlEnv" (dict "Values" .Values "secretName" (include "codetend.dbSecretName" .)) | nindent 12 }}
+            {{- include "codetend.sharedEnv" . | nindent 12 }}
+            # Eve runs in this Pod; the app reaches it over the shared loopback.
+            - name: EVE_URL
+              value: "http://127.0.0.1:2000"
+            - name: EVE_USERNAME
+              value: {{ .Values.eve.username | quote }}
+            - name: EVE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.evePasswordKey }}
+            - name: TECDEBT_ALLOWED_GIT_HOSTS
+              value: {{ .Values.scanning.allowedGitHosts | quote }}
+            - name: TECDEBT_MAX_ACTIVE_SCANS
+              value: {{ .Values.scanning.maxActiveScans | quote }}
+            - name: TECDEBT_MAX_ACTIVE_PATCHES
+              value: {{ .Values.scanning.maxActivePatches | quote }}
+            {{- with .Values.scanning.maxDailyCostUsd }}
+            - name: TECDEBT_MAX_DAILY_COST_USD
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.scanning.defaultScanCostUsd }}
+            - name: TECDEBT_DEFAULT_SCAN_COST_USD
+              value: {{ . | quote }}
+            {{- end }}
+            - name: TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS
+              value: {{ .Values.scanning.manualScanCooldownSeconds | quote }}
+            - name: SCHEDULER_INTERVAL_SECONDS
+              value: {{ .Values.scanning.schedulerIntervalSeconds | quote }}
+            # Eve has no Docker access in this Pod, so executable validation
+            # stays off; the app records it as unavailable.
+            - name: TECDEBT_VALIDATION_ENABLED
+              value: "false"
+            - name: GITNEXUS_ENABLED
+              value: "false"
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ['sh', '-c', 'sleep 5']
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.data.path }}
+            - name: app-tmp
+              mountPath: /tmp
+        - name: eve
+          securityContext:
+            {{- toYaml .Values.eve.securityContext | nindent 12 }}
+          image: {{ include "codetend.image" (dict "image" .Values.eve.image "appVersion" .Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ .Values.eve.image.pullPolicy }}
+          # Port 2000 is deliberately not named or exposed through a Service;
+          # the NetworkPolicy also denies it. Only the app container, sharing
+          # this Pod's network namespace, can reach it.
+          env:
+            {{- include "codetend.sharedEnv" . | nindent 12 }}
+            - name: EVE_USERNAME
+              value: {{ .Values.eve.username | quote }}
+            - name: EVE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.evePasswordKey }}
+            - name: TECDEBT_SCANNER_CONCURRENCY
+              value: {{ .Values.scanning.scannerConcurrency | quote }}
+          startupProbe:
+            httpGet:
+              path: /eve/v1/health
+              port: 2000
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /eve/v1/health
+              port: 2000
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.eve.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.data.path }}
+            - name: eve-state
+              mountPath: /app/eve/.eve
+            - name: eve-tmp
+              mountPath: /tmp
+        {{- if .Values.hodor.enabled }}
+        - name: hodor
+          securityContext:
+            {{- toYaml .Values.hodor.securityContext | nindent 12 }}
+          image: {{ include "codetend.image" (dict "image" .Values.hodor.image "appVersion" (required "hodor.image.tag or hodor.image.digest is required" .Values.hodor.image.tag)) | quote }}
+          imagePullPolicy: {{ .Values.hodor.image.pullPolicy }}
+          ports:
+            - name: gate
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "hodor.existingSecret is required when hodor is enabled" .Values.hodor.existingSecret }}
+                  key: {{ .Values.hodor.existingSecretPasswordKey }}
+            - name: UPSTREAM
+              value: "http://localhost:3000"
+            - name: SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hodor.existingSecret }}
+                  key: {{ .Values.hodor.existingSecretSecretKey }}
+            - name: TITLE
+              value: {{ .Values.hodor.title | quote }}
+            - name: SESSION_TTL
+              value: {{ .Values.hodor.sessionTtl | quote }}
+            - name: SECURE_COOKIE
+              value: {{ or .Values.hodor.secureCookie (not (empty .Values.ingress.tls)) | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.hodor.logFormat | quote }}
+            {{- if .Values.hodor.trustProxy }}
+            - name: TRUST_PROXY
+              value: "true"
+            {{- end }}
+            {{- with .Values.hodor.trustedProxyCidrs }}
+            - name: TRUSTED_PROXY_CIDRS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.hodor.bypassCidrs }}
+            - name: BYPASS_CIDRS
+              value: {{ join "," . | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /_gate/health
+              port: gate
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_gate/health
+              port: gate
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /_gate/health
+              port: gate
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.hodor.resources | nindent 12 }}
+          volumeMounts:
+            - name: hodor-tmp
+              mountPath: /tmp
+        {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "codetend.fullname" . }}-data
+        - name: eve-state
+          persistentVolumeClaim:
+            claimName: {{ include "codetend.fullname" . }}-eve-state
+        - name: app-tmp
+          emptyDir: {}
+        - name: eve-tmp
+          emptyDir: {}
+        {{- if .Values.hodor.enabled }}
+        - name: hodor-tmp
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,37 @@
+{{/*
+Two claims: the scan exchange directory the app and Eve share (checkouts,
+request/result JSON, usage records) and Eve's own durable workflow state.
+Both are node-local ReadWriteOnce, which is why the Deployment runs one
+replica with a Recreate strategy.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "codetend.fullname" . }}-data
+  labels:
+    {{- include "codetend.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.data.storageClass }}
+  storageClassName: {{ .Values.data.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.data.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "codetend.fullname" . }}-eve-state
+  labels:
+    {{- include "codetend.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.eve.state.storageClass }}
+  storageClassName: {{ .Values.eve.state.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.eve.state.size }}
