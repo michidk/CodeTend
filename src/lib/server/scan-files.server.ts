@@ -144,6 +144,35 @@ const knowledgeSummarySchema = z.object({
   concepts: z.array(z.string()).default([]),
 })
 
+const subsystemDependencyGraphSchema = z
+  .object({
+    edges: z
+      .array(
+        z.object({
+          source: z.string(),
+          target: z.string(),
+          weight: z.number(),
+        }),
+      )
+      .default([]),
+    cycles: z
+      .array(
+        z.object({
+          files: z.array(z.string()).default([]),
+          subsystems: z.array(z.string()).default([]),
+        }),
+      )
+      .default([]),
+    cycleStatus: z.enum(['clean', 'cycles_found', 'unavailable']),
+    componentCount: z.number().nullable(),
+  })
+  .default({
+    edges: [],
+    cycles: [],
+    cycleStatus: 'unavailable',
+    componentCount: null,
+  })
+
 const scanResultFileSchema = z.object({
   scanId: z.number().int(),
   commitSha: z.string(),
@@ -155,6 +184,7 @@ const scanResultFileSchema = z.object({
     summary: knowledgeSummarySchema,
     sources: z.array(z.object({ path: z.string(), hash: z.string() })),
     reason: z.string(),
+    dependencyGraph: subsystemDependencyGraphSchema,
   }),
   securityProfile: z.object({
     profile: z.object({

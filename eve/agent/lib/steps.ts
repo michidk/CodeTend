@@ -5,8 +5,17 @@ import type {
   PatchResult,
   ScanRequest,
   ScanResult,
+  SubsystemDependencyGraph,
   WorkspaceManifest,
 } from './contract'
+import {
+  buildSubsystemDependencyGraph,
+  parseCyclesReport,
+  parseFileEdges,
+  SUBSYSTEM_IMPORT_EDGES_QUERY,
+  type SubsystemNode,
+  UNAVAILABLE_DEPENDENCY_GRAPH,
+} from './dependency-graph'
 import { resolveGitAuth } from './git-auth'
 import {
   gitnexusHome,
@@ -556,6 +565,57 @@ export async function indexWithGitNexus(
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
     }
+  }
+}
+
+/**
+ * Optional enrichment: deterministically extracts a subsystem-level import
+ * graph and circular-import report from the GitNexus index, using the same
+ * `cypher`/`check` CLI the MCP server exposes to agents. Maps GitNexus's
+ * file-level edges onto the subsystem names the knowledge agent already
+ * produced (`buildSubsystemDependencyGraph`); never throws, degrading to
+ * `UNAVAILABLE_DEPENDENCY_GRAPH` on any failure since this is enrichment
+ * only, same policy as `indexWithGitNexus`.
+ */
+export async function extractSubsystemDependencyGraph(
+  gitnexusRepo: string,
+  subsystems: readonly SubsystemNode[],
+): Promise<SubsystemDependencyGraph> {
+  'use step'
+  const { existsSync } = await import('node:fs')
+  const { homedir } = await import('node:os')
+  const { resolve } = await import('node:path')
+  const binary =
+    [
+      process.env.GITNEXUS_BIN,
+      resolve('../.tools/node_modules/.bin/gitnexus'),
+      `${homedir()}/.local/bin/gitnexus`,
+      '/usr/local/bin/gitnexus',
+    ].find((candidate) => candidate && existsSync(candidate)) ?? 'gitnexus'
+  const env = {
+    GITNEXUS_HOME: gitnexusHome(),
+    GITNEXUS_NO_UPDATE_NOTIFIER: '1',
+  }
+  try {
+    const [edgesResult, cyclesResult] = await Promise.all([
+      run(
+        binary,
+        ['cypher', SUBSYSTEM_IMPORT_EDGES_QUERY, '-r', gitnexusRepo],
+        { env, timeoutMs: 60_000 },
+      ),
+      run(binary, ['check', '--cycles', '--json', '-r', gitnexusRepo], {
+        env,
+        timeoutMs: 60_000,
+      }),
+    ])
+    // `check --cycles` exits 1 when it finds cycles; that's a normal result,
+    // not a failure, so its exit code is ignored here.
+    const fileEdges =
+      edgesResult.exitCode === 0 ? parseFileEdges(edgesResult.stdout) : []
+    const cyclesReport = parseCyclesReport(cyclesResult.stdout)
+    return buildSubsystemDependencyGraph(subsystems, fileEdges, cyclesReport)
+  } catch {
+    return UNAVAILABLE_DEPENDENCY_GRAPH
   }
 }
 

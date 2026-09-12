@@ -107,12 +107,31 @@ export interface WorkspaceManifest {
   readonly topLevel: readonly string[]
 }
 
+export interface SubsystemDependencyEdge {
+  readonly source: string
+  readonly target: string
+  readonly weight: number
+}
+
+export interface SubsystemDependencyCycle {
+  readonly files: string[]
+  readonly subsystems: string[]
+}
+
+export interface SubsystemDependencyGraph {
+  readonly edges: SubsystemDependencyEdge[]
+  readonly cycles: SubsystemDependencyCycle[]
+  readonly cycleStatus: 'clean' | 'cycles_found' | 'unavailable'
+  readonly componentCount: number | null
+}
+
 export interface KnowledgeResult {
   readonly refreshed: boolean
   readonly overview: string
   readonly summary: KnowledgeSummary
   readonly sources: readonly { path: string; hash: string }[]
   readonly reason: string
+  readonly dependencyGraph: SubsystemDependencyGraph
 }
 
 export interface ScannerOutcome {

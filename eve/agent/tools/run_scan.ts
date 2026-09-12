@@ -7,6 +7,7 @@ import type {
   ScanRequest,
   ScanResult,
 } from '../lib/contract'
+import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -19,6 +20,7 @@ import { scannerAgentMessage } from '../lib/scanner-message'
 import {
   auditDependencies,
   cloneRepository,
+  extractSubsystemDependencyGraph,
   indexWithGitNexus,
   nowIso,
   readScanRequest,
@@ -92,9 +94,9 @@ export default defineWorkflowTool({
       workspace,
       request.knowledge?.fileCount ?? null,
     )
-    let knowledge: KnowledgeResult
+    let knowledgeBase: Omit<KnowledgeResult, 'dependencyGraph'>
     if (!staleness.refreshNeeded && request.knowledge) {
-      knowledge = {
+      knowledgeBase = {
         refreshed: false,
         overview: request.knowledge.overview,
         summary: request.knowledge.summary,
@@ -115,7 +117,7 @@ export default defineWorkflowTool({
         }),
         outputSchema: knowledgeOutputSchema,
       })) as unknown as KnowledgeAgentOutput | null
-      knowledge = output
+      knowledgeBase = output
         ? {
             refreshed: true,
             overview: output.overview,
@@ -141,6 +143,18 @@ export default defineWorkflowTool({
             reason: 'Knowledge agent returned no structured output.',
           }
     }
+
+    const dependencyGraphPhase: Progress = { phase: 'dependency graph' }
+    yield dependencyGraphPhase
+    const dependencyGraph =
+      gitnexusRepo && knowledgeBase.summary.subsystems.length > 0
+        ? await extractSubsystemDependencyGraph(
+            gitnexusRepo,
+            knowledgeBase.summary.subsystems,
+          )
+        : UNAVAILABLE_DEPENDENCY_GRAPH
+    const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
+
     const securityProfile =
       request.securityProfile ?? securityProfileFromKnowledge(knowledge)
 

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { CopyButton } from '@/components/copy-button'
 import { EntityNotFound } from '@/components/entity-not-found'
+import { DependencyGraph } from '@/components/knowledge/dependency-graph'
 import { Markdown } from '@/components/markdown'
 import { Page, PageHeader } from '@/components/page-layout'
 import { RouteError } from '@/components/route-error'
@@ -136,6 +137,17 @@ function KnowledgePage() {
           <Card className="lg:col-span-2">
             <CardContent>
               <Markdown className="text-sm">{knowledge.overview}</Markdown>
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle>Dependency graph</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DependencyGraph
+                subsystems={knowledge.summary.subsystems}
+                graph={knowledge.dependencyGraph}
+              />
             </CardContent>
           </Card>
           <Card className="lg:col-span-3">
