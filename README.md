@@ -37,8 +37,8 @@
 ## 🔍 What it is
 
 CodeTend is **not** an autonomous pull-request bot. It registers repositories
-and, on a schedule, a signed GitHub webhook, or on demand, makes a fresh
-checkout of the configured branch and runs fourteen specialized scanner agents
+and, on a schedule or on demand, makes a fresh checkout of the configured
+branch and runs fourteen specialized scanner agents
 over it: one per dimension of technical debt, from architecture and
 duplication to reliability, type safety, AI slop, dependency health and
 security. Their structured findings become deterministic scores and grades,
@@ -73,12 +73,12 @@ agent.
   per repository, with list-price estimates, a UTC-day budget cap, and
   concurrency limits.
 - 🔒 **Yours, end to end.** PostgreSQL you run, any OpenAI-compatible model
-  endpoint you choose, HTTP Basic behind your TLS, no telemetry.
+  endpoint you choose, your own login gate in front, no telemetry.
 
 ## 🔄 How it works
 
 ```text
-schedule / "Scan now" / signed GitHub push or pull-request webhook
+schedule / "Scan now"
         │
         ▼
  app creates a scan row and hands it to the Eve agent runtime
@@ -107,9 +107,8 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 </p>
 
 1. **Add a repository**: URL, branch, cron schedule (UTC).
-2. **Scan now**, or wait for the schedule or a GitHub push/pull-request
-   webhook. Choose standard or bounded deep mode, whole repository or selected
-   paths, and an optional cost ceiling.
+2. **Scan now**, or wait for the schedule. Choose standard or bounded deep
+   mode, whole repository or selected paths, and an optional cost ceiling.
 3. Watch the phase update live: cloning → indexing → knowledge → scanning →
    reconciling.
 4. The repository page shows the overall score and grade, per-scanner scores,
@@ -147,9 +146,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open <http://localhost:3000> and sign in with the HTTP Basic credentials from
-`.env`. The bundled topology publishes only the app on loopback; PostgreSQL
-and Eve stay on the Compose network.
+Open <http://localhost:3000>. The bundled topology publishes only the app on
+loopback; PostgreSQL and Eve stay on the Compose network. The app itself has
+no login of its own — put a login-gating proxy or another trusted network
+boundary in front before exposing it beyond loopback.
 
 ## 🔧 Local development
 
@@ -169,8 +169,7 @@ bun run dev                              # terminal 2: app on :3000, migrations 
 
 `scripts/start-dev.sh` supervises both processes from one terminal and
 restarts Eve in place after a rebuild. `scripts/start-preview.sh --build`
-serves the production build instead; set `TECDEBT_BASIC_AUTH_PASSWORD` first,
-because the production server fails closed without it.
+serves the production build instead.
 
 <details>
 <summary><b>All available commands</b></summary>
@@ -180,7 +179,7 @@ because the production server fails closed without it.
 | `bun run dev` | App with automatic migrations |
 | `bun run preview:serve` | Production build + Eve for a stable shared preview |
 | `bun run check` | Biome formatting/lint and import boundaries |
-| `bun run test` | Unit tests for scoring, pricing, webhooks, vulnerabilities, artifacts |
+| `bun run test` | Unit tests for scoring, pricing, vulnerabilities, artifacts |
 | `bun run test:database` | Migrated-schema and active-scan constraint smoke test |
 | `bun run typecheck` | Type-check the app |
 | `bun run eve:typecheck` | Type-check the Eve agent |
@@ -200,14 +199,15 @@ because the production server fails closed without it.
 | --- | --- |
 | [Architecture](docs/architecture.md) | Scan flow, scanners, scoring, finding lifecycle, vulnerability enrichment, patches, knowledge, cost tracking |
 | [Configuration reference](docs/configuration.md) | Every environment variable and its default |
-| [Operations](docs/OPERATIONS.md) | Deployment shape, webhooks, validation boundary, health, backup, monitoring |
+| [Operations](docs/OPERATIONS.md) | Deployment shape, validation boundary, health, backup, monitoring |
 | [Data handling](PRIVACY.md) | What is processed, sent to providers and retained |
 
 ## 🚧 Limitations
 
-- The built-in HTTP Basic boundary is single-tenant and expects TLS in
-  front. A multi-customer deployment needs an external identity provider,
-  organizations and repository-level authorization.
+- The app has no login of its own; it expects a login-gating proxy or
+  equivalent network boundary in front. A multi-customer deployment needs an
+  identity provider, organizations and repository-level authorization on top
+  of that.
 - CodeTend mints and caches its own GitHub App installation tokens from
   `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`; it
   also accepts a plain, externally-issued `GITHUB_TOKEN` for clones.

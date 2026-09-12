@@ -15,18 +15,19 @@ project was renamed to CodeTend.
 | `DATABASE_URL` | – | PostgreSQL connection string (required) |
 | `TECDEBT_DATA_DIR` | `./data` | Shared directory for scan requests/results, checkouts, usage records and GitNexus indexes. Must be the same directory for the app and Eve. |
 
-## Authentication and network boundary
+## Network boundary and clone access
+
+The app has no login of its own; put a login-gating reverse proxy (for
+example [Hodor](https://github.com/michidk/hodor)) or another trusted network
+boundary in front of it.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `TECDEBT_BASIC_AUTH_USERNAME` | `tecdebt` | HTTP Basic username for the app |
-| `TECDEBT_BASIC_AUTH_PASSWORD` | – | HTTP Basic password. The production server fails closed when this is missing. |
 | `TECDEBT_ALLOWED_GIT_HOSTS` | `github.com` | Comma-separated exact clone-host allowlist |
 | `TECDEBT_ALLOW_LOCAL_REPOSITORIES` | `false` | Allow `file://` URLs and absolute paths (development only) |
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
 | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for private HTTPS clones. CodeTend mints and caches its own installation tokens; all three are required together and take precedence over `GITHUB_TOKEN` |
 | `GITHUB_TOKEN` | – | Optional plain short-lived token for private HTTPS clones, used when no GitHub App credentials are configured |
-| `GITHUB_WEBHOOK_SECRET` | – | Optional secret authenticating GitHub push and pull-request deliveries to `/api/webhooks/github`. Without it the endpoint returns `503`. |
 
 ## Cost and concurrency guardrails
 

@@ -7,39 +7,16 @@ volume. The database enforces one active scan per repository and one active
 proposal per finding; configured scan/patch capacity and the shared daily AI
 cost limit provide additional admission control.
 Terminate TLS at a trusted reverse proxy and keep the app bound to loopback or
-a private network.
+a private network. The app has no login of its own — put a login-gating
+proxy (for example Hodor) in front of it; do not expose it directly.
 
-Replace every `change-me` value in `.env`. Keep the app password, Eve password,
-database password, OpenAI API key and the optional GitHub App private key (or
-plain `GITHUB_TOKEN`) in the deployment secret store. Rotate them without
+Replace every `change-me` value in `.env`. Keep the Eve password, database
+password, OpenAI API key and the optional GitHub App private key (or plain
+`GITHUB_TOKEN`) in the deployment secret store. Rotate them without
 committing values to the repository; a GitHub App's installation token itself
 needs no rotation since CodeTend mints and caches a fresh one from the App
 credentials, but the private key backing it should still be rotated
 periodically like any other long-lived credential.
-
-## GitHub push and pull-request webhook
-
-Set `GITHUB_WEBHOOK_SECRET` to a high-entropy random value in the app's secret
-store. In each GitHub repository, create a webhook with:
-
-- payload URL `https://<your-host>/api/webhooks/github`
-- content type `application/json`
-- the same secret
-- push and pull request events enabled
-
-The endpoint is intentionally outside the app's Basic-auth boundary because it
-uses GitHub's `X-Hub-Signature-256` HMAC instead. It accepts at most 1 MB,
-matches only enabled GitHub repositories and their configured branch, and
-retains delivery IDs for 30 days to reject replays. A missing secret makes the
-endpoint fail closed with `503`; invalid signatures return `401`. Restrict
-public ingress to GitHub's published webhook source ranges when the deployment
-platform can keep those ranges current.
-
-Branch pushes scan the committed `before…after` diff; a repository's first
-push scans the full tree. Pull-request `opened`, `reopened`, `synchronize`, and
-`ready_for_review` deliveries scan the base-to-head diff when the base
-repository and branch match an enabled registration. Drafts, deletions, and
-non-review actions are ignored. The endpoint never writes GitHub state.
 
 ## Isolated finding validation
 

@@ -1,26 +1,3 @@
-import { timingSafeEqual } from 'node:crypto'
-
-export function independentlyAuthenticatedPath(pathname: string): boolean {
-  const normalized =
-    pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
-  return normalized === '/api/health' || normalized === '/api/webhooks/github'
-}
-
-export function hasValidBasicAuthorization(
-  request: Request,
-  username: string,
-  password: string,
-): boolean {
-  const actual = request.headers.get('authorization') ?? ''
-  const expected = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
-  const actualBytes = Buffer.from(actual)
-  const expectedBytes = Buffer.from(expected)
-  return (
-    actualBytes.length === expectedBytes.length &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  )
-}
-
 export function withSecurityHeaders(
   response: Response,
   request: Request,

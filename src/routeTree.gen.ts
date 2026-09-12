@@ -17,7 +17,6 @@ import { Route as RepositoriesRepositoryIdIndexRouteImport } from './routes/repo
 import { Route as RepositoriesNewIndexRouteImport } from './routes/repositories/new/index'
 import { Route as ScansScanIdIndexRouteImport } from './routes/scans/$scanId/index'
 import { Route as ApiPatchesPatchIdIndexRouteImport } from './routes/api/patches/$patchId/index'
-import { Route as ApiWebhooksGithubIndexRouteImport } from './routes/api/webhooks/github/index'
 import { Route as RepositoriesRepositoryIdEditIndexRouteImport } from './routes/repositories/$repositoryId/edit/index'
 import { Route as RepositoriesRepositoryIdKnowledgeIndexRouteImport } from './routes/repositories/$repositoryId/knowledge/index'
 import { Route as RepositoriesRepositoryIdSecurityIndexRouteImport } from './routes/repositories/$repositoryId/security/index'
@@ -65,11 +64,6 @@ const ApiPatchesPatchIdIndexRoute = ApiPatchesPatchIdIndexRouteImport.update({
   path: '/api/patches/$patchId/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiWebhooksGithubIndexRoute = ApiWebhooksGithubIndexRouteImport.update({
-  id: '/api/webhooks/github/',
-  path: '/api/webhooks/github/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const RepositoriesRepositoryIdEditIndexRoute =
   RepositoriesRepositoryIdEditIndexRouteImport.update({
     id: '/repositories/$repositoryId/edit/',
@@ -110,7 +104,6 @@ export interface FileRoutesByFullPath {
   '/repositories/new/': typeof RepositoriesNewIndexRoute
   '/scans/$scanId/': typeof ScansScanIdIndexRoute
   '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
-  '/api/webhooks/github/': typeof ApiWebhooksGithubIndexRoute
   '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
   '/repositories/$repositoryId/security/': typeof RepositoriesRepositoryIdSecurityIndexRoute
@@ -126,7 +119,6 @@ export interface FileRoutesByTo {
   '/repositories/new': typeof RepositoriesNewIndexRoute
   '/scans/$scanId': typeof ScansScanIdIndexRoute
   '/api/patches/$patchId': typeof ApiPatchesPatchIdIndexRoute
-  '/api/webhooks/github': typeof ApiWebhooksGithubIndexRoute
   '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
   '/repositories/$repositoryId/security': typeof RepositoriesRepositoryIdSecurityIndexRoute
@@ -143,7 +135,6 @@ export interface FileRoutesById {
   '/repositories/new/': typeof RepositoriesNewIndexRoute
   '/scans/$scanId/': typeof ScansScanIdIndexRoute
   '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
-  '/api/webhooks/github/': typeof ApiWebhooksGithubIndexRoute
   '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
   '/repositories/$repositoryId/security/': typeof RepositoriesRepositoryIdSecurityIndexRoute
@@ -161,7 +152,6 @@ export interface FileRouteTypes {
     | '/repositories/new/'
     | '/scans/$scanId/'
     | '/api/patches/$patchId/'
-    | '/api/webhooks/github/'
     | '/repositories/$repositoryId/edit/'
     | '/repositories/$repositoryId/knowledge/'
     | '/repositories/$repositoryId/security/'
@@ -177,7 +167,6 @@ export interface FileRouteTypes {
     | '/repositories/new'
     | '/scans/$scanId'
     | '/api/patches/$patchId'
-    | '/api/webhooks/github'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
     | '/repositories/$repositoryId/security'
@@ -193,7 +182,6 @@ export interface FileRouteTypes {
     | '/repositories/new/'
     | '/scans/$scanId/'
     | '/api/patches/$patchId/'
-    | '/api/webhooks/github/'
     | '/repositories/$repositoryId/edit/'
     | '/repositories/$repositoryId/knowledge/'
     | '/repositories/$repositoryId/security/'
@@ -210,7 +198,6 @@ export interface RootRouteChildren {
   RepositoriesNewIndexRoute: typeof RepositoriesNewIndexRoute
   ScansScanIdIndexRoute: typeof ScansScanIdIndexRoute
   ApiPatchesPatchIdIndexRoute: typeof ApiPatchesPatchIdIndexRoute
-  ApiWebhooksGithubIndexRoute: typeof ApiWebhooksGithubIndexRoute
   RepositoriesRepositoryIdEditIndexRoute: typeof RepositoriesRepositoryIdEditIndexRoute
   RepositoriesRepositoryIdKnowledgeIndexRoute: typeof RepositoriesRepositoryIdKnowledgeIndexRoute
   RepositoriesRepositoryIdSecurityIndexRoute: typeof RepositoriesRepositoryIdSecurityIndexRoute
@@ -276,13 +263,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPatchesPatchIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/webhooks/github/': {
-      id: '/api/webhooks/github/'
-      path: '/api/webhooks/github'
-      fullPath: '/api/webhooks/github/'
-      preLoaderRoute: typeof ApiWebhooksGithubIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/repositories/$repositoryId/edit/': {
       id: '/repositories/$repositoryId/edit/'
       path: '/repositories/$repositoryId/edit'
@@ -330,7 +310,6 @@ const rootRouteChildren: RootRouteChildren = {
   RepositoriesNewIndexRoute: RepositoriesNewIndexRoute,
   ScansScanIdIndexRoute: ScansScanIdIndexRoute,
   ApiPatchesPatchIdIndexRoute: ApiPatchesPatchIdIndexRoute,
-  ApiWebhooksGithubIndexRoute: ApiWebhooksGithubIndexRoute,
   RepositoriesRepositoryIdEditIndexRoute:
     RepositoriesRepositoryIdEditIndexRoute,
   RepositoriesRepositoryIdKnowledgeIndexRoute:

@@ -13,8 +13,6 @@ const booleanString = z
 const serverSchema = {
   DATABASE_URL: z.string().trim().min(1),
   TECDEBT_DATA_DIR: z.string().trim().min(1).default('./data'),
-  TECDEBT_BASIC_AUTH_USERNAME: z.string().trim().min(1).default('tecdebt'),
-  TECDEBT_BASIC_AUTH_PASSWORD: optionalString,
   TECDEBT_ALLOWED_GIT_HOSTS: z.string().trim().min(1).default('github.com'),
   TECDEBT_ALLOW_LOCAL_REPOSITORIES: booleanString.default(false),
   TECDEBT_ALLOW_INSECURE_GIT: booleanString.default(false),
@@ -45,7 +43,6 @@ const serverSchema = {
     .min(0)
     .max(86_400)
     .default(60),
-  GITHUB_WEBHOOK_SECRET: optionalString,
   EVE_URL: z.url().default('http://127.0.0.1:2000'),
   EVE_USERNAME: z.string().trim().min(1).default('tecdebt'),
   EVE_PASSWORD: optionalString,
@@ -89,10 +86,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
     runtimeEnvStrict: {
       DATABASE_URL: runtimeEnvironment.DATABASE_URL,
       TECDEBT_DATA_DIR: runtimeEnvironment.TECDEBT_DATA_DIR,
-      TECDEBT_BASIC_AUTH_USERNAME:
-        runtimeEnvironment.TECDEBT_BASIC_AUTH_USERNAME,
-      TECDEBT_BASIC_AUTH_PASSWORD:
-        runtimeEnvironment.TECDEBT_BASIC_AUTH_PASSWORD,
       TECDEBT_ALLOWED_GIT_HOSTS: runtimeEnvironment.TECDEBT_ALLOWED_GIT_HOSTS,
       TECDEBT_ALLOW_LOCAL_REPOSITORIES:
         runtimeEnvironment.TECDEBT_ALLOW_LOCAL_REPOSITORIES,
@@ -111,7 +104,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       TECDEBT_VALIDATION_IMAGE: runtimeEnvironment.TECDEBT_VALIDATION_IMAGE,
       TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS:
         runtimeEnvironment.TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS,
-      GITHUB_WEBHOOK_SECRET: runtimeEnvironment.GITHUB_WEBHOOK_SECRET,
       EVE_URL: runtimeEnvironment.EVE_URL,
       EVE_USERNAME: runtimeEnvironment.EVE_USERNAME,
       EVE_PASSWORD: runtimeEnvironment.EVE_PASSWORD,

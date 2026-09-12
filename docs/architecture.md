@@ -3,7 +3,7 @@
 ## Scan flow
 
 ```text
-schedule / "Scan now" / signed GitHub push or pull-request webhook
+schedule / "Scan now"
         │
         ▼
  app creates a scan row, writes data/requests/scan-<id>.json

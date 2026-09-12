@@ -2,50 +2,17 @@ import {
   createStartHandler,
   defaultStreamHandler,
 } from '@tanstack/react-start/server'
-import { getServerEnv } from '@/lib/env.server'
-import {
-  hasValidBasicAuthorization,
-  independentlyAuthenticatedPath,
-  withSecurityHeaders,
-} from '@/lib/http-security'
+import { withSecurityHeaders } from '@/lib/http-security'
 
 const startHandler = createStartHandler(defaultStreamHandler)
 
+/**
+ * No authentication gate here: the deployment terminates access control in
+ * front of this process (for example a login proxy such as Hodor). Running
+ * this app directly reachable without such a gate in front is unsupported.
+ */
 export default {
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url)
-    const independentlyAuthenticated = independentlyAuthenticatedPath(
-      url.pathname,
-    )
-    if (!independentlyAuthenticated) {
-      const env = getServerEnv()
-      if (!env.TECDEBT_BASIC_AUTH_PASSWORD) {
-        if (process.env.NODE_ENV === 'production') {
-          return withSecurityHeaders(
-            new Response('Authentication is not configured.', { status: 503 }),
-            request,
-          )
-        }
-      } else if (
-        !hasValidBasicAuthorization(
-          request,
-          env.TECDEBT_BASIC_AUTH_USERNAME,
-          env.TECDEBT_BASIC_AUTH_PASSWORD,
-        )
-      ) {
-        return withSecurityHeaders(
-          new Response('Authentication required.', {
-            status: 401,
-            headers: {
-              'Cache-Control': 'no-store',
-              'WWW-Authenticate': 'Basic realm="tecdebt", charset="UTF-8"',
-            },
-          }),
-          request,
-        )
-      }
-    }
-
     return withSecurityHeaders(await startHandler(request), request)
   },
 }

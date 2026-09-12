@@ -55,7 +55,7 @@ export const SCAN_STATUSES = [
 ] as const
 export type ScanStatus = (typeof SCAN_STATUSES)[number]
 
-export const SCAN_TRIGGERS = ['manual', 'schedule', 'webhook'] as const
+export const SCAN_TRIGGERS = ['manual', 'schedule'] as const
 export type ScanTrigger = (typeof SCAN_TRIGGERS)[number]
 
 export const SCANNER_RUN_STATUSES = [
@@ -78,13 +78,6 @@ export const repositories = pgTable('repositories', {
   lastScanAt: timestamp('last_scan_at', { withTimezone: true }),
   createdAt,
   updatedAt,
-})
-
-/** GitHub delivery IDs already accepted, retained to reject signed replays. */
-export const githubWebhookDeliveries = pgTable('github_webhook_deliveries', {
-  deliveryId: text('delivery_id').primaryKey(),
-  event: text('event').notNull(),
-  createdAt,
 })
 
 /**

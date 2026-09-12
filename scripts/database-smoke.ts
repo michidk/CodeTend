@@ -80,7 +80,6 @@ try {
     'finding_events',
     'finding_patches',
     'finding_validations',
-    'github_webhook_deliveries',
     'repository_security_profiles',
     'scan_artifacts',
   ]
