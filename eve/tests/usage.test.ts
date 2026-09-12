@@ -33,7 +33,7 @@ const meta = (id: string) => ({ id, at: '2026-09-09T00:00:00.000Z' })
 
 describe('Eve usage hooks', () => {
   test('records child usage against the root scan and clears turn state', async () => {
-    const temporaryData = await mkdtemp(join(tmpdir(), 'tecdebt-usage-'))
+    const temporaryData = await mkdtemp(join(tmpdir(), 'codetend-usage-'))
     const previousDataDir = process.env.TECDEBT_DATA_DIR
     const previousModel = process.env.TECDEBT_MODEL
     process.env.TECDEBT_DATA_DIR = temporaryData

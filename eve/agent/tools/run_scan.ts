@@ -55,7 +55,7 @@ interface Progress {
  */
 export default defineWorkflowTool({
   description:
-    'Run a full repository health scan for a scan id prepared by the tecdebt app. Clones the repository, refreshes repository knowledge, runs every specialized scanner and writes the result file.',
+    'Run a full repository health scan for a scan id prepared by the CodeTend app. Clones the repository, refreshes repository knowledge, runs every specialized scanner and writes the result file.',
   inputSchema: z.object({ scanId: z.number().int().positive() }),
   label: {
     start: ({ scanId }) => `Scan #${scanId}`,

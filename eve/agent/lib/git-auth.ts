@@ -1,5 +1,5 @@
 /**
- * Repository access for clones. For github.com URLs, tecdebt prefers a
+ * Repository access for clones. For github.com URLs, CodeTend prefers a
  * GitHub App installation token it mints and caches itself from
  * `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` / `GITHUB_APP_PRIVATE_KEY`
  * (see `./github-app-auth.ts`), then a plain `GITHUB_TOKEN`, then the local
@@ -50,7 +50,7 @@ export async function resolveGitAuth(repositoryUrl: string): Promise<GitAuth> {
  * The token is carried through a dedicated environment variable on the
  * spawned git process and expanded there by the credential-helper
  * subprocess. It is never interpolated into the clone command's argv (which
- * `ps` can see) or logged by tecdebt.
+ * `ps` can see) or logged by CodeTend.
  */
 function tokenGitAuth(token: string): Pick<GitAuth, 'gitConfig' | 'env'> {
   return {

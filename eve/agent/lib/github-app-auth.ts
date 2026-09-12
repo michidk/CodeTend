@@ -2,8 +2,8 @@
  * Mints and caches GitHub App installation access tokens from
  * `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` / `GITHUB_APP_PRIVATE_KEY`.
  * Installation tokens are valid for one hour; the "hosting control plane"
- * that operates tecdebt does not need to rotate or feed in a token itself —
- * tecdebt mints its own from the App credentials, cached in-process and
+ * that operates CodeTend does not need to rotate or feed in a token itself —
+ * CodeTend mints its own from the App credentials, cached in-process and
  * refreshed ahead of expiry so a clone never races an expiring token.
  *
  * Only imported from "use step" functions (needs Node.js APIs).

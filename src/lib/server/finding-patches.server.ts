@@ -157,7 +157,7 @@ export async function generateFindingPatchImpl(findingId: number) {
     throw error
   }
   void runPatchPipeline(created.id, finding.repositoryId).catch((error) =>
-    console.error(`[tecdebt] patch ${created.id} crashed`, error),
+    console.error(`[CodeTend] patch ${created.id} crashed`, error),
   )
   return { patchId: created.id }
 }
@@ -350,7 +350,7 @@ export async function recoverInterruptedPatches(): Promise<void> {
       ? adoptPatch(patch.id, patch.finding.repositoryId, patch.createdAt)
       : runPatchPipeline(patch.id, patch.finding.repositoryId)
     void recovery.catch((error) =>
-      console.error(`[tecdebt] failed to recover patch ${patch.id}`, error),
+      console.error(`[CodeTend] failed to recover patch ${patch.id}`, error),
     )
   }
 }

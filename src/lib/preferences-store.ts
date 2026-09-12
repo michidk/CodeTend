@@ -23,7 +23,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       markHydrated: () => set({ hasHydrated: true }),
     }),
     {
-      name: 'tecdebt-preferences',
+      name: 'codetend-preferences',
       version: 1,
       skipHydration: true,
       partialize: ({ theme }) => ({ theme }),

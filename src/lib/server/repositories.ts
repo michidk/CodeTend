@@ -240,7 +240,7 @@ export const deleteRepository = createServerFn({ method: 'POST' })
     ).length
     if (cleanupFailures > 0) {
       console.warn(
-        `[tecdebt] repository ${id} deleted with ${cleanupFailures} artifact cleanup failures`,
+        `[CodeTend] repository ${id} deleted with ${cleanupFailures} artifact cleanup failures`,
       )
     }
     return { id }

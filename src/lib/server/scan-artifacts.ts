@@ -50,7 +50,7 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
   )
 
   const findingDocument = {
-    documentType: 'tecdebt.findings',
+    documentType: 'codetend.findings',
     schemaVersion: '1',
     scanId,
     findings: occurrences.map((occurrence) => ({

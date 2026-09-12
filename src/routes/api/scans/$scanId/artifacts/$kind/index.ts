@@ -30,7 +30,7 @@ export const Route = createFileRoute('/api/scans/$scanId/artifacts/$kind/')({
         return new Response(artifact.contents, {
           headers: {
             'Content-Type': artifact.contentType,
-            'Content-Disposition': `attachment; filename="tecdebt-scan-${scanId}-${kind}.${extension}"`,
+            'Content-Disposition': `attachment; filename="codetend-scan-${scanId}-${kind}.${extension}"`,
             ETag: `"${artifact.sha256}"`,
             'Cache-Control': 'private, no-store',
           },

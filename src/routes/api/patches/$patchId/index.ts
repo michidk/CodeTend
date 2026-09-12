@@ -19,7 +19,7 @@ export const Route = createFileRoute('/api/patches/$patchId/')({
         return new Response(patch.diff, {
           headers: {
             'Content-Type': 'text/x-diff; charset=utf-8',
-            'Content-Disposition': `attachment; filename="tecdebt-finding-${patch.findingId}-patch-${patch.id}.diff"`,
+            'Content-Disposition': `attachment; filename="codetend-finding-${patch.findingId}-patch-${patch.id}.diff"`,
             'Cache-Control': 'private, no-store',
           },
         })

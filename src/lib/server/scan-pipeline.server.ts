@@ -199,7 +199,7 @@ export async function startScan(
     .where(eq(repositories.id, repositoryId))
 
   void runScanPipeline(scan.id, repository).catch((error) => {
-    console.error(`[tecdebt] scan ${scan.id} crashed`, error)
+    console.error(`[CodeTend] scan ${scan.id} crashed`, error)
   })
   return scan.id
 }
@@ -399,7 +399,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
         .settle((phase) => setPhase(scanId, phase))
         .catch((error) => {
           console.warn(
-            `[tecdebt] scan ${scanId}: Eve stream ended early, waiting for the result file`,
+            `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
             error,
           )
           return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
@@ -651,7 +651,7 @@ async function persistScanResult(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unknown artifact error.'
-    console.error(`[tecdebt] scan ${scanId}: artifact sealing failed`, error)
+    console.error(`[CodeTend] scan ${scanId}: artifact sealing failed`, error)
     await db
       .update(scans)
       .set({
@@ -851,7 +851,7 @@ export async function recoverInterruptedScans(): Promise<void> {
   })
   for (const scan of active) {
     void adoptScan(scan.id, scan.repository, scan.createdAt).catch((error) =>
-      console.error(`[tecdebt] failed to recover scan ${scan.id}`, error),
+      console.error(`[CodeTend] failed to recover scan ${scan.id}`, error),
     )
   }
 }
@@ -880,7 +880,7 @@ async function adoptScan(
     await setPhase(scanId, 'reconciling')
     await persistScanResult(scanId, repository, result)
     await cleanupScanFiles(repository.id, scanId)
-    console.info(`[tecdebt] recovered scan ${scanId} after restart`)
+    console.info(`[CodeTend] recovered scan ${scanId} after restart`)
   } catch (error) {
     if (await cancellationRequested(scanId)) {
       await cancelScanRecord(scanId, repository.id)
@@ -932,7 +932,7 @@ export async function requestScanCancellation(scanId: number): Promise<void> {
     await cancelEveScanSession(scan.eveSessionId)
   } catch (error) {
     console.warn(
-      `[tecdebt] Eve cancellation request failed for scan ${scanId}; the pipeline will stop at its next checkpoint`,
+      `[CodeTend] Eve cancellation request failed for scan ${scanId}; the pipeline will stop at its next checkpoint`,
       error,
     )
   }
@@ -1029,7 +1029,7 @@ async function cleanupScanFiles(repositoryId: number, scanId: number) {
     await removeGitNexusIndex(`repo-${repositoryId}-scan-${scanId}`)
   } catch (error) {
     console.warn(
-      `[tecdebt] failed to remove GitNexus index for scan ${scanId}`,
+      `[CodeTend] failed to remove GitNexus index for scan ${scanId}`,
       error,
     )
   }
@@ -1039,7 +1039,10 @@ async function cleanupScanFiles(repositoryId: number, scanId: number) {
       removeScanArtifacts(scanId),
     ])
   } catch (error) {
-    console.warn(`[tecdebt] failed to clean up files for scan ${scanId}`, error)
+    console.warn(
+      `[CodeTend] failed to clean up files for scan ${scanId}`,
+      error,
+    )
   }
 }
 
@@ -1057,7 +1060,7 @@ async function loadScanUsage(scanId: number): Promise<ScanUsage | null> {
   try {
     return await readScanUsage(scan.eveSessionId)
   } catch (error) {
-    console.warn(`[tecdebt] failed to read usage for scan ${scanId}`, error)
+    console.warn(`[CodeTend] failed to read usage for scan ${scanId}`, error)
     return null
   }
 }
@@ -1069,7 +1072,7 @@ async function discardScanUsage(usage: ScanUsage | null): Promise<void> {
     await removeScanUsage(usage.rootSessionId)
   } catch (error) {
     console.warn(
-      `[tecdebt] failed to remove usage file ${usage.rootSessionId}`,
+      `[CodeTend] failed to remove usage file ${usage.rootSessionId}`,
       error,
     )
   }

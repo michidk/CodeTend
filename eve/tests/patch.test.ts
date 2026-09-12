@@ -80,7 +80,7 @@ describe('generated patch boundary', () => {
   })
 
   test('checks, applies, and normalizes a patch only in its workspace', async () => {
-    const repository = await mkdtemp(join(tmpdir(), 'tecdebt-patch-test-'))
+    const repository = await mkdtemp(join(tmpdir(), 'codetend-patch-test-'))
     try {
       await writeFile(join(repository, 'auth.ts'), 'unsafe()\n')
       const initialized = Bun.spawnSync(['git', 'init', '--quiet'], {

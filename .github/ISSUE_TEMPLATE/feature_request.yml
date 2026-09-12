@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposed change
-      description: How should tecdebt behave? For a new scanner, say what it owns and which existing dimension the concern currently falls into.
+      description: How should CodeTend behave? For a new scanner, say what it owns and which existing dimension the concern currently falls into.
     validations:
       required: true
   - type: textarea
@@ -27,4 +27,4 @@ body:
       options:
         - label: I searched existing issues and discussions for this idea.
           required: true
-        - label: This does not require tecdebt to push branches, comment on GitHub or otherwise mutate the scanned repository.
+        - label: This does not require CodeTend to push branches, comment on GitHub or otherwise mutate the scanned repository.

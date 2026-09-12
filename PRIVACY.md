@@ -1,6 +1,6 @@
 # Data handling
 
-tecdebt processes source repositories, file metadata, model-generated
+CodeTend processes source repositories, file metadata, model-generated
 repository knowledge and findings, Git commit identifiers, scan status, and
 token/cost usage. Operators are responsible for having permission to process
 every registered repository.

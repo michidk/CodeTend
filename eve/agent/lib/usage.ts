@@ -87,7 +87,7 @@ export function usageHooks(agent: string) {
         await appendUsageRecord(record)
       } catch (error) {
         // Usage accounting must never fail a scan.
-        console.warn('[tecdebt] failed to record usage', error)
+        console.warn('[CodeTend] failed to record usage', error)
       }
     },
     async 'turn.completed'(

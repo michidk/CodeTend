@@ -99,7 +99,7 @@ async function configureDevMigrations(server: ViteDevServer) {
 
 export function devMigrations(): Plugin {
   return {
-    name: 'tecdebt-dev-migrations',
+    name: 'codetend-dev-migrations',
     apply: 'serve',
     configureServer: configureDevMigrations,
   }

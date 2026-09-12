@@ -117,7 +117,7 @@ function responseSession(response: StreamResponse): EveScanSession {
           case 'input.requested': {
             // A session that hits a configured usage limit does not fail: Eve
             // parks it on an approval prompt and completes the turn without a
-            // result. Nothing in tecdebt answers prompts, so treat it as a
+            // result. Nothing in CodeTend answers prompts, so treat it as a
             // failure now instead of waiting for the scan timeout.
             const parked = readParkedRequest(event.data)
             if (parked) {

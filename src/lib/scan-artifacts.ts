@@ -29,7 +29,7 @@ export function toSarifDocument(
       {
         tool: {
           driver: {
-            name: 'tecdebt',
+            name: 'CodeTend',
             informationUri: repositoryUrl,
             rules: findings.map((finding) => ({
               id: finding.ruleId,

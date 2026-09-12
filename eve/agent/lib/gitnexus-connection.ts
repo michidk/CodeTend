@@ -1,7 +1,7 @@
 import { defineDynamic, defineMcpClientConnection } from 'eve/connections'
 
 /**
- * Optional GitNexus code-intelligence layer. The tecdebt app starts the
+ * Optional GitNexus code-intelligence layer. The CodeTend app starts the
  * GitNexus MCP HTTP server (loopback) and sets GITNEXUS_MCP_URL for the Eve
  * runtime; when unset the connection simply does not exist and agents fall
  * back to filesystem search. Read-only tools only.

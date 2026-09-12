@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD033 -->
 <h1 align="center">
   <img src="public/favicon.svg" alt="" width="64" height="64"><br>
-  tecdebt
+  CodeTend
 </h1>
 
 <p align="center">
@@ -20,8 +20,8 @@
 </p>
 
 <p align="center">
-<a href="https://github.com/michidk/tecdebt/actions/workflows/ci.yml">
-<img alt="Checks and Build" src="https://github.com/michidk/tecdebt/actions/workflows/ci.yml/badge.svg"></a>
+<a href="https://github.com/michidk/CodeTend/actions/workflows/ci.yml">
+<img alt="Checks and Build" src="https://github.com/michidk/CodeTend/actions/workflows/ci.yml/badge.svg"></a>
 <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
 <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-yes-0f766e.svg">
 </p>
@@ -29,14 +29,14 @@
 ---
 
 > [!WARNING]
-> **Proof of concept.** tecdebt works end to end and is used on real
+> **Proof of concept.** CodeTend works end to end and is used on real
 > repositories, but its authentication boundary is single-tenant and the
 > full LLM scan is an external-service integration. Read
 > [Limitations](#-limitations) before relying on it.
 
 ## 🔍 What it is
 
-tecdebt is **not** an autonomous pull-request bot. It registers repositories
+CodeTend is **not** an autonomous pull-request bot. It registers repositories
 and, on a schedule, a signed GitHub webhook, or on demand, makes a fresh
 checkout of the configured branch and runs fourteen specialized scanner agents
 over it: one per dimension of technical debt, from architecture and
@@ -61,13 +61,13 @@ agent.
   and the app derives `new → active → improved → resolved → regressed` from
   its own persisted results, coverage-aware and never from Git history.
 - 🛡️ **Real vulnerability data.** Google's OSV Scanner matches exact lockfile
-  versions; tecdebt computes CVSS locally, joins FIRST EPSS and the CISA KEV
+  versions; CodeTend computes CVSS locally, joins FIRST EPSS and the CISA KEV
   catalog, and keeps raw severity separate from contextual priority.
 - 🧪 **Evidence, not vibes.** Security findings carry source/control/sink
   evidence, an attack path, and optional executable validation that runs
   only in a networkless, capability-dropped container, never on the host.
 - 🩹 **Review-gated patches.** Generate a unified diff for one finding in a
-  disposable clone, re-run its reproducer, then approve or reject. tecdebt
+  disposable clone, re-run its reproducer, then approve or reject. CodeTend
   never pushes a branch or opens a pull request.
 - 📊 **Cost you can see.** Provider-reported tokens per scanner, per scan and
   per repository, with list-price estimates, a UTC-day budget cap, and
@@ -103,7 +103,7 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 ## 🖥️ Using it
 
 <p align="center">
-  <img src="docs/repository-page.png" alt="tecdebt repository page showing the overall score, per-scanner grades, active findings and change-over-time charts" width="820">
+  <img src="docs/repository-page.png" alt="CodeTend repository page showing the overall score, per-scanner grades, active findings and change-over-time charts" width="820">
 </p>
 
 1. **Add a repository**: URL, branch, cron schedule (UTC).
@@ -208,7 +208,7 @@ because the production server fails closed without it.
 - The built-in HTTP Basic boundary is single-tenant and expects TLS in
   front. A multi-customer deployment needs an external identity provider,
   organizations and repository-level authorization.
-- tecdebt mints and caches its own GitHub App installation tokens from
+- CodeTend mints and caches its own GitHub App installation tokens from
   `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`; it
   also accepts a plain, externally-issued `GITHUB_TOKEN` for clones.
 - Executable finding validation is disabled by default. When enabled, Eve
@@ -234,5 +234,5 @@ because the production server fails closed without it.
 <p align="center">
   Open-source software for teams who would rather measure their debt than
   argue about it.<br>
-  <sub><a href="https://github.com/michidk/tecdebt">Star it on GitHub</a></sub>
+  <sub><a href="https://github.com/michidk/CodeTend">Star it on GitHub</a></sub>
 </p>

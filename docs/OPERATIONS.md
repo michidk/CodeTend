@@ -13,7 +13,7 @@ Replace every `change-me` value in `.env`. Keep the app password, Eve password,
 database password, OpenAI API key and the optional GitHub App private key (or
 plain `GITHUB_TOKEN`) in the deployment secret store. Rotate them without
 committing values to the repository; a GitHub App's installation token itself
-needs no rotation since tecdebt mints and caches a fresh one from the App
+needs no rotation since CodeTend mints and caches a fresh one from the App
 credentials, but the private key backing it should still be rotated
 periodically like any other long-lived credential.
 
@@ -62,7 +62,7 @@ The fixer sees a read-only checkout and returns a unified diff; a trusted
 workflow applies it only inside a disposable clone after rejecting binary,
 symlink, absolute-path and traversal changes. If an isolated reproducer exists,
 the patched clone is checked again. Reviewers must approve or reject every
-proposal in tecdebt. Approval never writes to GitHub or the registered source
+proposal in CodeTend. Approval never writes to GitHub or the registered source
 repository; download the `.diff` and apply it through the organization's normal
 review and CI process.
 
@@ -94,7 +94,7 @@ the deployment configuration; the shared scan volume is transient and does not
 need durable backup.
 
 ```bash
-docker compose exec -T postgres pg_dump -U tecdebt -d tecdebt -Fc > tecdebt.dump
+docker compose exec -T postgres pg_dump -U tecdebt -d tecdebt -Fc > codetend.dump
 ```
 
 Test restores in an isolated database. Never overwrite the production database

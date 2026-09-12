@@ -29,7 +29,7 @@ const FONTS_HREF =
  * after hydration; without this every full load flashed the light theme.
  * Mirrors the zustand persist key/shape from `@/lib/preferences-store`.
  */
-const THEME_BOOT_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem('tecdebt-preferences')||'null');var t=s&&s.state&&s.state.theme;var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light'}catch(e){}})()`
+const THEME_BOOT_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem('codetend-preferences')||'null');var t=s&&s.state&&s.state.theme;var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light'}catch(e){}})()`
 
 export const Route = createRootRoute({
   head: () => ({
@@ -39,7 +39,7 @@ export const Route = createRootRoute({
         name: 'viewport',
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',
       },
-      { title: 'tecdebt' },
+      { title: 'CodeTend' },
     ],
     links: [
       { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },

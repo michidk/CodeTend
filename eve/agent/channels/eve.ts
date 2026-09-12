@@ -1,7 +1,7 @@
 import { httpBasic, localDev } from 'eve/channels/auth'
 import { eveChannel } from 'eve/channels/eve'
 
-/** The tecdebt app authenticates with HTTP Basic; `eve dev` stays open locally. */
+/** The CodeTend app authenticates with HTTP Basic; `eve dev` stays open locally. */
 const password = process.env.EVE_PASSWORD
 if (!password && process.env.NODE_ENV === 'production') {
   throw new Error('EVE_PASSWORD is required in production')

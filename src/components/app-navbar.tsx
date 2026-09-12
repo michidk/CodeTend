@@ -32,14 +32,14 @@ export function AppNavbar() {
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-1 px-2 sm:gap-3 sm:px-4 md:gap-6 md:px-8">
           <Link
             to="/"
-            aria-label="tecdebt home"
+            aria-label="CodeTend home"
             className="flex min-h-11 shrink-0 items-center gap-2 outline-none focus-visible:rounded-xl focus-visible:ring-3 focus-visible:ring-ring/45"
           >
             <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-control">
               <Radar className="size-5" aria-hidden="true" />
             </span>
             <span className="hidden font-display text-xl font-extrabold tracking-tight sm:inline">
-              tecdebt
+              CodeTend
             </span>
           </Link>
           <nav

@@ -58,7 +58,7 @@ async function startServer(port: number): Promise<boolean> {
     child.unref()
     child.once('error', (error) => {
       console.warn(
-        `[tecdebt] GitNexus MCP server failed to start: ${error.message}`,
+        `[CodeTend] GitNexus MCP server failed to start: ${error.message}`,
       )
     })
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -66,12 +66,12 @@ async function startServer(port: number): Promise<boolean> {
       if (await isHealthy(port)) return true
     }
     console.warn(
-      '[tecdebt] GitNexus MCP server did not become healthy; continuing without it',
+      '[CodeTend] GitNexus MCP server did not become healthy; continuing without it',
     )
     return false
   } catch (error) {
     console.warn(
-      `[tecdebt] GitNexus unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      `[CodeTend] GitNexus unavailable: ${error instanceof Error ? error.message : String(error)}`,
     )
     return false
   }

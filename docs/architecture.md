@@ -114,7 +114,7 @@ operator's judgement is not enough.
 The deterministic **Vulnerable Dependencies** scanner runs Google's OSV
 Scanner over supported lockfiles and manifests. OSV supplies exact ecosystem,
 package and version matches (plus purl when published), advisory aliases and
-fixed versions. tecdebt calculates published CVSS 2.0, 3.0, 3.1 and 4.0
+fixed versions. CodeTend calculates published CVSS 2.0, 3.0, 3.1 and 4.0
 vectors locally, fetches FIRST EPSS probabilities, and joins the CISA Known
 Exploited Vulnerabilities catalog. An unavailable EPSS or KEV feed is reported
 in the scanner summary but never discards an OSV result.
@@ -138,7 +138,7 @@ stopping; it does not launch one agent per file.
 Executable validation is fail closed. Commands run sequentially in a disposable
 Docker container with no network, all capabilities dropped,
 `no-new-privileges`, CPU/memory/PID limits, a read-only source mount, and a
-throwaway writable copy. If isolation is unavailable, tecdebt records an
+throwaway writable copy. If isolation is unavailable, CodeTend records an
 explicit proof gap and never executes repository code on the app or Eve host.
 The bundled Compose topology deliberately has no Docker socket, so validation
 is unavailable there unless Eve is deployed with a separate authorized
@@ -152,7 +152,7 @@ text-only unified diff, and must pass path/symlink/binary restrictions plus
 `git apply --check`. When the finding has an executable reproducer, the patched
 clone is rerun through the same isolated validator; a patch is marked verified
 only when the vulnerable behavior no longer reproduces. Reviewers explicitly
-approve or reject the stored diff. Approval is an audit decision only: tecdebt
+approve or reject the stored diff. Approval is an audit decision only: CodeTend
 does not modify the registered checkout, push a branch, or open a pull request.
 
 ## Repository knowledge

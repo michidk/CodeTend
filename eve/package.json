@@ -1,8 +1,8 @@
 {
-  "name": "tecdebt-agent",
+  "name": "codetend-agent",
   "private": true,
   "type": "module",
-  "description": "Eve agent runtime for tecdebt repository health scans.",
+  "description": "Eve agent runtime for CodeTend repository health scans.",
   "engines": {
     "node": ">=24"
   },

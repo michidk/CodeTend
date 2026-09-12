@@ -62,7 +62,7 @@ function DashboardPage() {
         <EmptyState
           icon={FolderGit2}
           title="No repositories yet"
-          description="Register a repository and tecdebt will scan it on the configured schedule."
+          description="Register a repository and CodeTend will scan it on the configured schedule."
           actionLabel="Add repository"
           actionHref="/repositories/new"
         />

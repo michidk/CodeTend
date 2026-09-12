@@ -2,7 +2,7 @@ import { defineAgent } from 'eve'
 import { MODEL_CONTEXT_WINDOW_TOKENS, scannerModel } from './lib/model'
 
 /**
- * Root orchestrator. It never analyzes code itself: the tecdebt app sends one
+ * Root orchestrator. It never analyzes code itself: the CodeTend app sends one
  * message per scan and the root calls the durable `run_scan` workflow tool.
  *
  * Eve folds every subagent's usage into the root session, so a per-session

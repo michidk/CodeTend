@@ -321,7 +321,7 @@ export async function applyGeneratedPatch(input: {
   const { lstat, rm, writeFile } = await import('node:fs/promises')
   const { join } = await import('node:path')
   assertSafeUnifiedDiff(input.diff)
-  const patchFile = join(input.workspace.hostPath, '.tecdebt-generated.patch')
+  const patchFile = join(input.workspace.hostPath, '.codetend-generated.patch')
   try {
     await writeFile(patchFile, input.diff, { flag: 'wx' })
     const check = await run(
@@ -439,7 +439,7 @@ function assertSafePatchPath(path: string): void {
     path.split('/').some((segment) => segment === '' || segment === '..') ||
     path === '.git' ||
     path.startsWith('.git/') ||
-    path === '.tecdebt-generated.patch'
+    path === '.codetend-generated.patch'
   ) {
     throw new Error(`Unsafe patch path: ${path}`)
   }
@@ -780,7 +780,7 @@ async function runCandidateValidation(input: {
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
   const started = Date.now()
-  const scratch = await mkdtemp(join(tmpdir(), 'tecdebt-validation-'))
+  const scratch = await mkdtemp(join(tmpdir(), 'codetend-validation-'))
   let containerId = ''
   const commands: CandidateValidation['commands'][number][] = []
   try {

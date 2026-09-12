@@ -15,7 +15,7 @@ import {
 } from '@/lib/server/scan-pipeline.server'
 import { pruneTransientUsageFiles } from '@/lib/server/scan-usage.server'
 
-const SCHEDULER_KEY = Symbol.for('tecdebt.scheduler')
+const SCHEDULER_KEY = Symbol.for('codetend.scheduler')
 
 interface SchedulerState {
   timer: ReturnType<typeof setInterval>
@@ -41,7 +41,7 @@ export function ensureScheduler(): void {
 
   void Promise.all([recoverInterruptedScans(), recoverInterruptedPatches()])
     .catch((error) =>
-      console.error('[tecdebt] failed to recover interrupted scans', error),
+      console.error('[CodeTend] failed to recover interrupted scans', error),
     )
     .then(async () => {
       const active = await db.query.scans.findMany({
@@ -68,13 +68,13 @@ export function ensureScheduler(): void {
       ])
       if (scanFiles + patchFiles + usageFiles > 0) {
         console.info(
-          `[tecdebt] removed ${scanFiles} stale scan files, ${patchFiles} stale patch files and ${usageFiles} usage files`,
+          `[CodeTend] removed ${scanFiles} stale scan files, ${patchFiles} stale patch files and ${usageFiles} usage files`,
         )
       }
       await tick(state)
     })
     .catch((error) =>
-      console.error('[tecdebt] scheduler initialization failed', error),
+      console.error('[CodeTend] scheduler initialization failed', error),
     )
 }
 
@@ -93,11 +93,11 @@ async function tick(state: SchedulerState) {
       const scanId = await startScan(repository.id, 'schedule')
       if (scanId)
         console.info(
-          `[tecdebt] scheduled scan ${scanId} for ${repository.name}`,
+          `[CodeTend] scheduled scan ${scanId} for ${repository.name}`,
         )
     }
   } catch (error) {
-    console.error('[tecdebt] scheduler tick failed', error)
+    console.error('[CodeTend] scheduler tick failed', error)
   } finally {
     state.ticking = false
   }
