@@ -114,8 +114,20 @@ function responseSession(response: StreamResponse): EveScanSession {
             if (typeof data.message === 'string') message = data.message
             break
           }
+          case 'input.requested': {
+            // A session that hits a configured usage limit does not fail: Eve
+            // parks it on an approval prompt and completes the turn without a
+            // result. Nothing in tecdebt answers prompts, so treat it as a
+            // failure now instead of waiting for the scan timeout.
+            const parked = readParkedRequest(event.data)
+            if (parked) {
+              status = 'failed'
+              failure = parked
+            }
+            break
+          }
           case 'turn.completed':
-            status = 'completed'
+            if (status !== 'failed') status = 'completed'
             break
           case 'turn.failed':
           case 'session.failed': {
@@ -136,6 +148,24 @@ function responseSession(response: StreamResponse): EveScanSession {
       return { status, message, failure }
     },
   }
+}
+
+function readParkedRequest(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null) return undefined
+  const requests = (data as { requests?: unknown }).requests
+  if (!Array.isArray(requests)) return undefined
+  for (const request of requests) {
+    if (typeof request !== 'object' || request === null) continue
+    const { kind, prompt } = request as { kind?: unknown; prompt?: unknown }
+    if (kind === 'session-limit') {
+      return `Eve paused the session for operator approval: ${
+        typeof prompt === 'string'
+          ? prompt
+          : 'a session usage limit was reached'
+      } Raise or unset TECDEBT_MAX_INPUT_TOKENS_PER_SESSION.`
+    }
+  }
+  return undefined
 }
 
 function readPartialOutput(data: unknown): { phase?: string } | undefined {

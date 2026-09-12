@@ -25,6 +25,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "eve:install": "cd eve && npm install",
+    "tools:osv-scanner": "bash scripts/install-osv-scanner.sh",
     "eve:build": "cd eve && npx eve build",
     "eve:start": "cd eve && npx eve start --host 127.0.0.1 --port 2000",
     "eve:dev": "cd eve && npx eve dev --no-ui --port 2000",

@@ -54,11 +54,18 @@ places, or at `GITNEXUS_BIN`).
 ```bash
 cp .env.example .env               # set OPENAI_API_KEY, passwords and DATABASE_URL
 bun install && (cd eve && npm install)
+bun run tools:osv-scanner          # local dependency audit; the Docker image already has it
 
 docker compose up -d postgres      # or point DATABASE_URL at your own database
 bun run eve:build && bun run eve:start   # terminal 1: Eve runtime on :2000
 bun run dev                              # terminal 2: app on :3000, migrations applied automatically
 ```
+
+Deployments configured before September 2026 used `ANTHROPIC_API_KEY` and
+`ANTHROPIC_BASE_URL`; rename them to `OPENAI_API_KEY` and `OPENAI_BASE_URL`
+(same values). Eve talks to one OpenAI-compatible endpoint, so Claude and
+other vendors' models run through a gateway such as OpenRouter or a local
+proxy by setting `TECDEBT_MODEL` to that gateway's model id.
 
 `scripts/start-dev.sh` supervises both processes with `.env` loaded under one
 managed VibePod preview; Eve is restarted in place when it exits so the Vite
