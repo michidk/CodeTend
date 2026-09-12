@@ -43,6 +43,11 @@ interface ModelRates {
  * cost 10% of the input price and cache writes 125% for the models listed
  * here. Unknown models still get their tokens tracked, but no cost is
  * estimated rather than a misleading one.
+ *
+ * Prices go stale: check this table against the OpenAI and Anthropic pricing
+ * pages before each release (`git log -1 -- src/lib/ai-pricing.ts` shows when
+ * it last moved). When adding a model, use the first-party list price even if
+ * you run it through a gateway, and extend `ai-pricing.test.ts`.
  */
 const MODEL_RATES: Readonly<Record<string, ModelRates>> = {
   'gpt-5.6-sol': { input: 4, output: 20 },
