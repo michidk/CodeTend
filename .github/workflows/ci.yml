@@ -10,7 +10,12 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # docker/metadata-action normalizes github.repository to lowercase
+  # automatically, but the raw value (michidk/CodeTend) is also
+  # interpolated directly into the per-platform build step's buildx
+  # `outputs=` string below, which does not normalize it - so this must
+  # already be lowercase, matching the ghcr.io package name.
+  IMAGE_NAME: michidk/codetend
 
 permissions:
   contents: read
