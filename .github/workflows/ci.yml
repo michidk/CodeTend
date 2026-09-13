@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 30
     services:
       postgres:
@@ -83,7 +83,6 @@ jobs:
           POSTGRES_PASSWORD: ci-password
           EVE_PASSWORD: ci-password
           OPENAI_API_KEY: ci-key
-          TECDEBT_BASIC_AUTH_PASSWORD: ci-password
         run: docker compose config --quiet
 
       - name: Apply database migrations
@@ -99,7 +98,7 @@ jobs:
         run: git diff --exit-code -- src/routeTree.gen.ts
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 45
     needs: checks
     permissions:
