@@ -61,9 +61,7 @@ export default defineWorkflowTool({
 
     try {
       yield { phase: 'generating patch' }
-      const output = await ctx.agent({
-        key: `fixer:${patchId}`,
-        target: 'fixer',
+      const output = await ctx.agent('fixer', {
         outputSchema: fixerOutputSchema,
         message: patchMessage(request, repoPath),
       })

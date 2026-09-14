@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # ---- App build (TanStack Start on Bun) ----
-FROM oven/bun:1.4.0 AS app-builder
+FROM oven/bun:1.4.2 AS app-builder
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.4.0-slim AS app
+FROM oven/bun:1.4.2-slim AS app
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -26,12 +26,12 @@ USER bun
 EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
 
-# ---- Eve agent runtime (Node 24) ----
-FROM node:24-bookworm-slim AS eve
+# ---- Eve agent runtime (Node 26) ----
+FROM node:26-bookworm-slim AS eve
 WORKDIR /app
 ENV NODE_ENV=production
 ARG TARGETARCH
-ARG OSV_SCANNER_VERSION=v2.5.1
+ARG OSV_SCANNER_VERSION=v2.6.0
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl \
   && cd /tmp \
   && curl --connect-timeout 15 --max-time 120 --retry 3 -fsSLO "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_${TARGETARCH}" \

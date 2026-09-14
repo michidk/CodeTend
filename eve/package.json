@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Eve agent runtime for CodeTend repository health scans.",
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "scripts": {
     "build": "eve build",
@@ -13,15 +13,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.0",
-    "ai": "^7.0.82",
-    "eve": "0.52.3",
+    "@ai-sdk/openai": "^4.0.66",
+    "ai": "^7.0.99",
+    "eve": "0.54.3",
     "just-bash": "^3.4.2",
     "minimatch": "^10.2.6",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.2"
+    "@types/node": "^26.5.1",
+    "typescript": "^7.0.2"
   }
 }

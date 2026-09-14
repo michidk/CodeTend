@@ -150,9 +150,7 @@ export default defineWorkflowTool({
         reason: staleness.reason,
       }
     } else {
-      const output = (await ctx.agent({
-        key: 'knowledge',
-        target: 'knowledge',
+      const output = (await ctx.agent('knowledge', {
         message: knowledgeAgentMessage({
           repoPath,
           repositoryName: request.repositoryName,
@@ -235,16 +233,10 @@ export default defineWorkflowTool({
               let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
               let lastError: unknown
               // Launching a dozen subagents at once occasionally trips a transient
-              // start failure inside the runtime; one retry with a fresh key
-              // (keys must be unique per run) recovers it.
+              // start failure inside the runtime; one retry recovers it.
               for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
                 try {
-                  result = await ctx.agent({
-                    key:
-                      attempt === 0
-                        ? `scanner:${scanner.id}`
-                        : `scanner:${scanner.id}:retry${attempt}`,
-                    target: 'scanner',
+                  result = await ctx.agent('scanner', {
                     message,
                     outputSchema: request.outputSchema as JsonObject,
                   })

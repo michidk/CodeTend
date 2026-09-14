@@ -28,7 +28,7 @@ const serverSchema = {
     .string()
     .trim()
     .min(1)
-    .default('node:24-bookworm-slim'),
+    .default('node:26-bookworm-slim'),
   TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS: z.coerce
     .number()
     .int()

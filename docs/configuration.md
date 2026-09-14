@@ -51,7 +51,7 @@ boundary in front of it.
 | --- | --- | --- |
 | `TECDEBT_VALIDATION_ENABLED` | `false` | Run model-proposed reproducers in disposable containers. Requires Eve to have Docker access; never falls back to the host. |
 | `TECDEBT_VALIDATION_RUNNER` | `auto` | `auto`, `docker` or `disabled` |
-| `TECDEBT_VALIDATION_IMAGE` | `node:24-bookworm-slim` | Image used for validation containers |
+| `TECDEBT_VALIDATION_IMAGE` | `node:26-bookworm-slim` | Image used for validation containers |
 
 ## Eve runtime and models
 
