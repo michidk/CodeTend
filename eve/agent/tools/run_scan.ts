@@ -49,7 +49,12 @@ interface Progress {
   readonly detail?: string
   readonly scanId?: number
   readonly commitSha?: string
-  readonly completed?: number
+  readonly completed: number
+  readonly total: number
+  readonly scannerCompleted?: number
+  readonly scannerTotal?: number
+  readonly targetFileCount?: number
+  readonly completedScanners?: number
   readonly failed?: number
 }
 
@@ -70,13 +75,24 @@ export default defineWorkflowTool({
     'use workflow'
 
     const request: ScanRequest = await readScanRequest(scanId)
+    const total =
+      5 +
+      request.scanners.length +
+      (request.dependencyAudit === false ? 0 : 1) +
+      (request.gitnexus ? 1 : 0)
+    let completed = 0
 
     const cloning: Progress = {
       phase: 'cloning',
       detail: `${request.repositoryUrl}#${request.branch}`,
+      completed,
+      total,
+      scannerCompleted: 0,
+      scannerTotal: request.scanners.length,
     }
     yield cloning
     const workspace = await cloneRepository(request)
+    completed += 1
     const repoPath = sandboxRepoPath(workspace.name)
     const allTargetFiles = await resolveTargetFiles(request, workspace)
     const fileGlob = request.fileGlob ?? DEFAULT_SCAN_FILE_GLOB
@@ -120,20 +136,46 @@ export default defineWorkflowTool({
     // Requests from an older app omit this flag and retain the old enabled
     // behavior during rolling deployments.
     if (request.dependencyAudit !== false) {
-      const auditing: Progress = { phase: 'dependency audit', detail: 'OSV' }
+      const auditing: Progress = {
+        phase: 'dependency audit',
+        detail: 'Checking dependency lockfiles with OSV',
+        completed,
+        total,
+        scannerCompleted: 0,
+        scannerTotal: scanners.length,
+        targetFileCount: targetFiles.length,
+      }
       yield auditing
       dependencyAudit = await auditDependencies(workspace)
+      completed += 1
     }
 
     let gitnexusRepo: string | null = null
     if (request.gitnexus) {
-      const indexing: Progress = { phase: 'indexing', detail: 'GitNexus' }
+      const indexing: Progress = {
+        phase: 'indexing',
+        detail: 'Building the GitNexus code index',
+        completed,
+        total,
+        scannerCompleted: 0,
+        scannerTotal: scanners.length,
+        targetFileCount: targetFiles.length,
+      }
       yield indexing
       const indexed = await indexWithGitNexus(workspace)
       if (indexed.ok) gitnexusRepo = workspace.name
+      completed += 1
     }
 
-    const knowledgePhase: Progress = { phase: 'knowledge' }
+    const knowledgePhase: Progress = {
+      phase: 'knowledge',
+      detail: 'Refreshing repository architecture knowledge',
+      completed,
+      total,
+      scannerCompleted: 0,
+      scannerTotal: scanners.length,
+      targetFileCount: targetFiles.length,
+    }
     yield knowledgePhase
     const staleness = assessKnowledgeStaleness(
       request.knowledge,
@@ -189,8 +231,17 @@ export default defineWorkflowTool({
             reason: 'Knowledge agent returned no structured output.',
           }
     }
+    completed += 1
 
-    const dependencyGraphPhase: Progress = { phase: 'dependency graph' }
+    const dependencyGraphPhase: Progress = {
+      phase: 'dependency graph',
+      detail: 'Mapping subsystem dependencies',
+      completed,
+      total,
+      scannerCompleted: 0,
+      scannerTotal: scanners.length,
+      targetFileCount: targetFiles.length,
+    }
     yield dependencyGraphPhase
     const dependencyGraph =
       gitnexusRepo && knowledgeBase.summary.subsystems.length > 0
@@ -199,72 +250,88 @@ export default defineWorkflowTool({
             knowledgeBase.summary.subsystems,
           )
         : UNAVAILABLE_DEPENDENCY_GRAPH
+    completed += 1
     const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
 
     const securityProfile =
       request.securityProfile ?? securityProfileFromKnowledge(knowledge)
-
-    const scanning: Progress = { phase: 'scanning' }
-    yield scanning
 
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.
     const outcomes: ScannerOutcome[] = []
     for (let start = 0; start < scanners.length; start += SCANNER_CONCURRENCY) {
       const batch = scanners.slice(start, start + SCANNER_CONCURRENCY)
-      outcomes.push(
-        ...(await Promise.all(
-          batch.map(async (scanner): Promise<ScannerOutcome> => {
-            const startedAt = await nowIso()
-            const message = scannerAgentMessage({
-              scanner,
-              siblingScanners: scanners,
-              repoPath,
-              repositoryName: request.repositoryName,
-              workspace,
-              knowledge,
-              gitnexusRepo,
-              previousCommitSha: request.previousCommitSha ?? null,
-              target: request.target,
-              targetFiles,
-              securityProfile,
-            })
-            try {
-              let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
-              let lastError: unknown
-              // Launching a dozen subagents at once occasionally trips a transient
-              // start failure inside the runtime; one retry recovers it.
-              for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
-                try {
-                  result = await ctx.agent('scanner', {
-                    message,
-                    outputSchema: request.outputSchema as JsonObject,
-                  })
-                  lastError = undefined
-                  break
-                } catch (error) {
-                  lastError = error
-                }
-              }
-              if (lastError !== undefined) throw lastError
-              return {
-                scannerId: scanner.id,
-                ...scannerOutput(result),
-                startedAt,
-                finishedAt: await nowIso(),
-              }
-            } catch (error) {
-              return {
-                scannerId: scanner.id,
-                status: 'failed',
-                error: describeError(error),
-                startedAt,
-                finishedAt: await nowIso(),
+      yield {
+        phase: 'scanning',
+        detail: `Running ${batch.map((scanner) => scanner.name).join(', ')}`,
+        completed,
+        total,
+        scannerCompleted: outcomes.length,
+        scannerTotal: scanners.length,
+        targetFileCount: targetFiles.length,
+      } satisfies Progress
+      const batchOutcomes = await Promise.all(
+        batch.map(async (scanner): Promise<ScannerOutcome> => {
+          const startedAt = await nowIso()
+          const message = scannerAgentMessage({
+            scanner,
+            siblingScanners: scanners,
+            repoPath,
+            repositoryName: request.repositoryName,
+            workspace,
+            knowledge,
+            gitnexusRepo,
+            previousCommitSha: request.previousCommitSha ?? null,
+            target: request.target,
+            targetFiles,
+            securityProfile,
+          })
+          try {
+            let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
+            let lastError: unknown
+            // Launching a dozen subagents at once occasionally trips a transient
+            // start failure inside the runtime; one retry recovers it.
+            for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+              try {
+                result = await ctx.agent('scanner', {
+                  message,
+                  outputSchema: request.outputSchema as JsonObject,
+                })
+                lastError = undefined
+                break
+              } catch (error) {
+                lastError = error
               }
             }
-          }),
-        )),
+            if (lastError !== undefined) throw lastError
+            return {
+              scannerId: scanner.id,
+              ...scannerOutput(result),
+              startedAt,
+              finishedAt: await nowIso(),
+            }
+          } catch (error) {
+            return {
+              scannerId: scanner.id,
+              status: 'failed',
+              error: describeError(error),
+              startedAt,
+              finishedAt: await nowIso(),
+            }
+          }
+        }),
       )
+      outcomes.push(...batchOutcomes)
+      completed += batch.length
+      yield {
+        phase: 'scanning',
+        detail: `${outcomes.length} of ${scanners.length} scanners completed`,
+        completed,
+        total,
+        scannerCompleted: outcomes.length,
+        scannerTotal: scanners.length,
+        targetFileCount: targetFiles.length,
+      } satisfies Progress
     }
 
     const coverage =
@@ -305,15 +372,32 @@ export default defineWorkflowTool({
           .filter((candidate) => candidate.fingerprint.length > 0)
       })
 
-    const validating: Progress = { phase: 'validating' }
+    const validating: Progress = {
+      phase: 'validating',
+      detail: `${candidates.length} security candidates to validate`,
+      completed,
+      total,
+      scannerCompleted: outcomes.length,
+      scannerTotal: scanners.length,
+      targetFileCount: targetFiles.length,
+    }
     yield validating
     const validations = await validateCandidates({
       request,
       workspace,
       candidates,
     })
+    completed += 1
 
-    const persisting: Progress = { phase: 'persisting' }
+    const persisting: Progress = {
+      phase: 'persisting',
+      detail: 'Writing the scan result',
+      completed,
+      total,
+      scannerCompleted: outcomes.length,
+      scannerTotal: scanners.length,
+      targetFileCount: targetFiles.length,
+    }
     yield persisting
     const result: ScanResult = {
       scanId,
@@ -337,13 +421,20 @@ export default defineWorkflowTool({
       finishedAt: await nowIso(),
     }
     await writeScanResult(result)
+    completed += 1
 
     const done: Progress = {
       phase: 'done',
       scanId,
       commitSha: workspace.commitSha,
-      completed: outcomes.filter((outcome) => outcome.status === 'completed')
-        .length,
+      completed,
+      total,
+      scannerCompleted: outcomes.length,
+      scannerTotal: scanners.length,
+      targetFileCount: targetFiles.length,
+      completedScanners: outcomes.filter(
+        (outcome) => outcome.status === 'completed',
+      ).length,
       failed: outcomes.filter((outcome) => outcome.status === 'failed').length,
     }
     return done
@@ -351,7 +442,7 @@ export default defineWorkflowTool({
   toModelOutput(output: Progress) {
     return {
       type: 'text',
-      value: `Scan ${output.scanId ?? '?'} finished at ${output.commitSha ?? '?'}: ${output.completed ?? 0} scanners completed, ${output.failed ?? 0} failed.`,
+      value: `Scan ${output.scanId ?? '?'} finished at ${output.commitSha ?? '?'}: ${output.completedScanners ?? 0} scanners completed, ${output.failed ?? 0} failed.`,
     }
   },
 })

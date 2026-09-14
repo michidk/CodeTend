@@ -43,6 +43,7 @@ import { getScanner } from '@/lib/scanners'
 import { DEFAULT_SCAN_FILE_GLOB, type ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
+import { ScanProgress } from './-components/scan-progress'
 
 export const Route = createFileRoute('/scans/$scanId/')({
   loader: ({ params }) => getScanDetail({ data: parseIdParam(params.scanId) }),
@@ -139,6 +140,10 @@ function ScanPage() {
           ) : undefined
         }
       />
+
+      {active && scan.progress ? (
+        <ScanProgress progress={scan.progress} />
+      ) : null}
 
       {scan.error ? (
         <Card className="border-destructive/40">

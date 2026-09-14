@@ -41,6 +41,7 @@ export const getActivityStatus = createServerFn({ method: 'GET' })
           id: scans.id,
           status: scans.status,
           phase: scans.phase,
+          progress: scans.progress,
           cancelling: sql<boolean>`${scans.cancellationRequestedAt} is not null`,
         })
         .from(scans)
@@ -56,7 +57,7 @@ export const getActivityStatus = createServerFn({ method: 'GET' })
     const signature = [
       ...activeScans.map(
         (scan) =>
-          `s${scan.id}:${scan.status}:${scan.phase ?? ''}:${scan.cancelling ? 'c' : ''}`,
+          `s${scan.id}:${scan.status}:${scan.phase ?? ''}:${JSON.stringify(scan.progress)}:${scan.cancelling ? 'c' : ''}`,
       ),
       ...generatingPatches.map((patch) => `p${patch.id}`),
     ].join('|')

@@ -27,6 +27,7 @@ import {
   scannerResultJsonSchema,
 } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
+import type { ScanProgress } from '@/lib/scan-progress'
 import { getScanner, type ScannerDefinition } from '@/lib/scanners'
 import {
   calculateOverallScore,
@@ -205,6 +206,7 @@ export async function startScan(
           options.maxCostUsd ?? env.TECDEBT_DEFAULT_SCAN_COST_USD ?? null,
         status: 'queued',
         phase: 'queued',
+        progress: { phase: 'queued', completed: 0, total: 1 },
         branch: repository.branch,
       })
       .returning({ id: scans.id })
@@ -240,10 +242,10 @@ function postgresErrorCode(error: unknown): string | undefined {
   return undefined
 }
 
-async function setPhase(scanId: number, phase: string) {
+async function setProgress(scanId: number, progress: ScanProgress) {
   await db
     .update(scans)
-    .set({ phase })
+    .set({ phase: progress.phase, progress })
     .where(and(eq(scans.id, scanId), isNull(scans.cancellationRequestedAt)))
 }
 
@@ -289,7 +291,12 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     }
     const claimed = await db
       .update(scans)
-      .set({ status: 'running', phase: 'preparing', startedAt })
+      .set({
+        status: 'running',
+        phase: 'preparing',
+        progress: { phase: 'preparing', completed: 0, total: 1 },
+        startedAt,
+      })
       .where(
         and(
           eq(scans.id, scanId),
@@ -405,7 +412,14 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       outputSchema: scannerResultJsonSchema,
     })
 
-    await setPhase(scanId, 'starting agent')
+    await setProgress(scanId, {
+      phase: 'starting agent',
+      detail: `${activeAgentScanners.length} scanners configured`,
+      completed: 0,
+      total: 1,
+      scannerCompleted: 0,
+      scannerTotal: activeAgentScanners.length,
+    })
     if (await cancellationRequested(scanId)) {
       await cancelScanRecord(scanId, repository.id)
       return
@@ -438,7 +452,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     // stream drops, so the scan completes whenever the file appears.
     const outcome = await Promise.race([
       session
-        .settle((phase) => setPhase(scanId, phase))
+        .settle((progress) => setProgress(scanId, progress))
         .catch((error) => {
           console.warn(
             `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
@@ -462,7 +476,12 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     }
 
     await throwIfCancellationRequested(scanId)
-    await setPhase(scanId, 'reconciling')
+    await setProgress(scanId, {
+      phase: 'reconciling',
+      detail: 'Saving findings and scores',
+      completed: 1,
+      total: 1,
+    })
     await persistScanResult(scanId, repository, result)
     await cleanupScanFiles(repository.id, scanId)
   } catch (error) {
@@ -684,6 +703,14 @@ async function persistScanResult(
           ? 'partial'
           : 'completed',
       phase: 'done',
+      progress: {
+        phase: 'done',
+        completed: 1,
+        total: 1,
+        scannerCompleted: result.scanners.length,
+        scannerTotal: result.scanners.length,
+        targetFileCount: result.targetFiles.length,
+      },
       commitSha: result.commitSha,
       fileCount: result.fileCount,
       reviewedFileCount: result.targetFiles.length,
@@ -942,7 +969,12 @@ async function adoptScan(
     }
     const result = await readScanResult(scanId)
     if (!result) throw new Error('Scan result file disappeared.')
-    await setPhase(scanId, 'reconciling')
+    await setProgress(scanId, {
+      phase: 'reconciling',
+      detail: 'Saving findings and scores',
+      completed: 1,
+      total: 1,
+    })
     await persistScanResult(scanId, repository, result)
     await cleanupScanFiles(repository.id, scanId)
     console.info(`[CodeTend] recovered scan ${scanId} after restart`)
@@ -1019,6 +1051,7 @@ async function cancelScanRecord(scanId: number, repositoryId: number) {
     .set({
       status: 'cancelled',
       phase: 'cancelled',
+      progress: null,
       error: null,
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),
@@ -1061,6 +1094,7 @@ async function failScan(scanId: number, repositoryId: number, message: string) {
     .set({
       status: 'failed',
       phase: 'failed',
+      progress: null,
       error: message,
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),

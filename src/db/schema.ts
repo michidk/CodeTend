@@ -30,6 +30,7 @@ import type {
   ValidationStatus,
   VulnerabilityMetadata,
 } from '@/lib/findings'
+import type { ScanProgress } from '@/lib/scan-progress'
 import type { CustomScannerDefinition } from '@/lib/scanner-configuration'
 import type { ScannerDefinition } from '@/lib/scanners'
 import {
@@ -243,6 +244,8 @@ export const scans = pgTable(
     fileCount: integer('file_count'),
     /** Current pipeline phase for the UI, e.g. "cloning", "scanning". */
     phase: text('phase'),
+    /** Structured live progress persisted from Eve's durable event stream. */
+    progress: jsonb('progress').$type<ScanProgress>(),
     eveSessionId: text('eve_session_id'),
     gitnexusUsed: boolean('gitnexus_used').notNull().default(false),
     knowledgeRefreshed: boolean('knowledge_refreshed').notNull().default(false),

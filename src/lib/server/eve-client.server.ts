@@ -2,6 +2,7 @@ import '@tanstack/react-start/server-only'
 
 import { Client } from 'eve/client'
 import { getServerEnv } from '@/lib/env.server'
+import type { ScanProgress } from '@/lib/scan-progress'
 
 let cachedClient: Client | undefined
 
@@ -46,7 +47,7 @@ export interface EveScanSession {
   readonly sessionId: string
   /** Consumes the event stream until the turn settles. */
   readonly settle: (
-    onPhase: (phase: string) => Promise<void>,
+    onProgress: (progress: ScanProgress) => Promise<void>,
   ) => Promise<EveTurnOutcome>
 }
 
@@ -93,19 +94,20 @@ interface StreamResponse
 function responseSession(response: StreamResponse): EveScanSession {
   return {
     sessionId: response.sessionId,
-    settle: async (onPhase) => {
+    settle: async (onProgress) => {
       let message: string | undefined
       let failure: string | undefined
       let status: EveTurnOutcome['status'] = 'waiting'
-      let lastPhase: string | undefined
+      let lastProgress: string | undefined
 
       for await (const event of response) {
         switch (event.type) {
           case 'action.partial': {
             const output = readPartialOutput(event.data)
-            if (output?.phase && output.phase !== lastPhase) {
-              lastPhase = output.phase
-              await onPhase(output.phase)
+            const serialized = output ? JSON.stringify(output) : undefined
+            if (output && serialized !== lastProgress) {
+              lastProgress = serialized
+              await onProgress(output)
             }
             break
           }
@@ -168,11 +170,34 @@ function readParkedRequest(data: unknown): string | undefined {
   return undefined
 }
 
-function readPartialOutput(data: unknown): { phase?: string } | undefined {
+function readPartialOutput(data: unknown): ScanProgress | undefined {
   if (typeof data !== 'object' || data === null) return undefined
   const result = (data as { result?: { output?: unknown } }).result
   const output = result?.output
   if (typeof output !== 'object' || output === null) return undefined
-  const phase = (output as { phase?: unknown }).phase
-  return typeof phase === 'string' ? { phase } : undefined
+  const candidate = output as Record<string, unknown>
+  if (
+    typeof candidate.phase !== 'string' ||
+    typeof candidate.completed !== 'number' ||
+    typeof candidate.total !== 'number'
+  ) {
+    return undefined
+  }
+  return {
+    phase: candidate.phase,
+    completed: candidate.completed,
+    total: candidate.total,
+    ...(typeof candidate.detail === 'string'
+      ? { detail: candidate.detail }
+      : {}),
+    ...(typeof candidate.scannerCompleted === 'number'
+      ? { scannerCompleted: candidate.scannerCompleted }
+      : {}),
+    ...(typeof candidate.scannerTotal === 'number'
+      ? { scannerTotal: candidate.scannerTotal }
+      : {}),
+    ...(typeof candidate.targetFileCount === 'number'
+      ? { targetFileCount: candidate.targetFileCount }
+      : {}),
+  }
 }
