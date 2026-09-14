@@ -26,6 +26,10 @@
 <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-yes-0f766e.svg">
 </p>
 
+<p align="center">
+  <img src="docs/codetend-thumbnail.png" alt="CodeTend turning tangled technical debt into a healthy repository structure" width="960">
+</p>
+
 ---
 
 > [!WARNING]
@@ -103,8 +107,16 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 ## 🖥️ Using it
 
 <p align="center">
-  <img src="docs/repository-page.png" alt="CodeTend repository page showing the overall score, per-scanner grades, active findings and change-over-time charts" width="820">
+  <img src="docs/dashboard.png" alt="CodeTend dashboard showing three example repositories with scores, grades and finding counts" width="820">
 </p>
+
+<p align="center"><em>Repository health at a glance. All data shown is illustrative.</em></p>
+
+<p align="center">
+  <img src="docs/repository-page.png" alt="CodeTend repository page showing an example overall score, finding lifecycle counts, repository knowledge and change-over-time charts" width="820">
+</p>
+
+<p align="center"><em>Drill into score trends, findings and the repository knowledge model.</em></p>
 
 1. **Add a repository** from the repositories available to the configured
    GitHub App or token, or use the URL fallback for another Git host.
