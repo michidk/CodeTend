@@ -160,7 +160,7 @@ export const repositoryKnowledge = pgTable('repository_knowledge', {
   updatedAt,
 })
 
-/** Generated, security-specific context used by discovery and prioritization. */
+/** Durable agent- and operator-maintained context used by security reviews. */
 export const repositorySecurityProfiles = pgTable(
   'repository_security_profiles',
   {

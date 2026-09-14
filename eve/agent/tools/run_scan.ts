@@ -216,6 +216,7 @@ export default defineWorkflowTool({
           gitnexusRepo,
           targetFiles,
           targetFileCount: eligibleTargetFiles.length,
+          securityProfile: request.securityProfile,
         }),
         outputSchema: knowledgeOutputSchema,
       })) as unknown as KnowledgeAgentOutput | null
@@ -268,7 +269,10 @@ export default defineWorkflowTool({
     completed += 1
     const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
 
-    const securityProfile = securityProfileFromKnowledge(knowledge)
+    const securityProfile =
+      (knowledge.refreshed
+        ? knowledge.summary.securityProfile
+        : request.securityProfile) ?? securityProfileFromKnowledge(knowledge)
 
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.

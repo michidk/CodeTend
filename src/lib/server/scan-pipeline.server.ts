@@ -326,9 +326,12 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     const gitnexus = env.GITNEXUS_ENABLED ? await ensureGitNexusServer() : false
     await throwIfCancellationRequested(scanId)
 
-    const [knowledge, openFindings] = await Promise.all([
+    const [knowledge, securityProfile, openFindings] = await Promise.all([
       db.query.repositoryKnowledge.findFirst({
         where: eq(repositoryKnowledge.repositoryId, repository.id),
+      }),
+      db.query.repositorySecurityProfiles.findFirst({
+        where: eq(repositorySecurityProfiles.repositoryId, repository.id),
       }),
       db.query.findings.findMany({
         where: and(
@@ -366,7 +369,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       maxFiles: scanConfiguration.maxFiles,
       fileGlob: scanConfiguration.fileGlob,
       maxCostUsd: scanConfiguration.maxCostUsd,
-      securityProfile: null,
+      securityProfile: securityProfile?.profile ?? null,
       validation: {
         enabled: env.TECDEBT_VALIDATION_ENABLED,
         runner: env.TECDEBT_VALIDATION_RUNNER,
