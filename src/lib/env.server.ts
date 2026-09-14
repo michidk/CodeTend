@@ -20,14 +20,6 @@ const serverSchema = {
   TECDEBT_MAX_ACTIVE_PATCHES: z.coerce.number().int().min(1).max(32).default(1),
   TECDEBT_MAX_DAILY_COST_USD: z.coerce.number().positive().optional(),
   TECDEBT_DEFAULT_SCAN_COST_USD: z.coerce.number().positive().optional(),
-  TECDEBT_DEEP_WORKERS: z.coerce.number().int().min(1).max(4).default(2),
-  TECDEBT_DEEP_MAX_RUNS: z.coerce.number().int().min(1).max(12).default(6),
-  TECDEBT_DEEP_STOP_AFTER_NO_NEW: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(6)
-    .default(2),
   TECDEBT_VALIDATION_ENABLED: booleanString.default(false),
   TECDEBT_VALIDATION_RUNNER: z
     .enum(['auto', 'docker', 'disabled'])
@@ -99,10 +91,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       TECDEBT_MAX_DAILY_COST_USD: runtimeEnvironment.TECDEBT_MAX_DAILY_COST_USD,
       TECDEBT_DEFAULT_SCAN_COST_USD:
         runtimeEnvironment.TECDEBT_DEFAULT_SCAN_COST_USD,
-      TECDEBT_DEEP_WORKERS: runtimeEnvironment.TECDEBT_DEEP_WORKERS,
-      TECDEBT_DEEP_MAX_RUNS: runtimeEnvironment.TECDEBT_DEEP_MAX_RUNS,
-      TECDEBT_DEEP_STOP_AFTER_NO_NEW:
-        runtimeEnvironment.TECDEBT_DEEP_STOP_AFTER_NO_NEW,
       TECDEBT_VALIDATION_ENABLED: runtimeEnvironment.TECDEBT_VALIDATION_ENABLED,
       TECDEBT_VALIDATION_RUNNER: runtimeEnvironment.TECDEBT_VALIDATION_RUNNER,
       TECDEBT_VALIDATION_IMAGE: runtimeEnvironment.TECDEBT_VALIDATION_IMAGE,

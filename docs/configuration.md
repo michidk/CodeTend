@@ -43,14 +43,6 @@ boundary in front of it.
 | `TECDEBT_SCANNER_CONCURRENCY` | `4` | How many scanner subagents run at once inside one scan |
 | `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION` | unlimited | Cumulative input-token ceiling per knowledge, scanner or fixer session. A session that reaches it parks the scan until an operator approves more budget; prefer the USD caps. |
 
-## Deep security review
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `TECDEBT_DEEP_WORKERS` | `2` | Worker pool for bounded deep passes |
-| `TECDEBT_DEEP_MAX_RUNS` | `6` | Hard ceiling on deep passes per scan |
-| `TECDEBT_DEEP_STOP_AFTER_NO_NEW` | `2` | Stop after this many consecutive passes without a new candidate |
-
 ## Isolated validation
 
 | Variable | Default | Purpose |

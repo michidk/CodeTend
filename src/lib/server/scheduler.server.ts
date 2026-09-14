@@ -157,7 +157,9 @@ async function tick(state: SchedulerState) {
     )
     if (!next) return
 
-    const scanId = await startScan(next.repositoryId, 'schedule')
+    const scanId = await startScan(next.repositoryId, 'schedule', {
+      maxFiles: settings.maxFiles,
+    })
     if (!scanId) return
     await db.transaction(async (transaction) => {
       await transaction

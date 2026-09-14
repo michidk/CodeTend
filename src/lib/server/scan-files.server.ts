@@ -13,11 +13,7 @@ import { join, resolve } from 'node:path'
 import { z } from 'zod'
 import { getServerEnv } from '@/lib/env.server'
 import { scannerResultSchema } from '@/lib/findings'
-import type {
-  ScanMode,
-  ScanTarget,
-  SecurityProfile,
-} from '@/lib/security-scans'
+import type { ScanTarget, SecurityProfile } from '@/lib/security-scans'
 
 /**
  * The app and the Eve runtime exchange scan requests and results through
@@ -94,15 +90,10 @@ export interface ScanRequestFile {
     readonly fileCount: number | null
   } | null
   readonly previousCommitSha: string | null
-  readonly mode: ScanMode
   readonly target: ScanTarget
+  readonly maxFiles: number
   readonly maxCostUsd: number | null
   readonly securityProfile: SecurityProfile | null
-  readonly deep: {
-    readonly workers: number
-    readonly maxDiscoveryRuns: number
-    readonly stopAfterNoNew: number
-  }
   readonly validation: {
     readonly enabled: boolean
     readonly runner: 'auto' | 'docker' | 'disabled'
@@ -275,6 +266,7 @@ const scanResultFileSchema = z.object({
     )
     .default([]),
   targetFiles: z.array(z.string()).default([]),
+  targetFileCount: z.number().int().nonnegative().default(0),
   finishedAt: z.string(),
 })
 

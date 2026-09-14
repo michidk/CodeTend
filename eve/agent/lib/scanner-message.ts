@@ -54,6 +54,7 @@ export function scannerAgentMessage(input: {
     `Checkout path inside your sandbox (read-only): ${input.repoPath}`,
     `Commit: ${workspace.commitSha}`,
     `Tracked files: ${workspace.fileCount}`,
+    `Review sample: ${input.targetFiles.length} files`,
     `Top-level entries: ${workspace.topLevel.join(', ')}`,
     `Languages: ${knowledge.summary.languages.join(', ') || 'unknown — infer them'}`,
     `Frameworks: ${knowledge.summary.frameworks.join(', ') || 'unknown — infer them'}`,
@@ -61,23 +62,20 @@ export function scannerAgentMessage(input: {
   )
 
   parts.push('', '## Scan target', targetDescription(input.target))
-  if (input.targetFiles.length > 0 && input.target.kind !== 'repository') {
+  if (input.targetFiles.length > 0) {
     parts.push(
-      'Primary in-scope files:',
-      '<target-files>',
-      ...input.targetFiles.slice(0, 500).map((path) => `- ${path}`),
-      ...(input.targetFiles.length > 500
-        ? [`- [${input.targetFiles.length - 500} additional files omitted]`]
-        : []),
-      '</target-files>',
-      'Read directly supporting code as needed, but report only findings whose root cause or newly introduced attack path is within this target.',
+      'Files in this review sample:',
+      '<review-sample>',
+      ...input.targetFiles.map((path) => `- ${path}`),
+      '</review-sample>',
+      'Inspect only files in this review sample. Report only findings whose root cause or newly introduced attack path is in one of these files. Do not claim complete target coverage when the sample excludes target files.',
     )
   }
 
   if (input.gitnexusRepo) {
     parts.push(
       '',
-      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (always pass repo: "${input.gitnexusRepo}"). Useful tools: query (semantic/keyword search over symbols and execution flows), context (callers/callees of a symbol), impact (blast radius), check (import cycles), trace (paths between symbols). It is an accelerator only; the files are the ground truth and languages GitNexus does not parse must still be analyzed directly.`,
+      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (always pass repo: "${input.gitnexusRepo}"). Useful tools: query (semantic/keyword search over symbols and execution flows), context (callers/callees of a symbol), impact (blast radius), check (import cycles), trace (paths between symbols). It is an accelerator only; follow results only into files in the review sample. Those files are the ground truth and languages GitNexus does not parse must still be analyzed directly.`,
     )
   }
 
@@ -155,10 +153,10 @@ export function scannerAgentMessage(input: {
     '',
     '## Task',
     scanner.hypotheses.length > 0
-      ? 'First verify every hypothesis above. Then analyze the entire repository for this dimension and report any distinct new problems you find with clear evidence. Return the structured result.'
+      ? 'First verify every in-sample hypothesis above. Then analyze the review sample for this dimension and report any distinct new problems you find with clear evidence. Return the structured result.'
       : input.target.kind === 'repository'
-        ? 'Analyze the entire repository for this dimension and return the structured result.'
-        : 'Analyze the configured target and its directly supporting code for this dimension and return the structured result.',
+        ? 'Analyze the repository review sample for this dimension and return the structured result.'
+        : 'Analyze the configured target review sample for this dimension and return the structured result.',
     'Report coverage honestly: list the reviewed surfaces, every deferred or excluded area with a reason, and open questions. Use partial or unknown rather than complete when sampling, context limits, missing generated code, unavailable tools, or unresolved paths leave a material gap; the app only lets a scan resolve a tracked finding when coverage of its paths is complete.',
   )
   return parts.join('\n')

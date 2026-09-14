@@ -13,7 +13,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getErrorMessage } from '@/lib/error-message'
-import type { ScanMode, ScanTarget } from '@/lib/security-scans'
+import {
+  DEFAULT_SCAN_MAX_FILES,
+  MAX_SCAN_MAX_FILES,
+  SCAN_FILE_BUDGET_PRESETS,
+  type ScanTarget,
+} from '@/lib/security-scans'
 import { triggerConfiguredScan } from '@/lib/server/repositories'
 
 export function ScanDialog({
@@ -27,7 +32,7 @@ export function ScanDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onStarted: () => Promise<void>
 }) {
-  const [mode, setMode] = useState<ScanMode>('standard')
+  const [maxFiles, setMaxFiles] = useState(String(DEFAULT_SCAN_MAX_FILES))
   const [scope, setScope] = useState<'repository' | 'paths'>('repository')
   const [pathText, setPathText] = useState('')
   const [maxCost, setMaxCost] = useState('')
@@ -43,6 +48,17 @@ export function ScanDialog({
       return
     }
     const parsedCost = maxCost.trim() ? Number(maxCost) : null
+    const parsedMaxFiles = Number(maxFiles)
+    if (
+      !Number.isInteger(parsedMaxFiles) ||
+      parsedMaxFiles < 1 ||
+      parsedMaxFiles > MAX_SCAN_MAX_FILES
+    ) {
+      toast.error(
+        `The file budget must be between 1 and ${MAX_SCAN_MAX_FILES}.`,
+      )
+      return
+    }
     if (
       parsedCost !== null &&
       (!Number.isFinite(parsedCost) || parsedCost <= 0)
@@ -56,9 +72,14 @@ export function ScanDialog({
     setSubmitting(true)
     try {
       await triggerConfiguredScan({
-        data: { repositoryId, mode, target, maxCostUsd: parsedCost },
+        data: {
+          repositoryId,
+          target,
+          maxFiles: parsedMaxFiles,
+          maxCostUsd: parsedCost,
+        },
       })
-      toast.success(`${mode === 'deep' ? 'Deep scan' : 'Scan'} started`)
+      toast.success('Scan started')
       onOpenChange(false)
       await onStarted()
     } catch (error) {
@@ -74,42 +95,44 @@ export function ScanDialog({
         <DialogHeader>
           <DialogTitle>Start security review</DialogTitle>
           <DialogDescription>
-            Standard scans make one bounded pass per scanner. Deep scans run
-            additional independent security audits until the configured
-            convergence limit is reached.
+            Set how many files the model-backed review may inspect. CodeTend
+            prioritizes high-signal files and records anything outside the
+            sample as partial coverage.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold">Depth</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(['standard', 'deep'] as const).map((value) => (
-                <label
+          <div className="space-y-2">
+            <Label htmlFor="scan-max-files">Review budget (files) *</Label>
+            <div className="flex flex-wrap gap-2">
+              {SCAN_FILE_BUDGET_PRESETS.map((value) => (
+                <Button
                   key={value}
-                  className="flex cursor-pointer items-start gap-2 rounded-xl border p-3"
+                  type="button"
+                  size="sm"
+                  variant={maxFiles === String(value) ? 'default' : 'outline'}
+                  onClick={() => setMaxFiles(String(value))}
                 >
-                  <input
-                    type="radio"
-                    name="scan-mode"
-                    value={value}
-                    checked={mode === value}
-                    onChange={() => setMode(value)}
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold capitalize">
-                      {value}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {value === 'standard'
-                        ? 'Fast, broad scanner pass.'
-                        : 'Bounded independent security passes.'}
-                    </span>
-                  </span>
-                </label>
+                  {value.toLocaleString()}
+                </Button>
               ))}
             </div>
-          </fieldset>
+            <Input
+              id="scan-max-files"
+              required
+              type="number"
+              min={1}
+              max={MAX_SCAN_MAX_FILES}
+              step={1}
+              value={maxFiles}
+              onChange={(event) => setMaxFiles(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              At most this many target files are available to the knowledge and
+              scanner agents. Source, entry-point, configuration, dependency,
+              and security-sensitive files are prioritized.
+            </p>
+          </div>
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-semibold">Target</legend>

@@ -8,6 +8,7 @@ import type {
   ScanResult,
 } from '../lib/contract'
 import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
+import { selectReviewFiles } from '../lib/file-sampling'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -73,7 +74,37 @@ export default defineWorkflowTool({
     yield cloning
     const workspace = await cloneRepository(request)
     const repoPath = sandboxRepoPath(workspace.name)
-    const targetFiles = await resolveTargetFiles(request, workspace)
+    const allTargetFiles = await resolveTargetFiles(request, workspace)
+    const priorityPaths = request.scanners.flatMap((scanner) =>
+      scanner.hypotheses.flatMap((hypothesis) =>
+        hypothesis.locations.map((location) => location.path),
+      ),
+    )
+    const allTargetFileSet = new Set(allTargetFiles)
+    // Requests written by an older app during a rolling deployment do not
+    // carry maxFiles; keep the new runtime bounded in that compatibility case.
+    const maxFiles = request.maxFiles ?? 300
+    const targetFiles = selectReviewFiles({
+      candidates: workspace.files.filter((file) =>
+        allTargetFileSet.has(file.path),
+      ),
+      maxFiles,
+      priorityPaths,
+    })
+    const sampled = targetFiles.length < allTargetFiles.length
+    const targetFileSet = new Set(targetFiles)
+    const scanners = request.scanners.map((scanner) => ({
+      ...scanner,
+      hypotheses: sampled
+        ? scanner.hypotheses.filter(
+            (hypothesis) =>
+              hypothesis.locations.length > 0 &&
+              hypothesis.locations.every((location) =>
+                targetFileSet.has(location.path),
+              ),
+          )
+        : scanner.hypotheses,
+    }))
 
     const auditing: Progress = { phase: 'dependency audit', detail: 'OSV' }
     yield auditing
@@ -114,6 +145,8 @@ export default defineWorkflowTool({
           previous: request.knowledge,
           staleness,
           gitnexusRepo,
+          targetFiles,
+          targetFileCount: allTargetFiles.length,
         }),
         outputSchema: knowledgeOutputSchema,
       })) as unknown as KnowledgeAgentOutput | null
@@ -164,19 +197,15 @@ export default defineWorkflowTool({
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.
     const outcomes: ScannerOutcome[] = []
-    for (
-      let start = 0;
-      start < request.scanners.length;
-      start += SCANNER_CONCURRENCY
-    ) {
-      const batch = request.scanners.slice(start, start + SCANNER_CONCURRENCY)
+    for (let start = 0; start < scanners.length; start += SCANNER_CONCURRENCY) {
+      const batch = scanners.slice(start, start + SCANNER_CONCURRENCY)
       outcomes.push(
         ...(await Promise.all(
           batch.map(async (scanner): Promise<ScannerOutcome> => {
             const startedAt = await nowIso()
             const message = scannerAgentMessage({
               scanner,
-              siblingScanners: request.scanners,
+              siblingScanners: scanners,
               repoPath,
               repositoryName: request.repositoryName,
               workspace,
@@ -231,87 +260,11 @@ export default defineWorkflowTool({
       )
     }
 
-    if (request.mode === 'deep') {
-      const securityIndex = outcomes.findIndex(
-        (outcome) => outcome.scannerId === 'security',
-      )
-      const securityScanner = request.scanners.find(
-        (entry) => entry.id === 'security',
-      )
-      if (securityIndex >= 0 && securityScanner) {
-        const original = outcomes[securityIndex]
-        const deepResults: ScannerOutcome[] = [original]
-        const seen = findingFingerprints(original.result)
-        let withoutNew = 0
-        let runNumber = 1
-        while (
-          runNumber < request.deep.maxDiscoveryRuns &&
-          withoutNew < request.deep.stopAfterNoNew
-        ) {
-          const waveSize = Math.min(
-            request.deep.workers,
-            request.deep.maxDiscoveryRuns - runNumber,
-          )
-          const wave = await Promise.all(
-            Array.from({ length: waveSize }, async (_, offset) => {
-              const scanner = {
-                ...securityScanner,
-                hypotheses: [],
-              }
-              const startedAt = await nowIso()
-              try {
-                const result = await ctx.agent({
-                  key: `scanner:security:deep:${runNumber + offset + 1}`,
-                  target: 'scanner',
-                  message: `${scannerAgentMessage({
-                    scanner,
-                    siblingScanners: request.scanners,
-                    repoPath,
-                    repositoryName: request.repositoryName,
-                    workspace,
-                    knowledge,
-                    gitnexusRepo,
-                    previousCommitSha: request.previousCommitSha ?? null,
-                    target: request.target,
-                    targetFiles,
-                    securityProfile,
-                  })}\n\nThis is an independent deep-scan audit. Approach the target from a fresh angle and do not assume earlier workers found every vulnerability.`,
-                  outputSchema: request.outputSchema as JsonObject,
-                })
-                return {
-                  scannerId: 'security',
-                  ...scannerOutput(result),
-                  startedAt,
-                  finishedAt: await nowIso(),
-                }
-              } catch (error) {
-                return {
-                  scannerId: 'security',
-                  status: 'failed' as const,
-                  error: describeError(error),
-                  startedAt,
-                  finishedAt: await nowIso(),
-                }
-              }
-            }),
-          )
-          for (const outcome of wave) {
-            deepResults.push(outcome)
-            const current = findingFingerprints(outcome.result)
-            let foundNew = false
-            for (const fingerprint of current) {
-              if (!seen.has(fingerprint)) foundNew = true
-              seen.add(fingerprint)
-            }
-            withoutNew = foundNew ? 0 : withoutNew + 1
-          }
-          runNumber += waveSize
-        }
-        outcomes[securityIndex] = aggregateDeepOutcomes(deepResults)
-      }
-    }
-
-    const coverage = aggregateCoverage(outcomes)
+    const coverage = aggregateCoverage(
+      outcomes,
+      allTargetFiles.length - targetFiles.length,
+      maxFiles,
+    )
     const candidates = outcomes
       .filter((outcome) => outcome.scannerId === 'security')
       .flatMap((outcome) => {
@@ -358,13 +311,17 @@ export default defineWorkflowTool({
       knowledge,
       securityProfile: {
         profile: securityProfile,
-        generated: request.securityProfile === null,
+        generated:
+          request.securityProfile === null &&
+          request.target.kind === 'repository' &&
+          !sampled,
       },
       dependencyAudit,
       scanners: outcomes,
       coverage,
       validations,
       targetFiles,
+      targetFileCount: allTargetFiles.length,
       finishedAt: await nowIso(),
     }
     await writeScanResult(result)
@@ -478,104 +435,29 @@ function asScannerResult(value: unknown): RawScannerResult | null {
     : null
 }
 
-function findingFingerprints(value: unknown): Set<string> {
-  const result = asScannerResult(value)
-  return new Set(
-    (result?.findings ?? [])
-      .map((finding) => finding.fingerprint)
-      .filter((value): value is string => typeof value === 'string'),
-  )
-}
-
-function aggregateDeepOutcomes(
+function aggregateCoverage(
   outcomes: readonly ScannerOutcome[],
-): ScannerOutcome {
-  const completed = outcomes.filter(
-    (outcome) =>
-      outcome.status === 'completed' && asScannerResult(outcome.result),
-  )
-  const firstOutcome = outcomes[0]
-  if (completed.length === 0 && firstOutcome) return firstOutcome
-  if (completed.length === 0) {
-    return {
-      scannerId: 'security',
-      status: 'failed',
-      error: 'Deep scan produced no worker outcomes.',
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-    }
-  }
-
-  const findings = new Map<string, Record<string, unknown>>()
-  const verdicts = new Map<number, Record<string, unknown>>()
-  const summaries: string[] = []
-  const coverages: ScanCoverage[] = []
-  for (const outcome of completed) {
-    const result = asScannerResult(outcome.result)
-    if (!result) continue
-    if (result.summary) summaries.push(result.summary)
-    if (result.coverage) coverages.push(result.coverage)
-    for (const finding of result.findings ?? []) {
-      const fingerprint = finding.fingerprint
-      if (typeof fingerprint !== 'string') continue
-      const previous = findings.get(fingerprint)
-      if (!previous || findingStrength(finding) > findingStrength(previous)) {
-        findings.set(fingerprint, finding)
-      }
-    }
-    for (const verdict of result.hypothesisVerdicts ?? []) {
-      const id = verdict.previousFindingId
-      if (typeof id === 'number' && !verdicts.has(id)) verdicts.set(id, verdict)
-    }
-  }
-
-  return {
-    scannerId: 'security',
-    status: 'completed',
-    result: {
-      summary:
-        `Deep security scan combined ${completed.length} completed independent audits. ${summaries[0] ?? ''}`.trim(),
-      findings: [...findings.values()],
-      hypothesisVerdicts: [...verdicts.values()],
-      coverage: mergeCoverages(coverages),
-    },
-    error:
-      completed.length < outcomes.length
-        ? `${outcomes.length - completed.length} deep-scan worker(s) failed; completed results were retained.`
-        : undefined,
-    startedAt: outcomes[0]?.startedAt ?? new Date().toISOString(),
-    finishedAt:
-      outcomes.at(-1)?.finishedAt ??
-      outcomes[0]?.finishedAt ??
-      new Date().toISOString(),
-  }
-}
-
-const SEVERITY_STRENGTH: Record<string, number> = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-}
-const CONFIDENCE_STRENGTH: Record<string, number> = {
-  high: 3,
-  medium: 2,
-  low: 1,
-}
-
-function findingStrength(finding: Record<string, unknown>): number {
-  return (
-    (SEVERITY_STRENGTH[String(finding.severity)] ?? 0) * 10 +
-    (CONFIDENCE_STRENGTH[String(finding.confidence)] ?? 0)
-  )
-}
-
-function aggregateCoverage(outcomes: readonly ScannerOutcome[]): ScanCoverage {
-  return mergeCoverages(
+  deferredFileCount = 0,
+  maxFiles?: number,
+): ScanCoverage {
+  const coverage = mergeCoverages(
     outcomes
       .map((outcome) => asScannerResult(outcome.result)?.coverage)
       .filter((coverage): coverage is ScanCoverage => coverage !== undefined),
   )
+  if (deferredFileCount <= 0) return coverage
+  return {
+    ...coverage,
+    completeness:
+      coverage.completeness === 'unknown' ? 'unknown' : ('partial' as const),
+    deferred: [
+      ...coverage.deferred,
+      {
+        path: `${deferredFileCount} target files outside the review sample`,
+        reason: `The review budget was capped at ${maxFiles ?? 'the configured number of'} files.`,
+      },
+    ],
+  }
 }
 
 function mergeCoverages(coverages: readonly ScanCoverage[]): ScanCoverage {

@@ -3,6 +3,10 @@ import { z } from 'zod'
 export const SCAN_MODES = ['standard', 'deep'] as const
 export type ScanMode = (typeof SCAN_MODES)[number]
 
+export const DEFAULT_SCAN_MAX_FILES = 300
+export const MAX_SCAN_MAX_FILES = 10_000
+export const SCAN_FILE_BUDGET_PRESETS = [100, 300, 1_000] as const
+
 const repositoryPathSchema = z
   .string()
   .trim()
@@ -70,6 +74,9 @@ export interface ScanManifest {
   readonly revision: string
   readonly target: ScanTarget
   readonly mode: ScanMode
+  readonly maxFiles: number
+  readonly reviewedFileCount: number | null
+  readonly targetFileCount: number | null
   readonly model: string | null
   readonly scannerVersions: Record<string, string>
   readonly artifactHashes: Record<string, string>
@@ -106,8 +113,8 @@ export function coverageAllowsResolution(input: {
     return false
   }
   if (
-    input.target?.kind === 'diff' &&
-    input.findingPaths.some((path) => !(input.targetFiles ?? []).includes(path))
+    input.targetFiles &&
+    input.findingPaths.some((path) => !input.targetFiles?.includes(path))
   ) {
     return false
   }

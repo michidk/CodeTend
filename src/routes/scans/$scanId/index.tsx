@@ -112,8 +112,9 @@ function ScanPage() {
             {scan.gitnexusUsed ? ' · GitNexus' : ''}
             {scan.knowledgeRefreshed ? ' · knowledge refreshed' : ''}
             {' · '}
-            <span className="capitalize">{scan.mode}</span> ·{' '}
-            {describeTarget(scan.target)}
+            {scan.reviewedFileCount ?? '–'} of {scan.targetFileCount ?? '–'}
+            {' target files reviewed (budget '}
+            {scan.maxFiles}) · {describeTarget(scan.target)}
           </>
         }
         size="compact"

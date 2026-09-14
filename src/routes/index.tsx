@@ -41,7 +41,7 @@ function DashboardPage() {
   const scanNow = async (row: DashboardRow) => {
     try {
       await triggerScan({
-        data: { repositoryId: row.id, mode: 'standard' },
+        data: { repositoryId: row.id },
       })
       toast.success(`Scan started for ${row.name}`)
       await router.invalidate()

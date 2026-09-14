@@ -15,8 +15,8 @@ schedule / "Scan now"
         │   3. OSV lockfile dependency audit            (exact package versions)
         │   4. repository-knowledge refresh             (knowledge subagent, only if stale)
         │   5. subsystem dependency graph and cycles    (from the GitNexus index, optional)
-        │   6. threat-model-aware candidate discovery   (parallel, structured output)
-        │   7. bounded deep passes (deep mode only)     (convergence limited)
+        │   6. bounded file-sample review               (operator budget)
+        │   7. threat-model-aware candidate discovery   (parallel, structured output)
         │   8. isolated executable validation           (fail closed when unavailable)
         │   9. write data/results/scan-<id>.json        ("use step")
         ▼
@@ -137,9 +137,10 @@ snapshots all enrichment on each finding occurrence.
 
 Security Hygiene follows a staged review: editable repository security context
 and threat model → candidate discovery → safe isolated validation → attack-path
-and impact analysis → contextual ranking → coverage-aware lifecycle. Deep mode
-uses a small configurable worker pool, a hard run ceiling, and convergence
-stopping; it does not launch one agent per file.
+and impact analysis → contextual ranking → coverage-aware lifecycle. Operators
+set a maximum file sample per repository. Sampling is deterministic, favors
+high-signal source and security surfaces, and forces partial coverage whenever
+target files are deferred.
 
 Executable validation is fail closed. Commands run sequentially in a disposable
 Docker container with no network, all capabilities dropped,

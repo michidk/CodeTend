@@ -83,6 +83,17 @@ describe('coverage-aware lifecycle', () => {
       }),
     ).toBe(false)
   })
+
+  test('never resolves a finding outside an explicit review sample', () => {
+    expect(
+      coverageAllowsResolution({
+        coverage: completeCoverage,
+        target: { kind: 'repository' },
+        targetFiles: ['src/routes.ts'],
+        findingPaths: ['src/auth/session.ts'],
+      }),
+    ).toBe(false)
+  })
 })
 
 test('security profiles retain explicit empty defaults', () => {

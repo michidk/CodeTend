@@ -71,7 +71,9 @@ function sarifLevel(severity: string): 'error' | 'warning' | 'note' {
 export function toMarkdownScanReport(input: {
   readonly repository: string
   readonly revision: string
-  readonly mode: string
+  readonly maxFiles: number
+  readonly reviewedFileCount: number | null
+  readonly targetFileCount: number | null
   readonly target: unknown
   readonly coverage: {
     readonly completeness: string
@@ -89,7 +91,8 @@ export function toMarkdownScanReport(input: {
     `# Security scan: ${input.repository}`,
     '',
     `- Revision: \`${input.revision}\``,
-    `- Mode: ${input.mode}`,
+    `- Review budget: up to ${input.maxFiles} files`,
+    `- Review sample: ${input.reviewedFileCount ?? 'unknown'} of ${input.targetFileCount ?? 'unknown'} target files`,
     `- Target: \`${JSON.stringify(input.target)}\``,
     `- Coverage: ${input.coverage.completeness}`,
     `- Findings: ${input.findings.length}`,

@@ -64,18 +64,14 @@ export interface ScanRequest {
   readonly knowledge: PreviousKnowledge | null
   /** Commit analyzed by the previous completed scan, if any. */
   readonly previousCommitSha: string | null
-  readonly mode: 'standard' | 'deep'
   readonly target:
     | { readonly kind: 'repository' }
     | { readonly kind: 'paths'; readonly paths: readonly string[] }
     | { readonly kind: 'diff'; readonly base: string; readonly head: string }
   readonly maxCostUsd: number | null
+  /** Maximum source files the model-backed steps may inspect. */
+  readonly maxFiles?: number
   readonly securityProfile: SecurityProfile | null
-  readonly deep: {
-    readonly workers: number
-    readonly maxDiscoveryRuns: number
-    readonly stopAfterNoNew: number
-  }
   readonly validation: {
     readonly enabled: boolean
     readonly runner: 'auto' | 'docker' | 'disabled'
@@ -165,6 +161,7 @@ export interface ScanResult {
   readonly coverage: ScanCoverage
   readonly validations: readonly CandidateValidation[]
   readonly targetFiles: readonly string[]
+  readonly targetFileCount: number
   readonly finishedAt: string
 }
 

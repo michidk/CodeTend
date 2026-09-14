@@ -13,6 +13,10 @@ import {
   computeNextScanAt,
   isValidCronExpression,
 } from '@/lib/schedule'
+import {
+  MAX_SCAN_MAX_FILES,
+  SCAN_FILE_BUDGET_PRESETS,
+} from '@/lib/security-scans'
 import type { getScheduleSettings } from '@/lib/server/schedule-settings'
 import { updateScheduleSettings } from '@/lib/server/schedule-settings'
 import { cn } from '@/lib/utils'
@@ -30,19 +34,25 @@ export function ScheduleSettingsForm({
   const [cooldownMinutes, setCooldownMinutes] = useState(
     String(settings.cooldownMinutes),
   )
+  const [maxFiles, setMaxFiles] = useState(String(settings.maxFiles))
   const [submitting, setSubmitting] = useState(false)
 
   const cronValid = isValidCronExpression(cronExpression)
   const cooldown = Number(cooldownMinutes)
   const cooldownValid =
     Number.isInteger(cooldown) && cooldown >= 0 && cooldown <= 10_080
+  const fileBudget = Number(maxFiles)
+  const fileBudgetValid =
+    Number.isInteger(fileBudget) &&
+    fileBudget >= 1 &&
+    fileBudget <= MAX_SCAN_MAX_FILES
   const nextRun = cronValid
     ? computeNextScanAt(cronExpression, new Date())
     : null
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!cronValid || !cooldownValid) return
+    if (!cronValid || !cooldownValid || !fileBudgetValid) return
     setSubmitting(true)
     try {
       await updateScheduleSettings({
@@ -50,6 +60,7 @@ export function ScheduleSettingsForm({
           cronExpression: cronExpression.trim(),
           enabled,
           cooldownMinutes: cooldown,
+          maxFiles: fileBudget,
         },
       })
       toast.success('Schedule settings saved')
@@ -123,6 +134,41 @@ export function ScheduleSettingsForm({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="schedule-max-files">
+              Review budget per repository (files) *
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {SCAN_FILE_BUDGET_PRESETS.map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={maxFiles === String(value) ? 'default' : 'outline'}
+                  onClick={() => setMaxFiles(String(value))}
+                >
+                  {value.toLocaleString()}
+                </Button>
+              ))}
+            </div>
+            <Input
+              id="schedule-max-files"
+              required
+              type="number"
+              min={1}
+              max={MAX_SCAN_MAX_FILES}
+              step={1}
+              aria-invalid={!fileBudgetValid}
+              value={maxFiles}
+              onChange={(event) => setMaxFiles(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Every queued repository uses this maximum file sample. CodeTend
+              prioritizes high-signal files and marks larger targets as partial
+              coverage.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="cooldown">
               Cooldown between repositories (minutes) *
             </Label>
@@ -161,7 +207,9 @@ export function ScheduleSettingsForm({
       <div className="flex justify-end">
         <Button
           type="submit"
-          disabled={!cronValid || !cooldownValid || submitting}
+          disabled={
+            !cronValid || !cooldownValid || !fileBudgetValid || submitting
+          }
         >
           {submitting ? 'Saving…' : 'Save settings'}
         </Button>

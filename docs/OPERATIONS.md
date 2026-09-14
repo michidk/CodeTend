@@ -84,9 +84,8 @@ three-hour timeout, scanner failures increase, disk usage grows unexpectedly,
 or daily estimated cost approaches `TECDEBT_MAX_DAILY_COST_USD`. Application
 and Eve logs go to stdout/stderr for collection by the container platform.
 
-Deep reviews are bounded by `TECDEBT_DEEP_WORKERS`,
-`TECDEBT_DEEP_MAX_RUNS`, and `TECDEBT_DEEP_STOP_AFTER_NO_NEW`. Use
-`TECDEBT_DEFAULT_SCAN_COST_USD` to flag scans whose final estimated usage
+The global file review budget in Settings bounds model-backed repository work.
+Use `TECDEBT_DEFAULT_SCAN_COST_USD` to flag scans whose final estimated usage
 exceeds the expected per-scan budget; it is an accounting threshold, not a
 hard interruption point.
 

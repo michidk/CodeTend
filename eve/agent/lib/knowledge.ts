@@ -143,17 +143,24 @@ export function knowledgeAgentMessage(input: {
   previous: PreviousKnowledge | null
   staleness: StalenessReport
   gitnexusRepo: string | null
+  targetFiles: readonly string[]
+  targetFileCount: number
 }): string {
   const parts: string[] = [
     `Repository: ${input.repositoryName}`,
     `Checkout path inside your sandbox: ${input.repoPath}`,
     `Commit: ${input.workspace.commitSha}`,
     `Tracked files: ${input.workspace.fileCount}`,
+    `Review sample: ${input.targetFiles.length} of ${input.targetFileCount} target files`,
     `Top-level entries: ${input.workspace.topLevel.join(', ')}`,
+    'Only inspect files listed in the review sample below. This file budget applies to repository-knowledge work as well as the specialized reviews.',
+    '<review-sample>',
+    ...input.targetFiles.map((path) => `- ${path}`),
+    '</review-sample>',
   ]
   if (input.gitnexusRepo) {
     parts.push(
-      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (pass repo: "${input.gitnexusRepo}"). Use its query/context/impact tools and the clusters/processes resources to understand subsystems and execution flows faster, but verify against the files.`,
+      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (pass repo: "${input.gitnexusRepo}"). Use its query/context/impact tools and the clusters/processes resources to understand subsystems and execution flows faster, but only follow results into files in the review sample and verify against those files.`,
     )
   }
   if (input.previous) {

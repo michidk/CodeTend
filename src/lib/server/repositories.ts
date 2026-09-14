@@ -7,7 +7,7 @@ import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { validateRepositoryLocation } from '@/lib/repository-access'
-import { SCAN_MODES, scanTargetSchema } from '@/lib/security-scans'
+import { MAX_SCAN_MAX_FILES, scanTargetSchema } from '@/lib/security-scans'
 import { listAvailableGitHubRepositories } from '@/lib/server/github-repositories.server'
 import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import {
@@ -265,14 +265,11 @@ export const triggerScan = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       repositoryId: positiveId,
-      mode: z.enum(SCAN_MODES).default('standard'),
     }),
   )
   .handler(async ({ data }) => {
     ensureScheduler()
-    const scanId = await startScan(data.repositoryId, 'manual', {
-      mode: data.mode,
-    })
+    const scanId = await startScan(data.repositoryId, 'manual')
     if (scanId === null) {
       throw new DomainError(
         'conflict',
@@ -293,16 +290,16 @@ export const triggerConfiguredScan = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       repositoryId: positiveId,
-      mode: z.enum(SCAN_MODES),
       target: scanTargetSchema,
+      maxFiles: z.number().int().positive().max(MAX_SCAN_MAX_FILES),
       maxCostUsd: z.number().positive().max(10_000).nullable(),
     }),
   )
   .handler(async ({ data }) => {
     ensureScheduler()
     const scanId = await startScan(data.repositoryId, 'manual', {
-      mode: data.mode,
       target: data.target,
+      maxFiles: data.maxFiles,
       maxCostUsd: data.maxCostUsd,
     })
     if (scanId === null) {

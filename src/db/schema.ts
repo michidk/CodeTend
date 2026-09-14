@@ -83,6 +83,7 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   cronExpression: text('cron_expression').notNull().default('0 3 * * *'),
   enabled: boolean('enabled').notNull().default(true),
   cooldownMinutes: integer('cooldown_minutes').notNull().default(5),
+  maxFiles: integer('max_files').notNull().default(300),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
   createdAt,
@@ -217,6 +218,9 @@ export const scans = pgTable(
       .notNull()
       .default({ kind: 'repository' }),
     maxCostUsd: real('max_cost_usd'),
+    maxFiles: integer('max_files').notNull().default(300),
+    reviewedFileCount: integer('reviewed_file_count'),
+    targetFileCount: integer('target_file_count'),
     cancellationRequestedAt: timestamp('cancellation_requested_at', {
       withTimezone: true,
     }),

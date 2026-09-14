@@ -14,6 +14,7 @@ import {
   repositorySecurityProfiles,
   type ScanTrigger,
   scannerRuns,
+  scanScheduleSettings,
   scans,
   scheduledRepositoryQueue,
 } from '@/db/schema'
@@ -33,8 +34,8 @@ import {
   gradeForScore,
 } from '@/lib/scoring'
 import {
+  DEFAULT_SCAN_MAX_FILES,
   DEFAULT_SCAN_TARGET,
-  type ScanMode,
   type ScanTarget,
 } from '@/lib/security-scans'
 import {
@@ -79,8 +80,8 @@ export async function startScan(
   repositoryId: number,
   trigger: ScanTrigger,
   options: {
-    readonly mode?: ScanMode
     readonly target?: ScanTarget
+    readonly maxFiles?: number
     readonly maxCostUsd?: number | null
   } = {},
 ): Promise<number | null> {
@@ -163,6 +164,13 @@ export async function startScan(
     }
   }
 
+  const globalSettings =
+    options.maxFiles === undefined
+      ? await db.query.scanScheduleSettings.findFirst({
+          where: eq(scanScheduleSettings.id, 1),
+          columns: { maxFiles: true },
+        })
+      : null
   let scan: { id: number } | undefined
   try {
     const inserted = await db
@@ -170,8 +178,12 @@ export async function startScan(
       .values({
         repositoryId,
         trigger,
-        mode: options.mode ?? 'standard',
+        mode: 'standard',
         target: options.target ?? DEFAULT_SCAN_TARGET,
+        maxFiles:
+          options.maxFiles ??
+          globalSettings?.maxFiles ??
+          DEFAULT_SCAN_MAX_FILES,
         maxCostUsd:
           options.maxCostUsd ?? env.TECDEBT_DEFAULT_SCAN_COST_USD ?? null,
         status: 'queued',
@@ -246,7 +258,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     await throwIfCancellationRequested(scanId)
     const scanConfiguration = await db.query.scans.findFirst({
       where: eq(scans.id, scanId),
-      columns: { mode: true, target: true, maxCostUsd: true },
+      columns: { target: true, maxFiles: true, maxCostUsd: true },
     })
     if (!scanConfiguration) throw new Error('Scan configuration disappeared')
     if (await cancellationRequested(scanId)) {
@@ -310,15 +322,10 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     await writeScanRequest({
       scanId,
       previousCommitSha: previousScan?.commitSha ?? null,
-      mode: scanConfiguration.mode,
       target: scanConfiguration.target,
+      maxFiles: scanConfiguration.maxFiles,
       maxCostUsd: scanConfiguration.maxCostUsd,
       securityProfile: securityProfile?.profile ?? null,
-      deep: {
-        workers: env.TECDEBT_DEEP_WORKERS,
-        maxDiscoveryRuns: env.TECDEBT_DEEP_MAX_RUNS,
-        stopAfterNoNew: env.TECDEBT_DEEP_STOP_AFTER_NO_NEW,
-      },
       validation: {
         enabled: env.TECDEBT_VALIDATION_ENABLED,
         runner: env.TECDEBT_VALIDATION_RUNNER,
@@ -442,7 +449,7 @@ async function persistScanResult(
   const usage = await loadScanUsage(scanId)
   const scanConfiguration = await db.query.scans.findFirst({
     where: eq(scans.id, scanId),
-    columns: { mode: true, target: true, maxCostUsd: true },
+    columns: { mode: true, target: true, maxFiles: true, maxCostUsd: true },
   })
   if (!scanConfiguration) throw new Error('Scan configuration disappeared')
   const countsPerScanner: FindingCounts[] = []
@@ -509,7 +516,10 @@ async function persistScanResult(
       scanId,
       scannerId: scanner.id,
       result: scannerResult,
-      coverage: outcome.result.coverage,
+      coverage:
+        result.targetFiles.length < result.targetFileCount
+          ? result.coverage
+          : outcome.result.coverage,
       target: scanConfiguration.target,
       targetFiles: result.targetFiles,
     })
@@ -551,7 +561,10 @@ async function persistScanResult(
       )
   }
 
-  if (result.knowledge.overview.trim().length > 0) {
+  const knowledgeAuthoritative =
+    scanConfiguration.target.kind === 'repository' &&
+    result.targetFiles.length === result.targetFileCount
+  if (knowledgeAuthoritative && result.knowledge.overview.trim().length > 0) {
     await db
       .insert(repositoryKnowledge)
       .values({
@@ -619,8 +632,10 @@ async function persistScanResult(
       phase: 'done',
       commitSha: result.commitSha,
       fileCount: result.fileCount,
+      reviewedFileCount: result.targetFiles.length,
+      targetFileCount: result.targetFileCount,
       gitnexusUsed: result.gitnexusUsed,
-      knowledgeRefreshed: result.knowledge.refreshed,
+      knowledgeRefreshed: knowledgeAuthoritative && result.knowledge.refreshed,
       overallScore,
       grade: gradeForScore(overallScore),
       counts,

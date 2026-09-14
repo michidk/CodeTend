@@ -87,8 +87,8 @@ schedule / "Scan now"
  Eve run_scan workflow (durable, resumable)
         │   fresh shallow clone → optional GitNexus index → OSV dependency audit
         │   → repository knowledge (refreshed only when grounding files changed)
-        │   → subsystem dependency graph → parallel scanner subagents (structured output)
-        │   → bounded deep security passes → isolated validation
+        │   → subsystem dependency graph → budgeted file sample
+        │   → parallel scanner subagents (structured output) → isolated validation
         ▼
  app enriches, prioritizes, reconciles, scores, persists and seals SARIF/Markdown artifacts
 ```
@@ -109,8 +109,9 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 1. **Add a repository** from the repositories available to the configured
    GitHub App or token, or use the URL fallback for another Git host.
 2. **Scan now**, or configure the global cron and queue cooldown in Settings.
-   Choose standard or bounded deep
-   mode, whole repository or selected paths, and an optional cost ceiling.
+   Choose a concrete file review budget, whole repository or selected paths,
+   and an optional cost ceiling. Larger targets are sampled deterministically
+   and recorded as partial coverage.
 3. Watch the phase update live: cloning → indexing → knowledge → scanning →
    reconciling.
 4. The repository page shows the overall score and grade, per-scanner scores,

@@ -18,7 +18,7 @@ function SettingsPage() {
     <Page width="form">
       <PageHeader
         title="Settings"
-        description="Control when the shared repository scan queue runs and how quickly it dispatches work."
+        description="Control when the shared repository scan queue runs, its per-repository review budget, and how quickly it dispatches work."
         size="compact"
       />
       <ScheduleSettingsForm settings={settings} />
