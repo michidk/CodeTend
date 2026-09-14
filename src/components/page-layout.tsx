@@ -93,7 +93,7 @@ export function PageHeader({
             ) : null}
           </div>
           {description ? (
-            <p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-muted-foreground">
+            <p className="mt-1 max-w-2xl break-words text-sm font-semibold leading-relaxed text-muted-foreground [&_code]:break-all">
               {description}
             </p>
           ) : null}
