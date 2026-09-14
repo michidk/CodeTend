@@ -1,6 +1,7 @@
 /**
- * Mints and caches GitHub App installation access tokens from
- * `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` / `GITHUB_APP_PRIVATE_KEY`.
+ * Resolves the GitHub App installation for a repository, then mints and
+ * caches its installation access token from `GITHUB_APP_ID` /
+ * `GITHUB_APP_PRIVATE_KEY`.
  * Installation tokens are valid for one hour; the "hosting control plane"
  * that operates CodeTend does not need to rotate or feed in a token itself —
  * CodeTend mints its own from the App credentials, cached in-process and
@@ -12,11 +13,10 @@
 const REFRESH_BUFFER_MS = 5 * 60 * 1000
 const GITHUB_API_URL = 'https://api.github.com'
 
-let cached: { token: string; expiresAt: number } | undefined
+const cachedTokens = new Map<string, { token: string; expiresAt: number }>()
 
 export interface GitHubAppCredentials {
   readonly appId: string
-  readonly installationId: string
   readonly privateKey: string
 }
 
@@ -24,10 +24,9 @@ export function readGitHubAppCredentials(
   env: NodeJS.ProcessEnv = process.env,
 ): GitHubAppCredentials | null {
   const appId = env.GITHUB_APP_ID?.trim()
-  const installationId = env.GITHUB_APP_INSTALLATION_ID?.trim()
   const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim()
-  if (!appId || !installationId || !privateKey) return null
-  return { appId, installationId, privateKey: normalizePrivateKey(privateKey) }
+  if (!appId || !privateKey) return null
+  return { appId, privateKey: normalizePrivateKey(privateKey) }
 }
 
 /** Accepts a PEM pasted with literal `\n` escapes as well as real newlines. */
@@ -65,10 +64,11 @@ async function signAppJwt(credentials: GitHubAppCredentials): Promise<string> {
 
 async function fetchInstallationToken(
   credentials: GitHubAppCredentials,
+  installationId: string,
 ): Promise<{ token: string; expiresAt: number }> {
   const jwt = await signAppJwt(credentials)
   const response = await fetch(
-    `${GITHUB_API_URL}/app/installations/${credentials.installationId}/access_tokens`,
+    `${GITHUB_API_URL}/app/installations/${installationId}/access_tokens`,
     {
       method: 'POST',
       headers: {
@@ -87,18 +87,52 @@ async function fetchInstallationToken(
   return { token: body.token, expiresAt: new Date(body.expires_at).getTime() }
 }
 
-/** Returns a cached installation token, minting a fresh one when needed. */
+async function resolveInstallationId(
+  credentials: GitHubAppCredentials,
+  owner: string,
+  repository: string,
+): Promise<string> {
+  const jwt = await signAppJwt(credentials)
+  const response = await fetch(
+    `${GITHUB_API_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/installation`,
+    {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!response.ok) {
+    throw new Error(
+      `GitHub App installation lookup failed for ${owner}/${repository} with ${response.status}: ${await response.text()}`,
+    )
+  }
+  const body = (await response.json()) as { id: number }
+  return String(body.id)
+}
+
+/** Resolves and returns a cached installation token for one repository. */
 export async function getGitHubAppToken(
   credentials: GitHubAppCredentials,
+  owner: string,
+  repository: string,
 ): Promise<string> {
+  const installationId = await resolveInstallationId(
+    credentials,
+    owner,
+    repository,
+  )
+  const cached = cachedTokens.get(installationId)
   if (cached && cached.expiresAt - REFRESH_BUFFER_MS > Date.now()) {
     return cached.token
   }
-  cached = await fetchInstallationToken(credentials)
-  return cached.token
+  const token = await fetchInstallationToken(credentials, installationId)
+  cachedTokens.set(installationId, token)
+  return token.token
 }
 
 /** Test-only: clears the module-level cache between cases. */
 export function resetGitHubAppTokenCache(): void {
-  cached = undefined
+  cachedTokens.clear()
 }

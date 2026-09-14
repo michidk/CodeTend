@@ -11,7 +11,6 @@ const { privateKey } = generateKeyPairSync('rsa', {
 
 const ENV_KEYS = [
   'GITHUB_APP_ID',
-  'GITHUB_APP_INSTALLATION_ID',
   'GITHUB_APP_PRIVATE_KEY',
   'GITHUB_TOKEN',
 ] as const
@@ -34,18 +33,21 @@ describe('resolveGitAuth', () => {
 
   test('prefers a minted GitHub App installation token over a plain token', async () => {
     process.env.GITHUB_APP_ID = '123'
-    process.env.GITHUB_APP_INSTALLATION_ID = '456'
     process.env.GITHUB_APP_PRIVATE_KEY = privateKey
     process.env.GITHUB_TOKEN = 'plain-token-should-lose'
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () =>
-      new Response(
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (String(input).endsWith('/repos/example/repo/installation')) {
+        return Response.json({ id: 456 })
+      }
+      return new Response(
         JSON.stringify({
           token: 'ghs_app_token',
           expires_at: new Date(Date.now() + 3_600_000).toISOString(),
         }),
         { status: 200 },
-      )) as typeof fetch
+      )
+    }) as typeof fetch
 
     try {
       const auth = await resolveGitAuth('https://github.com/example/repo.git')

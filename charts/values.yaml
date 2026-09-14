@@ -151,7 +151,6 @@ github:
   appAuth:
     existingSecret: ""
     appIdKey: GITHUB_APP_ID
-    installationIdKey: GITHUB_APP_INSTALLATION_ID
     privateKeyKey: GITHUB_APP_PRIVATE_KEY
 
 eve:

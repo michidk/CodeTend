@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test'
-import { listGitHubRepositoriesWithToken } from '@/lib/server/github-repositories.server'
+import { generateKeyPairSync } from 'node:crypto'
+import {
+  listGitHubRepositoriesWithApp,
+  listGitHubRepositoriesWithToken,
+} from '@/lib/server/github-repositories.server'
+
+const { privateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+})
 
 const repository = {
   full_name: 'example/private-repo',
@@ -10,6 +20,52 @@ const repository = {
 }
 
 describe('available GitHub repositories', () => {
+  test('combines repositories from every GitHub App installation', async () => {
+    const request = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const url = String(input)
+      if (url.includes('/app/installations?')) {
+        return Response.json([{ id: 10 }, { id: 20 }])
+      }
+      if (url.endsWith('/app/installations/10/access_tokens')) {
+        return Response.json({
+          token: 'token-10',
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        })
+      }
+      if (url.endsWith('/app/installations/20/access_tokens')) {
+        return Response.json({
+          token: 'token-20',
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        })
+      }
+      const authorization = new Headers(init?.headers).get('Authorization')
+      return Response.json({
+        repositories: [
+          {
+            ...repository,
+            full_name:
+              authorization === 'Bearer token-10'
+                ? 'first/private-repo'
+                : 'second/private-repo',
+          },
+        ],
+      })
+    }) as typeof fetch
+
+    const result = await listGitHubRepositoriesWithApp(
+      { appId: '123', privateKey },
+      request,
+    )
+
+    expect(result.map((row) => row.name)).toEqual([
+      'first/private-repo',
+      'second/private-repo',
+    ])
+  })
+
   test('reads repositories from an installation token', async () => {
     const urls: string[] = []
     const request = (async (input: string | URL | Request) => {

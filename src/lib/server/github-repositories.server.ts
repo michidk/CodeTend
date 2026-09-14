@@ -10,9 +10,10 @@ const REFRESH_BUFFER_MS = 5 * 60_000
 const PAGE_SIZE = 100
 const MAX_PAGES = 10
 
-let cachedInstallationToken:
-  | { readonly token: string; readonly expiresAt: number }
-  | undefined
+const cachedInstallationTokens = new Map<
+  string,
+  { readonly token: string; readonly expiresAt: number }
+>()
 
 export interface AvailableGitHubRepository {
   readonly name: string
@@ -63,7 +64,9 @@ async function getInstallationToken(
   appId: string,
   installationId: string,
   privateKey: string,
+  request: typeof fetch = fetch,
 ): Promise<string> {
+  const cachedInstallationToken = cachedInstallationTokens.get(installationId)
   if (
     cachedInstallationToken &&
     cachedInstallationToken.expiresAt - REFRESH_BUFFER_MS > Date.now()
@@ -71,7 +74,7 @@ async function getInstallationToken(
     return cachedInstallationToken.token
   }
 
-  const response = await fetch(
+  const response = await request(
     `${GITHUB_API_URL}/app/installations/${installationId}/access_tokens`,
     {
       method: 'POST',
@@ -87,11 +90,39 @@ async function getInstallationToken(
     readonly token: string
     readonly expires_at: string
   }
-  cachedInstallationToken = {
+  const cached = {
     token: body.token,
     expiresAt: new Date(body.expires_at).getTime(),
   }
-  return body.token
+  cachedInstallationTokens.set(installationId, cached)
+  return cached.token
+}
+
+export async function listGitHubRepositoriesWithApp(
+  credentials: { readonly appId: string; readonly privateKey: string },
+  request: typeof fetch = fetch,
+): Promise<AvailableGitHubRepository[]> {
+  const installationIds = await listAppInstallationIds(
+    credentials.appId,
+    credentials.privateKey,
+    request,
+  )
+  const repositoryGroups = await Promise.all(
+    installationIds.map(async (installationId) => {
+      const token = await getInstallationToken(
+        credentials.appId,
+        installationId,
+        credentials.privateKey,
+        request,
+      )
+      return fetchPages('/installation/repositories', token, request)
+    }),
+  )
+  const uniqueRepositories = new Map<string, GitHubRepositoryResponse>()
+  for (const repository of repositoryGroups.flat()) {
+    uniqueRepositories.set(repository.full_name, repository)
+  }
+  return toAvailableRepositories([...uniqueRepositories.values()])
 }
 
 function githubHeaders(token: string): HeadersInit {
@@ -104,18 +135,37 @@ function githubHeaders(token: string): HeadersInit {
 }
 
 function appCredentials(env: ServerEnv) {
-  if (
-    env.GITHUB_APP_ID &&
-    env.GITHUB_APP_INSTALLATION_ID &&
-    env.GITHUB_APP_PRIVATE_KEY
-  ) {
+  if (env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY) {
     return {
       appId: env.GITHUB_APP_ID,
-      installationId: env.GITHUB_APP_INSTALLATION_ID,
       privateKey: env.GITHUB_APP_PRIVATE_KEY,
     }
   }
   return null
+}
+
+async function listAppInstallationIds(
+  appId: string,
+  privateKey: string,
+  request: typeof fetch = fetch,
+): Promise<string[]> {
+  const jwt = createAppJwt(appId, privateKey)
+  const installationIds: string[] = []
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const response = await request(
+      `${GITHUB_API_URL}/app/installations?per_page=${PAGE_SIZE}&page=${page}`,
+      { headers: githubHeaders(jwt) },
+    )
+    if (!response.ok) {
+      throw new Error(
+        `GitHub App installation request failed (${response.status})`,
+      )
+    }
+    const rows = (await response.json()) as { readonly id: number }[]
+    installationIds.push(...rows.map((row) => String(row.id)))
+    if (rows.length < PAGE_SIZE) break
+  }
+  return installationIds
 }
 
 async function fetchPages(
@@ -191,13 +241,10 @@ export async function listAvailableGitHubRepositories(): Promise<{
   const credentials = appCredentials(env)
 
   if (credentials) {
-    const token = await getInstallationToken(
-      credentials.appId,
-      credentials.installationId,
-      credentials.privateKey,
-    )
-    const rows = await fetchPages('/installation/repositories', token)
-    return { configured: true, repositories: toAvailableRepositories(rows) }
+    return {
+      configured: true,
+      repositories: await listGitHubRepositoriesWithApp(credentials),
+    }
   } else if (env.GITHUB_TOKEN) {
     return {
       configured: true,

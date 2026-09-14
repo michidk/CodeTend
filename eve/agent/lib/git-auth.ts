@@ -1,7 +1,7 @@
 /**
  * Repository access for clones. For github.com URLs, CodeTend prefers a
  * GitHub App installation token it mints and caches itself from
- * `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` / `GITHUB_APP_PRIVATE_KEY`
+ * `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`
  * (see `./github-app-auth.ts`), then a plain `GITHUB_TOKEN`, then the local
  * `gh` CLI (`gh auth git-credential`) when `gh` is logged in, otherwise the
  * credential helpers already configured for Git.
@@ -26,7 +26,15 @@ export async function resolveGitAuth(repositoryUrl: string): Promise<GitAuth> {
   }
   const appCredentials = readGitHubAppCredentials()
   if (appCredentials) {
-    const token = await getGitHubAppToken(appCredentials)
+    const url = new URL(repositoryUrl)
+    const [owner, repositoryWithSuffix] = url.pathname
+      .replace(/^\//, '')
+      .split('/')
+    const repository = repositoryWithSuffix?.replace(/\.git$/, '')
+    if (!owner || !repository) {
+      throw new Error(`Invalid GitHub repository URL: ${repositoryUrl}`)
+    }
+    const token = await getGitHubAppToken(appCredentials, owner, repository)
     return { ...tokenGitAuth(token), source: 'github-app' }
   }
   if (process.env.GITHUB_TOKEN) {

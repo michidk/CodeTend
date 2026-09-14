@@ -30,7 +30,7 @@ boundary in front of it.
 | `TECDEBT_ALLOWED_GIT_HOSTS` | `github.com` | Comma-separated exact clone-host allowlist |
 | `TECDEBT_ALLOW_LOCAL_REPOSITORIES` | `false` | Allow `file://` URLs and absolute paths (development only) |
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
-| `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing available repositories and cloning private HTTPS repositories. CodeTend mints and caches its own installation tokens; all three are required together and take precedence over `GITHUB_TOKEN` |
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing available repositories and cloning private HTTPS repositories. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN` |
 | `GITHUB_TOKEN` | – | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured |
 
 ## Cost and concurrency guardrails

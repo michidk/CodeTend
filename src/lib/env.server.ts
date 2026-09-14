@@ -36,7 +36,6 @@ const serverSchema = {
     .max(86_400)
     .default(60),
   GITHUB_APP_ID: optionalString,
-  GITHUB_APP_INSTALLATION_ID: optionalString,
   GITHUB_APP_PRIVATE_KEY: optionalString,
   GITHUB_TOKEN: optionalString,
   EVE_URL: z.url().default('http://127.0.0.1:2000'),
@@ -97,7 +96,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS:
         runtimeEnvironment.TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS,
       GITHUB_APP_ID: runtimeEnvironment.GITHUB_APP_ID,
-      GITHUB_APP_INSTALLATION_ID: runtimeEnvironment.GITHUB_APP_INSTALLATION_ID,
       GITHUB_APP_PRIVATE_KEY: runtimeEnvironment.GITHUB_APP_PRIVATE_KEY,
       GITHUB_TOKEN: runtimeEnvironment.GITHUB_TOKEN,
       EVE_URL: runtimeEnvironment.EVE_URL,

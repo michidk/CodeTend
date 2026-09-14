@@ -157,11 +157,6 @@ data directory and the per-scan guardrails Eve reads directly.
     secretKeyRef:
       name: {{ .Values.github.appAuth.existingSecret }}
       key: {{ .Values.github.appAuth.appIdKey }}
-- name: GITHUB_APP_INSTALLATION_ID
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.github.appAuth.existingSecret }}
-      key: {{ .Values.github.appAuth.installationIdKey }}
 - name: GITHUB_APP_PRIVATE_KEY
   valueFrom:
     secretKeyRef:

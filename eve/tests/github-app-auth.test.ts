@@ -28,11 +28,10 @@ function verifyJwtSignature(jwt: string): boolean {
 }
 
 describe('readGitHubAppCredentials', () => {
-  test('requires all three fields together', () => {
+  test('requires the App id and private key together', () => {
     expect(
       readGitHubAppCredentials({
         GITHUB_APP_ID: '123',
-        GITHUB_APP_INSTALLATION_ID: '456',
       }),
     ).toBeNull()
     expect(readGitHubAppCredentials({})).toBeNull()
@@ -42,7 +41,6 @@ describe('readGitHubAppCredentials', () => {
     const escaped = privateKey.trim().replaceAll('\n', '\\n')
     const credentials = readGitHubAppCredentials({
       GITHUB_APP_ID: '123',
-      GITHUB_APP_INSTALLATION_ID: '456',
       GITHUB_APP_PRIVATE_KEY: escaped,
     })
     expect(credentials?.privateKey).toBe(privateKey.trim())
@@ -51,7 +49,6 @@ describe('readGitHubAppCredentials', () => {
   test('leaves a private key with real newlines untouched', () => {
     const credentials = readGitHubAppCredentials({
       GITHUB_APP_ID: '123',
-      GITHUB_APP_INSTALLATION_ID: '456',
       GITHUB_APP_PRIVATE_KEY: privateKey,
     })
     expect(credentials?.privateKey).toBe(privateKey.trim())
@@ -70,6 +67,9 @@ describe('getGitHubAppToken', () => {
           (init?.headers as Record<string, string> | undefined)
             ?.Authorization ?? null,
       })
+      if (String(url).endsWith('/repos/example/repo/installation')) {
+        return Response.json({ id: 456 })
+      }
       return new Response(
         JSON.stringify({
           token: 'ghs_minted',
@@ -82,13 +82,15 @@ describe('getGitHubAppToken', () => {
     try {
       const credentials = {
         appId: '123',
-        installationId: '456',
         privateKey,
       }
-      const token = await getGitHubAppToken(credentials)
+      const token = await getGitHubAppToken(credentials, 'example', 'repo')
       expect(token).toBe('ghs_minted')
-      expect(requests).toHaveLength(1)
+      expect(requests).toHaveLength(2)
       expect(requests[0].url).toBe(
+        'https://api.github.com/repos/example/repo/installation',
+      )
+      expect(requests[1].url).toBe(
         'https://api.github.com/app/installations/456/access_tokens',
       )
       const jwt = requests[0].authorization?.replace('Bearer ', '') ?? ''
@@ -100,9 +102,15 @@ describe('getGitHubAppToken', () => {
       expect(verifyJwtSignature(jwt)).toBe(true)
 
       // Second call within the token's lifetime reuses the cache.
-      const cachedToken = await getGitHubAppToken(credentials)
+      const cachedToken = await getGitHubAppToken(
+        credentials,
+        'example',
+        'repo',
+      )
       expect(cachedToken).toBe('ghs_minted')
-      expect(requests).toHaveLength(1)
+      // Installation lookup is cheap and ensures repository access still
+      // exists; the installation token itself remains cached.
+      expect(requests).toHaveLength(3)
     } finally {
       globalThis.fetch = originalFetch
       resetGitHubAppTokenCache()
@@ -117,7 +125,7 @@ describe('getGitHubAppToken', () => {
 
     try {
       await expect(
-        getGitHubAppToken({ appId: '1', installationId: '2', privateKey }),
+        getGitHubAppToken({ appId: '1', privateKey }, 'example', 'repo'),
       ).rejects.toThrow(/404/)
     } finally {
       globalThis.fetch = originalFetch

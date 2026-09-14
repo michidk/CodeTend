@@ -225,8 +225,8 @@ serves the production build instead.
   identity provider, organizations and repository-level authorization on top
   of that.
 - CodeTend mints and caches its own GitHub App installation tokens from
-  `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`; it
-  also accepts a plain, externally-issued `GITHUB_TOKEN` for clones.
+  `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY`, resolving the installation for
+  each repository; it also accepts a plain, externally-issued `GITHUB_TOKEN`.
 - Executable finding validation is disabled by default. When enabled, Eve
   must have Docker access; the bundled Compose deployment deliberately does
   not mount the Docker socket.
