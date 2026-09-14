@@ -40,7 +40,7 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { getScanner } from '@/lib/scanners'
-import type { ScanTarget } from '@/lib/security-scans'
+import { DEFAULT_SCAN_FILE_GLOB, type ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
 
@@ -119,8 +119,8 @@ function ScanPage() {
             {scan.knowledgeRefreshed ? ' · knowledge refreshed' : ''}
             {' · '}
             {scan.reviewedFileCount ?? '–'} of {scan.targetFileCount ?? '–'}
-            {' target files reviewed (budget '}
-            {scan.maxFiles}, glob <code>{scan.fileGlob}</code>) ·{' '}
+            {' target files reviewed · '}
+            {scan.maxFiles}-file budget · {describeFileFilter(scan.fileGlob)} ·{' '}
             {describeTarget(scan.target)}
           </>
         }
@@ -393,6 +393,12 @@ function describeTarget(target: ScanTarget): string {
   if (target.kind === 'repository') return 'entire repository'
   if (target.kind === 'paths') return `${target.paths.length} selected path(s)`
   return `diff ${shortSha(target.base)}…${shortSha(target.head)}`
+}
+
+function describeFileFilter(fileGlob: string): string {
+  return fileGlob === DEFAULT_SCAN_FILE_GLOB
+    ? 'source files'
+    : 'custom file filter'
 }
 
 function StringList({
