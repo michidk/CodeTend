@@ -41,6 +41,7 @@ const SCAN_HISTORY_COLUMNS = {
   branch: true,
   fileCount: true,
   phase: true,
+  progress: true,
   gitnexusUsed: true,
   overallScore: true,
   grade: true,

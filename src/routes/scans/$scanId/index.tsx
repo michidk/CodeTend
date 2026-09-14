@@ -8,6 +8,7 @@ import {
   GradeBadge,
   scoreTextClass,
 } from '@/components/health/grade-badge'
+import { ScanProgress } from '@/components/health/scan-progress'
 import { ScanStatusBadge } from '@/components/health/scan-status'
 import {
   CostCell,
@@ -43,7 +44,6 @@ import { getScanner } from '@/lib/scanners'
 import { DEFAULT_SCAN_FILE_GLOB, type ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
-import { ScanProgress } from './-components/scan-progress'
 
 export const Route = createFileRoute('/scans/$scanId/')({
   loader: ({ params }) => getScanDetail({ data: parseIdParam(params.scanId) }),

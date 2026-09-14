@@ -306,87 +306,103 @@ export default defineWorkflowTool({
         scannerTotal: scanners.length,
         targetFileCount: targetFiles.length,
       } satisfies Progress
-      const batchOutcomes = await Promise.all(
-        batch.map(async (scanner): Promise<ScannerOutcome> => {
-          const startedAt = await nowIso()
-          const message = scannerAgentMessage({
-            scanner,
-            siblingScanners: scanners,
-            repoPath,
-            repositoryName: request.repositoryName,
-            workspace,
-            knowledge,
-            gitnexusRepo,
-            previousCommitSha: request.previousCommitSha ?? null,
-            target: request.target,
-            targetFiles,
-            securityProfile,
-          })
-          try {
-            let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
-            let lastError: unknown
-            // Launching a dozen subagents at once occasionally trips a transient
-            // start failure inside the runtime; one retry recovers it.
-            for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
-              try {
-                result = await ctx.agent('scanner', {
-                  message,
-                  outputSchema: request.outputSchema as JsonObject,
-                })
-                lastError = undefined
-                break
-              } catch (error) {
-                lastError = error
+      const pending = new Map(
+        batch.map((scanner) => [
+          scanner.id,
+          (async (): Promise<{
+            scannerId: string
+            outcome: ScannerOutcome
+          }> => {
+            const startedAt = await nowIso()
+            const message = scannerAgentMessage({
+              scanner,
+              siblingScanners: scanners,
+              repoPath,
+              repositoryName: request.repositoryName,
+              workspace,
+              knowledge,
+              gitnexusRepo,
+              previousCommitSha: request.previousCommitSha ?? null,
+              target: request.target,
+              targetFiles,
+              securityProfile,
+            })
+            try {
+              let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
+              let lastError: unknown
+              // Launching a dozen subagents at once occasionally trips a transient
+              // start failure inside the runtime; one retry recovers it.
+              for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+                try {
+                  result = await ctx.agent('scanner', {
+                    message,
+                    outputSchema: request.outputSchema as JsonObject,
+                  })
+                  lastError = undefined
+                  break
+                } catch (error) {
+                  lastError = error
+                }
+              }
+              if (lastError !== undefined) throw lastError
+              return {
+                scannerId: scanner.id,
+                outcome: {
+                  scannerId: scanner.id,
+                  ...scannerOutput(result),
+                  startedAt,
+                  finishedAt: await nowIso(),
+                },
+              }
+            } catch (error) {
+              return {
+                scannerId: scanner.id,
+                outcome: {
+                  scannerId: scanner.id,
+                  status: 'failed',
+                  error: describeError(error),
+                  startedAt,
+                  finishedAt: await nowIso(),
+                },
               }
             }
-            if (lastError !== undefined) throw lastError
-            return {
-              scannerId: scanner.id,
-              ...scannerOutput(result),
-              startedAt,
-              finishedAt: await nowIso(),
-            }
-          } catch (error) {
-            return {
-              scannerId: scanner.id,
-              status: 'failed',
-              error: describeError(error),
-              startedAt,
-              finishedAt: await nowIso(),
-            }
-          }
-        }),
+          })(),
+        ]),
       )
-      outcomes.push(...batchOutcomes)
-      completed += batch.length
-      const checkpoint: ScanCheckpoint = {
-        version: 1,
-        scanId,
-        requestFingerprint,
-        commitSha: workspace.commitSha,
-        fileCount: workspace.fileCount,
-        gitnexusUsed: gitnexusRepo !== null,
-        knowledge,
-        securityProfile: {
-          profile: securityProfile,
-          generated: request.target.kind === 'repository' && !sampled,
-        },
-        dependencyAudit,
-        scanners: outcomes,
-        targetFiles,
-        targetFileCount: eligibleTargetFiles.length,
-        updatedAt: await nowIso(),
+      while (pending.size > 0) {
+        const settled = await Promise.race(pending.values())
+        pending.delete(settled.scannerId)
+        outcomes.push(settled.outcome)
+        completed += 1
+        const checkpoint: ScanCheckpoint = {
+          version: 1,
+          scanId,
+          requestFingerprint,
+          commitSha: workspace.commitSha,
+          fileCount: workspace.fileCount,
+          gitnexusUsed: gitnexusRepo !== null,
+          knowledge,
+          securityProfile: {
+            profile: securityProfile,
+            generated: request.target.kind === 'repository' && !sampled,
+          },
+          dependencyAudit,
+          scanners: outcomes,
+          targetFiles,
+          targetFileCount: eligibleTargetFiles.length,
+          updatedAt: await nowIso(),
+        }
+        await writeScanCheckpoint(checkpoint)
+        yield {
+          phase: 'scanning',
+          detail: `${outcomes.length} of ${scanners.length} scanners completed; ${pending.size} still running in this batch`,
+          completed,
+          total,
+          scannerCompleted: outcomes.length,
+          scannerTotal: scanners.length,
+          targetFileCount: targetFiles.length,
+        } satisfies Progress
       }
-      await writeScanCheckpoint(checkpoint)
-      yield {
-        phase: 'scanning',
-        detail: `${outcomes.length} of ${scanners.length} scanners completed`,
-        completed,
-        total,
-        scannerCompleted: outcomes.length,
-        scannerTotal: scanners.length,
-        targetFileCount: targetFiles.length,
-      } satisfies Progress
     }
 
     const coverage =

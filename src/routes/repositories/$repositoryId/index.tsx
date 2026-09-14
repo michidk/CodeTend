@@ -21,6 +21,7 @@ import {
   GradeBadge,
   scoreTextClass,
 } from '@/components/health/grade-badge'
+import { ScanProgress } from '@/components/health/scan-progress'
 import { ScanStatusBadge } from '@/components/health/scan-status'
 import { ScoreDelta } from '@/components/health/score-delta'
 import { TrendCharts } from '@/components/health/trend-charts'
@@ -207,22 +208,27 @@ function RepositoryPage() {
 
       {running ? (
         <Card className="border-accent bg-accent/40">
-          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
-            <ScanStatusBadge status={running.status} phase={running.phase} />
-            <span>
-              Scan #{running.id} started{' '}
-              {formatRelative(running.startedAt ?? running.createdAt)}. This
-              page refreshes automatically.
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void stopScan()}
-              disabled={running.cancellationRequestedAt !== null}
-            >
-              <Square className="size-3.5" aria-hidden="true" />
-              {running.cancellationRequestedAt ? 'Cancelling…' : 'Stop'}
-            </Button>
+          <CardContent className="space-y-4 text-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <ScanStatusBadge status={running.status} phase={running.phase} />
+              <span>
+                Scan #{running.id} started{' '}
+                {formatRelative(running.startedAt ?? running.createdAt)}. This
+                page refreshes automatically.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void stopScan()}
+                disabled={running.cancellationRequestedAt !== null}
+              >
+                <Square className="size-3.5" aria-hidden="true" />
+                {running.cancellationRequestedAt ? 'Cancelling…' : 'Stop'}
+              </Button>
+            </div>
+            {running.progress ? (
+              <ScanProgress progress={running.progress} embedded />
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
