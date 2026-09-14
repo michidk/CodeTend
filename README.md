@@ -250,8 +250,5 @@ serves the production build instead.
 <p align="center">
   Open-source software for teams who would rather measure their debt than
   argue about it.<br>
-  <sub>
-    Built by <a href="https://github.com/michidk">@michidk</a> ·
-    <a href="https://github.com/michidk/CodeTend">Star it on GitHub</a>
-  </sub>
+  <sub><a href="https://github.com/michidk/CodeTend">Star it on GitHub</a></sub>
 </p>
