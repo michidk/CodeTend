@@ -8,7 +8,11 @@ import type {
   ScanResult,
 } from '../lib/contract'
 import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
-import { selectReviewFiles } from '../lib/file-sampling'
+import {
+  DEFAULT_SCAN_FILE_GLOB,
+  matchesReviewFileGlob,
+  selectReviewFiles,
+} from '../lib/file-sampling'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -75,35 +79,38 @@ export default defineWorkflowTool({
     const workspace = await cloneRepository(request)
     const repoPath = sandboxRepoPath(workspace.name)
     const allTargetFiles = await resolveTargetFiles(request, workspace)
+    const fileGlob = request.fileGlob ?? DEFAULT_SCAN_FILE_GLOB
+    const eligibleTargetFiles = allTargetFiles.filter((path) =>
+      matchesReviewFileGlob(path, fileGlob),
+    )
     const priorityPaths = request.scanners.flatMap((scanner) =>
       scanner.hypotheses.flatMap((hypothesis) =>
         hypothesis.locations.map((location) => location.path),
       ),
     )
-    const allTargetFileSet = new Set(allTargetFiles)
+    const eligibleTargetFileSet = new Set(eligibleTargetFiles)
     // Requests written by an older app during a rolling deployment do not
     // carry maxFiles; keep the new runtime bounded in that compatibility case.
     const maxFiles = request.maxFiles ?? 300
     const targetFiles = selectReviewFiles({
       candidates: workspace.files.filter((file) =>
-        allTargetFileSet.has(file.path),
+        eligibleTargetFileSet.has(file.path),
       ),
       maxFiles,
+      fileGlob,
       priorityPaths,
     })
-    const sampled = targetFiles.length < allTargetFiles.length
+    const sampled = targetFiles.length < eligibleTargetFiles.length
     const targetFileSet = new Set(targetFiles)
     const scanners = request.scanners.map((scanner) => ({
       ...scanner,
-      hypotheses: sampled
-        ? scanner.hypotheses.filter(
-            (hypothesis) =>
-              hypothesis.locations.length > 0 &&
-              hypothesis.locations.every((location) =>
-                targetFileSet.has(location.path),
-              ),
-          )
-        : scanner.hypotheses,
+      hypotheses: scanner.hypotheses.filter(
+        (hypothesis) =>
+          hypothesis.locations.length > 0 &&
+          hypothesis.locations.every((location) =>
+            targetFileSet.has(location.path),
+          ),
+      ),
     }))
 
     const auditing: Progress = { phase: 'dependency audit', detail: 'OSV' }
@@ -146,7 +153,7 @@ export default defineWorkflowTool({
           staleness,
           gitnexusRepo,
           targetFiles,
-          targetFileCount: allTargetFiles.length,
+          targetFileCount: eligibleTargetFiles.length,
         }),
         outputSchema: knowledgeOutputSchema,
       })) as unknown as KnowledgeAgentOutput | null
@@ -262,8 +269,10 @@ export default defineWorkflowTool({
 
     const coverage = aggregateCoverage(
       outcomes,
-      allTargetFiles.length - targetFiles.length,
+      eligibleTargetFiles.length - targetFiles.length,
       maxFiles,
+      allTargetFiles.length - eligibleTargetFiles.length,
+      fileGlob,
     )
     const candidates = outcomes
       .filter((outcome) => outcome.scannerId === 'security')
@@ -321,7 +330,7 @@ export default defineWorkflowTool({
       coverage,
       validations,
       targetFiles,
-      targetFileCount: allTargetFiles.length,
+      targetFileCount: eligibleTargetFiles.length,
       finishedAt: await nowIso(),
     }
     await writeScanResult(result)
@@ -439,24 +448,41 @@ function aggregateCoverage(
   outcomes: readonly ScannerOutcome[],
   deferredFileCount = 0,
   maxFiles?: number,
+  excludedFileCount = 0,
+  fileGlob?: string,
 ): ScanCoverage {
   const coverage = mergeCoverages(
     outcomes
       .map((outcome) => asScannerResult(outcome.result)?.coverage)
       .filter((coverage): coverage is ScanCoverage => coverage !== undefined),
   )
-  if (deferredFileCount <= 0) return coverage
+  if (deferredFileCount <= 0 && excludedFileCount <= 0) return coverage
   return {
     ...coverage,
     completeness:
-      coverage.completeness === 'unknown' ? 'unknown' : ('partial' as const),
-    deferred: [
-      ...coverage.deferred,
-      {
-        path: `${deferredFileCount} target files outside the review sample`,
-        reason: `The review budget was capped at ${maxFiles ?? 'the configured number of'} files.`,
-      },
-    ],
+      deferredFileCount > 0 && coverage.completeness !== 'unknown'
+        ? ('partial' as const)
+        : coverage.completeness,
+    deferred:
+      deferredFileCount > 0
+        ? [
+            ...coverage.deferred,
+            {
+              path: `${deferredFileCount} matching target files outside the review sample`,
+              reason: `The review budget was capped at ${maxFiles ?? 'the configured number of'} files.`,
+            },
+          ]
+        : coverage.deferred,
+    excluded:
+      excludedFileCount > 0
+        ? [
+            ...coverage.excluded,
+            {
+              path: `${excludedFileCount} target files excluded by the review file glob`,
+              reason: `Did not match ${fileGlob ?? 'the configured file glob'}.`,
+            },
+          ]
+        : coverage.excluded,
   }
 }
 

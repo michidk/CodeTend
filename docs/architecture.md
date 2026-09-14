@@ -138,9 +138,9 @@ snapshots all enrichment on each finding occurrence.
 Security Hygiene follows a staged review: editable repository security context
 and threat model → candidate discovery → safe isolated validation → attack-path
 and impact analysis → contextual ranking → coverage-aware lifecycle. Operators
-set a maximum file sample per repository. Sampling is deterministic, favors
-high-signal source and security surfaces, and forces partial coverage whenever
-target files are deferred.
+set a global source-file glob and a maximum file sample per repository. The
+glob is applied before deterministic, risk-biased sampling, and matching target
+files deferred by the budget force partial coverage.
 
 Executable validation is fail closed. Commands run sequentially in a disposable
 Docker container with no network, all capabilities dropped,

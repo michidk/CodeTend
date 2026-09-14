@@ -84,7 +84,9 @@ three-hour timeout, scanner failures increase, disk usage grows unexpectedly,
 or daily estimated cost approaches `TECDEBT_MAX_DAILY_COST_USD`. Application
 and Eve logs go to stdout/stderr for collection by the container platform.
 
-The global file review budget in Settings bounds model-backed repository work.
+The global review file glob in Settings defines which source-file paths are
+eligible for model-backed work. The file review budget is applied to those
+matches and bounds the per-repository sample.
 Use `TECDEBT_DEFAULT_SCAN_COST_USD` to flag scans whose final estimated usage
 exceeds the expected per-scan budget; it is an accounting threshold, not a
 hard interruption point.

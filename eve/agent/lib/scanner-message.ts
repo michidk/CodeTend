@@ -62,15 +62,15 @@ export function scannerAgentMessage(input: {
   )
 
   parts.push('', '## Scan target', targetDescription(input.target))
-  if (input.targetFiles.length > 0) {
-    parts.push(
-      'Files in this review sample:',
-      '<review-sample>',
-      ...input.targetFiles.map((path) => `- ${path}`),
-      '</review-sample>',
-      'Inspect only files in this review sample. Report only findings whose root cause or newly introduced attack path is in one of these files. Do not claim complete target coverage when the sample excludes target files.',
-    )
-  }
+  parts.push(
+    'Files in this review sample:',
+    '<review-sample>',
+    ...input.targetFiles.map((path) => `- ${path}`),
+    '</review-sample>',
+    input.targetFiles.length > 0
+      ? 'Inspect only files in this review sample. Report only findings whose root cause or newly introduced attack path is in one of these files. Do not claim complete target coverage when the sample excludes target files.'
+      : 'No target files matched the configured review file glob. Do not inspect repository files or report new findings.',
+  )
 
   if (input.gitnexusRepo) {
     parts.push(

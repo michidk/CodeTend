@@ -114,7 +114,8 @@ function ScanPage() {
             {' · '}
             {scan.reviewedFileCount ?? '–'} of {scan.targetFileCount ?? '–'}
             {' target files reviewed (budget '}
-            {scan.maxFiles}) · {describeTarget(scan.target)}
+            {scan.maxFiles}, glob <code>{scan.fileGlob}</code>) ·{' '}
+            {describeTarget(scan.target)}
           </>
         }
         size="compact"

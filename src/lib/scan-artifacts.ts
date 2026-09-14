@@ -72,6 +72,7 @@ export function toMarkdownScanReport(input: {
   readonly repository: string
   readonly revision: string
   readonly maxFiles: number
+  readonly fileGlob: string
   readonly reviewedFileCount: number | null
   readonly targetFileCount: number | null
   readonly target: unknown
@@ -92,6 +93,7 @@ export function toMarkdownScanReport(input: {
     '',
     `- Revision: \`${input.revision}\``,
     `- Review budget: up to ${input.maxFiles} files`,
+    `- Review file glob: \`${input.fileGlob}\``,
     `- Review sample: ${input.reviewedFileCount ?? 'unknown'} of ${input.targetFileCount ?? 'unknown'} target files`,
     `- Target: \`${JSON.stringify(input.target)}\``,
     `- Coverage: ${input.coverage.completeness}`,

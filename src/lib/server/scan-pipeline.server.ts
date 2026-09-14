@@ -34,6 +34,7 @@ import {
   gradeForScore,
 } from '@/lib/scoring'
 import {
+  DEFAULT_SCAN_FILE_GLOB,
   DEFAULT_SCAN_MAX_FILES,
   DEFAULT_SCAN_TARGET,
   type ScanTarget,
@@ -82,6 +83,7 @@ export async function startScan(
   options: {
     readonly target?: ScanTarget
     readonly maxFiles?: number
+    readonly fileGlob?: string
     readonly maxCostUsd?: number | null
   } = {},
 ): Promise<number | null> {
@@ -164,13 +166,10 @@ export async function startScan(
     }
   }
 
-  const globalSettings =
-    options.maxFiles === undefined
-      ? await db.query.scanScheduleSettings.findFirst({
-          where: eq(scanScheduleSettings.id, 1),
-          columns: { maxFiles: true },
-        })
-      : null
+  const globalSettings = await db.query.scanScheduleSettings.findFirst({
+    where: eq(scanScheduleSettings.id, 1),
+    columns: { maxFiles: true, fileGlob: true },
+  })
   let scan: { id: number } | undefined
   try {
     const inserted = await db
@@ -184,6 +183,10 @@ export async function startScan(
           options.maxFiles ??
           globalSettings?.maxFiles ??
           DEFAULT_SCAN_MAX_FILES,
+        fileGlob:
+          options.fileGlob ??
+          globalSettings?.fileGlob ??
+          DEFAULT_SCAN_FILE_GLOB,
         maxCostUsd:
           options.maxCostUsd ?? env.TECDEBT_DEFAULT_SCAN_COST_USD ?? null,
         status: 'queued',
@@ -258,7 +261,12 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     await throwIfCancellationRequested(scanId)
     const scanConfiguration = await db.query.scans.findFirst({
       where: eq(scans.id, scanId),
-      columns: { target: true, maxFiles: true, maxCostUsd: true },
+      columns: {
+        target: true,
+        maxFiles: true,
+        fileGlob: true,
+        maxCostUsd: true,
+      },
     })
     if (!scanConfiguration) throw new Error('Scan configuration disappeared')
     if (await cancellationRequested(scanId)) {
@@ -324,6 +332,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       previousCommitSha: previousScan?.commitSha ?? null,
       target: scanConfiguration.target,
       maxFiles: scanConfiguration.maxFiles,
+      fileGlob: scanConfiguration.fileGlob,
       maxCostUsd: scanConfiguration.maxCostUsd,
       securityProfile: securityProfile?.profile ?? null,
       validation: {

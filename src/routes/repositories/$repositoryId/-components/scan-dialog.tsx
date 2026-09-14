@@ -96,8 +96,9 @@ export function ScanDialog({
           <DialogTitle>Start security review</DialogTitle>
           <DialogDescription>
             Set how many files the model-backed review may inspect. CodeTend
-            prioritizes high-signal files and records anything outside the
-            sample as partial coverage.
+            applies the global review file glob, prioritizes high-signal
+            matches, and records matching files outside the sample as partial
+            coverage.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,9 +129,9 @@ export function ScanDialog({
               onChange={(event) => setMaxFiles(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              At most this many target files are available to the knowledge and
-              scanner agents. Source, entry-point, configuration, dependency,
-              and security-sensitive files are prioritized.
+              At most this many matching target files are available to the
+              knowledge and scanner agents. Configure the file-extension glob in
+              Settings.
             </p>
           </div>
 

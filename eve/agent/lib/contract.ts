@@ -71,6 +71,8 @@ export interface ScanRequest {
   readonly maxCostUsd: number | null
   /** Maximum source files the model-backed steps may inspect. */
   readonly maxFiles?: number
+  /** Glob applied to target paths before the model-backed file budget. */
+  readonly fileGlob?: string
   readonly securityProfile: SecurityProfile | null
   readonly validation: {
     readonly enabled: boolean

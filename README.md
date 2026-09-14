@@ -110,8 +110,9 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
    GitHub App or token, or use the URL fallback for another Git host.
 2. **Scan now**, or configure the global cron and queue cooldown in Settings.
    Choose a concrete file review budget, whole repository or selected paths,
-   and an optional cost ceiling. Larger targets are sampled deterministically
-   and recorded as partial coverage.
+   and an optional cost ceiling. The global Settings file glob filters the
+   target before larger matching sets are sampled deterministically and
+   recorded as partial coverage.
 3. Watch the phase update live: cloning → indexing → knowledge → scanning →
    reconciling.
 4. The repository page shows the overall score and grade, per-scanner scores,

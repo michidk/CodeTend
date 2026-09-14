@@ -37,6 +37,7 @@ import type {
   ScanTarget,
   SecurityProfile,
 } from '@/lib/security-scans'
+import { DEFAULT_SCAN_FILE_GLOB } from '@/lib/security-scans'
 
 const createdAt = timestamp('created_at', { withTimezone: true })
   .notNull()
@@ -84,6 +85,7 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   enabled: boolean('enabled').notNull().default(true),
   cooldownMinutes: integer('cooldown_minutes').notNull().default(5),
   maxFiles: integer('max_files').notNull().default(300),
+  fileGlob: text('file_glob').notNull().default(DEFAULT_SCAN_FILE_GLOB),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
   createdAt,
@@ -219,6 +221,7 @@ export const scans = pgTable(
       .default({ kind: 'repository' }),
     maxCostUsd: real('max_cost_usd'),
     maxFiles: integer('max_files').notNull().default(300),
+    fileGlob: text('file_glob').notNull().default(DEFAULT_SCAN_FILE_GLOB),
     reviewedFileCount: integer('reviewed_file_count'),
     targetFileCount: integer('target_file_count'),
     cancellationRequestedAt: timestamp('cancellation_requested_at', {

@@ -1,46 +1,12 @@
+import { minimatch } from 'minimatch'
+
 export interface SampleCandidate {
   readonly path: string
   readonly size: number
 }
 
-const IMPORTANT_BASENAMES = new Set([
-  'package.json',
-  'cargo.toml',
-  'go.mod',
-  'pyproject.toml',
-  'pom.xml',
-  'build.gradle',
-  'dockerfile',
-  'docker-compose.yml',
-  'compose.yml',
-  'makefile',
-  'justfile',
-])
-
-const SOURCE_EXTENSIONS = new Set([
-  'c',
-  'cc',
-  'cpp',
-  'cs',
-  'ex',
-  'exs',
-  'go',
-  'java',
-  'js',
-  'jsx',
-  'kt',
-  'php',
-  'py',
-  'rb',
-  'rs',
-  'scala',
-  'sh',
-  'sol',
-  'swift',
-  'ts',
-  'tsx',
-  'vue',
-])
+export const DEFAULT_SCAN_FILE_GLOB =
+  '**/*.{c,cc,cpp,cxx,cs,css,dart,ex,exs,fs,fsx,go,gql,graphql,groovy,h,hh,hpp,hxx,hs,htm,html,java,js,jsx,kt,kts,less,lua,m,mjs,mm,php,pl,pm,proto,py,pyi,r,rb,rs,sass,scala,scss,sh,sol,sql,svelte,swift,tf,ts,tsx,vue,zig}'
 
 const SECURITY_TERMS =
   /(^|[/_.-])(auth|admin|api|crypto|permission|policy|secret|security|session|token|webhook)([/_.-]|$)/i
@@ -53,18 +19,22 @@ const BINARY_EXTENSIONS =
   /\.(avif|bmp|eot|gif|ico|jpeg|jpg|mov|mp3|mp4|pdf|png|ttf|webm|webp|woff2?|zip)$/i
 
 /**
- * Selects a stable, risk-biased file sample. Previous-finding locations,
- * manifests, entry points and security-sensitive source receive priority,
- * while one useful file per top-level area is seeded to avoid tunnel vision.
+ * Applies the configured file glob, then selects a stable, risk-biased sample.
+ * Previous-finding locations, entry points and security-sensitive source
+ * receive priority, while top-level-area seeds avoid tunnel vision.
  */
 export function selectReviewFiles(input: {
   readonly candidates: readonly SampleCandidate[]
   readonly maxFiles: number
+  readonly fileGlob: string
   readonly priorityPaths?: readonly string[]
 }): string[] {
   const maxFiles = Math.max(1, Math.floor(input.maxFiles))
   const priority = new Set(input.priorityPaths ?? [])
-  const ranked = [...input.candidates]
+  const ranked = input.candidates
+    .filter((candidate) =>
+      matchesReviewFileGlob(candidate.path, input.fileGlob),
+    )
     .map((candidate) => ({
       ...candidate,
       score: scoreCandidate(candidate, priority),
@@ -96,20 +66,18 @@ export function selectReviewFiles(input: {
   return [...selected].sort()
 }
 
+export function matchesReviewFileGlob(path: string, fileGlob: string): boolean {
+  return minimatch(path, fileGlob, { dot: true, nocase: true })
+}
+
 function scoreCandidate(
   candidate: SampleCandidate,
   priorityPaths: ReadonlySet<string>,
 ): number {
   const path = candidate.path
-  const basename = path.slice(path.lastIndexOf('/') + 1).toLowerCase()
-  const extension = basename.includes('.')
-    ? (basename.split('.').at(-1) ?? '')
-    : ''
   let score = priorityPaths.has(path) ? 2_000 : 0
-  if (IMPORTANT_BASENAMES.has(basename)) score += 600
   if (SECURITY_TERMS.test(path)) score += 300
   if (ENTRY_POINT_TERMS.test(path)) score += 220
-  if (SOURCE_EXTENSIONS.has(extension)) score += 150
   if (TEST_TERMS.test(path)) score += 60
   if (!path.includes('/')) score += 80
   if (LOW_VALUE_TERMS.test(path)) score -= 250

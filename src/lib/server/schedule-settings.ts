@@ -5,7 +5,7 @@ import { db } from '@/db'
 import { scanScheduleSettings, scheduledRepositoryQueue } from '@/db/schema'
 import { expectReturnedRow } from '@/lib/domain-errors'
 import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
-import { MAX_SCAN_MAX_FILES } from '@/lib/security-scans'
+import { MAX_SCAN_MAX_FILES, scanFileGlobSchema } from '@/lib/security-scans'
 
 const SETTINGS_ID = 1
 
@@ -19,6 +19,7 @@ const scheduleSettingsInputSchema = z.object({
   enabled: z.boolean(),
   cooldownMinutes: z.number().int().min(0).max(10_080),
   maxFiles: z.number().int().positive().max(MAX_SCAN_MAX_FILES),
+  fileGlob: scanFileGlobSchema,
 })
 
 export async function ensureScheduleSettingsRow() {

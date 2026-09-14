@@ -33,6 +33,7 @@ const SCAN_HISTORY_COLUMNS = {
   trigger: true,
   mode: true,
   maxFiles: true,
+  fileGlob: true,
   reviewedFileCount: true,
   targetFileCount: true,
   cancellationRequestedAt: true,

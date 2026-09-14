@@ -14,6 +14,7 @@ import {
   isValidCronExpression,
 } from '@/lib/schedule'
 import {
+  MAX_SCAN_FILE_GLOB_LENGTH,
   MAX_SCAN_MAX_FILES,
   SCAN_FILE_BUDGET_PRESETS,
 } from '@/lib/security-scans'
@@ -35,6 +36,7 @@ export function ScheduleSettingsForm({
     String(settings.cooldownMinutes),
   )
   const [maxFiles, setMaxFiles] = useState(String(settings.maxFiles))
+  const [fileGlob, setFileGlob] = useState(settings.fileGlob)
   const [submitting, setSubmitting] = useState(false)
 
   const cronValid = isValidCronExpression(cronExpression)
@@ -46,13 +48,17 @@ export function ScheduleSettingsForm({
     Number.isInteger(fileBudget) &&
     fileBudget >= 1 &&
     fileBudget <= MAX_SCAN_MAX_FILES
+  const fileGlobValid =
+    fileGlob.trim().length > 0 &&
+    fileGlob.trim().length <= MAX_SCAN_FILE_GLOB_LENGTH
   const nextRun = cronValid
     ? computeNextScanAt(cronExpression, new Date())
     : null
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!cronValid || !cooldownValid || !fileBudgetValid) return
+    if (!cronValid || !cooldownValid || !fileBudgetValid || !fileGlobValid)
+      return
     setSubmitting(true)
     try {
       await updateScheduleSettings({
@@ -61,6 +67,7 @@ export function ScheduleSettingsForm({
           enabled,
           cooldownMinutes: cooldown,
           maxFiles: fileBudget,
+          fileGlob: fileGlob.trim(),
         },
       })
       toast.success('Schedule settings saved')
@@ -163,8 +170,27 @@ export function ScheduleSettingsForm({
             />
             <p className="text-xs text-muted-foreground">
               Every queued repository uses this maximum file sample. CodeTend
-              prioritizes high-signal files and marks larger targets as partial
-              coverage.
+              applies the file glob first, prioritizes high-signal matches, and
+              marks larger matching targets as partial coverage.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="scan-file-glob">Review file glob *</Label>
+            <Input
+              id="scan-file-glob"
+              required
+              className="font-mono"
+              maxLength={MAX_SCAN_FILE_GLOB_LENGTH}
+              aria-invalid={!fileGlobValid}
+              value={fileGlob}
+              onChange={(event) => setFileGlob(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Applied before the file budget for manual and scheduled scans. Use
+              a standard glob such as <code>{'**/*.{ts,tsx,js,jsx}'}</code>.
+              Dependency manifests are still handled separately by the
+              dependency audit.
             </p>
           </div>
 
@@ -208,7 +234,11 @@ export function ScheduleSettingsForm({
         <Button
           type="submit"
           disabled={
-            !cronValid || !cooldownValid || !fileBudgetValid || submitting
+            !cronValid ||
+            !cooldownValid ||
+            !fileBudgetValid ||
+            !fileGlobValid ||
+            submitting
           }
         >
           {submitting ? 'Saving…' : 'Save settings'}

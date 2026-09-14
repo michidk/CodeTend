@@ -6,6 +6,15 @@ export type ScanMode = (typeof SCAN_MODES)[number]
 export const DEFAULT_SCAN_MAX_FILES = 300
 export const MAX_SCAN_MAX_FILES = 10_000
 export const SCAN_FILE_BUDGET_PRESETS = [100, 300, 1_000] as const
+export const DEFAULT_SCAN_FILE_GLOB =
+  '**/*.{c,cc,cpp,cxx,cs,css,dart,ex,exs,fs,fsx,go,gql,graphql,groovy,h,hh,hpp,hxx,hs,htm,html,java,js,jsx,kt,kts,less,lua,m,mjs,mm,php,pl,pm,proto,py,pyi,r,rb,rs,sass,scala,scss,sh,sol,sql,svelte,swift,tf,ts,tsx,vue,zig}'
+export const MAX_SCAN_FILE_GLOB_LENGTH = 1_000
+
+export const scanFileGlobSchema = z
+  .string()
+  .trim()
+  .min(1, 'Enter a file glob.')
+  .max(MAX_SCAN_FILE_GLOB_LENGTH, 'The file glob is too long.')
 
 const repositoryPathSchema = z
   .string()
@@ -75,6 +84,7 @@ export interface ScanManifest {
   readonly target: ScanTarget
   readonly mode: ScanMode
   readonly maxFiles: number
+  readonly fileGlob: string
   readonly reviewedFileCount: number | null
   readonly targetFileCount: number | null
   readonly model: string | null

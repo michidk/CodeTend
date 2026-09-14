@@ -92,6 +92,7 @@ export interface ScanRequestFile {
   readonly previousCommitSha: string | null
   readonly target: ScanTarget
   readonly maxFiles: number
+  readonly fileGlob: string
   readonly maxCostUsd: number | null
   readonly securityProfile: SecurityProfile | null
   readonly validation: {
