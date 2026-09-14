@@ -32,7 +32,7 @@ clones through a GitHub App whose installation tokens CodeTend mints itself
 helm install codetend ./charts \
   --set image.tag=latest \
   --set eve.image.tag=latest \
-  --set hodor.image.tag=0.2.0 \
+  --set hodor.image.tag=0.3.1 \
   --set hodor.existingSecret=codetend-hodor \
   --set secrets.existingSecret=codetend-secrets \
   --set github.appAuth.existingSecret=codetend-github-app \
