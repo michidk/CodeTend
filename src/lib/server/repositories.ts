@@ -7,8 +7,8 @@ import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { validateRepositoryLocation } from '@/lib/repository-access'
-import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
 import { SCAN_MODES, scanTargetSchema } from '@/lib/security-scans'
+import { listAvailableGitHubRepositories } from '@/lib/server/github-repositories.server'
 import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import {
   removeScanArtifacts,
@@ -23,15 +23,8 @@ import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
 
-const cronSchema = z
-  .string()
-  .trim()
-  .min(9)
-  .max(100)
-  .refine(isValidCronExpression, 'Enter a valid 5-field cron expression')
-
 const repositoryInputSchema = z.object({
-  name: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(200),
   url: z
     .string()
     .trim()
@@ -42,8 +35,6 @@ const repositoryInputSchema = z.object({
       'Enter a Git URL (https://, ssh://, git@ or an absolute local path)',
     ),
   branch: z.string().trim().min(1).max(200),
-  cronExpression: cronSchema,
-  enabled: z.boolean(),
 })
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>
@@ -146,19 +137,51 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
 
 export type DashboardRow = Awaited<ReturnType<typeof getDashboard>>[number]
 
+function githubRepositoryKey(url: string): string | null {
+  const match = url
+    .trim()
+    .replace(/\.git$/, '')
+    .match(/^(?:https?:\/\/github\.com\/|git@github\.com:)([^/]+\/[^/]+)$/i)
+  return match?.[1]?.toLowerCase() ?? null
+}
+
+export const getAvailableRepositories = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  try {
+    const [available, registered] = await Promise.all([
+      listAvailableGitHubRepositories(),
+      db.query.repositories.findMany({ columns: { url: true } }),
+    ])
+    const registeredKeys = new Set(
+      registered
+        .map((repository) => githubRepositoryKey(repository.url))
+        .filter((key): key is string => key !== null),
+    )
+    return {
+      configured: available.configured,
+      error: null,
+      repositories: available.repositories.map((repository) => ({
+        ...repository,
+        registered: registeredKeys.has(repository.name.toLowerCase()),
+      })),
+    }
+  } catch (error) {
+    console.error('[CodeTend] could not list GitHub repositories', error)
+    return {
+      configured: true,
+      error:
+        'GitHub repositories could not be loaded. You can still add one by URL.',
+      repositories: [],
+    }
+  }
+})
+
 export const createRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema)
   .handler(async ({ data }) => {
     assertRepositoryAccess(data.url)
-    const [row] = await db
-      .insert(repositories)
-      .values({
-        ...data,
-        nextScanAt: data.enabled
-          ? computeNextScanAt(data.cronExpression, new Date())
-          : null,
-      })
-      .returning()
+    const [row] = await db.insert(repositories).values(data).returning()
     return expectReturnedRow(row, 'Repository')
   })
 
@@ -171,18 +194,10 @@ export const updateRepository = createServerFn({ method: 'POST' })
       where: eq(repositories.id, id),
     })
     if (!current) throw new DomainError('not_found', 'Repository not found')
-    const scheduleChanged =
-      current.cronExpression !== values.cronExpression ||
-      current.enabled !== values.enabled
     const [row] = await db
       .update(repositories)
       .set({
         ...values,
-        nextScanAt: values.enabled
-          ? scheduleChanged || !current.nextScanAt
-            ? computeNextScanAt(values.cronExpression, new Date())
-            : current.nextScanAt
-          : null,
         updatedAt: new Date(),
       })
       .where(eq(repositories.id, id))

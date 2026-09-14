@@ -1,9 +1,11 @@
 # Configuration reference
 
-All settings are environment variables. `.env.example` documents a working
-local layout; Docker Compose maps the same names into the `app` and `eve`
-services. The app validates its variables on startup with Zod and reports the
-affected names.
+Deployment settings are environment variables. `.env.example` documents a
+working local layout; Docker Compose maps the same names into the `app` and
+`eve` services. The app validates its variables on startup with Zod and
+reports the affected names. The global repository cron, enabled state, and
+cooldown between queued repositories are stored in PostgreSQL and edited on
+the Settings page.
 
 The `TECDEBT_*` prefix is retained for configuration compatibility after the
 project was renamed to CodeTend.
@@ -26,8 +28,8 @@ boundary in front of it.
 | `TECDEBT_ALLOWED_GIT_HOSTS` | `github.com` | Comma-separated exact clone-host allowlist |
 | `TECDEBT_ALLOW_LOCAL_REPOSITORIES` | `false` | Allow `file://` URLs and absolute paths (development only) |
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
-| `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for private HTTPS clones. CodeTend mints and caches its own installation tokens; all three are required together and take precedence over `GITHUB_TOKEN` |
-| `GITHUB_TOKEN` | – | Optional plain short-lived token for private HTTPS clones, used when no GitHub App credentials are configured |
+| `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing available repositories and cloning private HTTPS repositories. CodeTend mints and caches its own installation tokens; all three are required together and take precedence over `GITHUB_TOKEN` |
+| `GITHUB_TOKEN` | – | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured |
 
 ## Cost and concurrency guardrails
 
@@ -63,7 +65,7 @@ boundary in front of it.
 | --- | --- | --- |
 | `EVE_URL` | `http://127.0.0.1:2000` | Eve runtime endpoint as seen from the app |
 | `EVE_USERNAME`, `EVE_PASSWORD` | – | HTTP Basic credentials shared between app and Eve |
-| `SCHEDULER_INTERVAL_SECONDS` | `30` | How often the app looks for due repositories |
+| `SCHEDULER_INTERVAL_SECONDS` | `30` | How often the app checks the global schedule and its repository queue |
 | `OPENAI_API_KEY` | – | API key for the OpenAI-compatible endpoint (required by Eve) |
 | `OPENAI_BASE_URL` | OpenAI | Point at a gateway such as OpenRouter to run other vendors' models |
 | `TECDEBT_MODEL` | `gpt-5.6-sol` | Model id passed to the endpoint, for example `anthropic/claude-opus-5` through a gateway |

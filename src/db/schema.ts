@@ -72,13 +72,42 @@ export const repositories = pgTable('repositories', {
   name: text('name').notNull(),
   url: text('url').notNull(),
   branch: text('branch').notNull().default('main'),
-  cronExpression: text('cron_expression').notNull().default('0 3 * * *'),
-  enabled: boolean('enabled').notNull().default(true),
-  nextScanAt: timestamp('next_scan_at', { withTimezone: true }),
   lastScanAt: timestamp('last_scan_at', { withTimezone: true }),
   createdAt,
   updatedAt,
 })
+
+/** Singleton configuration for the global repository scan queue. */
+export const scanScheduleSettings = pgTable('scan_schedule_settings', {
+  id: integer('id').primaryKey().default(1),
+  cronExpression: text('cron_expression').notNull().default('0 3 * * *'),
+  enabled: boolean('enabled').notNull().default(true),
+  cooldownMinutes: integer('cooldown_minutes').notNull().default(5),
+  nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+  lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+})
+
+/** Durable queue populated as one batch whenever the global schedule is due. */
+export const scheduledRepositoryQueue = pgTable(
+  'scheduled_repository_queue',
+  {
+    id: serial('id').primaryKey(),
+    repositoryId: integer('repository_id')
+      .notNull()
+      .references(() => repositories.id, { onDelete: 'cascade' }),
+    enqueuedAt: timestamp('enqueued_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('scheduled_repository_queue_repository_idx').on(
+      table.repositoryId,
+    ),
+    index('scheduled_repository_queue_enqueued_idx').on(table.enqueuedAt),
+  ],
+)
 
 /**
  * Persistent, source-grounded knowledge about a repository. The overview is
@@ -502,6 +531,7 @@ export const repositoriesRelations = relations(
   ({ many, one }) => ({
     scans: many(scans),
     findings: many(findings),
+    scheduledQueueEntries: many(scheduledRepositoryQueue),
     knowledge: one(repositoryKnowledge, {
       fields: [repositories.id],
       references: [repositoryKnowledge.repositoryId],
@@ -509,6 +539,16 @@ export const repositoriesRelations = relations(
     securityProfile: one(repositorySecurityProfiles, {
       fields: [repositories.id],
       references: [repositorySecurityProfiles.repositoryId],
+    }),
+  }),
+)
+
+export const scheduledRepositoryQueueRelations = relations(
+  scheduledRepositoryQueue,
+  ({ one }) => ({
+    repository: one(repositories, {
+      fields: [scheduledRepositoryQueue.repositoryId],
+      references: [repositories.id],
     }),
   }),
 )
@@ -617,6 +657,9 @@ export const scanArtifactsRelations = relations(scanArtifacts, ({ one }) => ({
 }))
 
 export type Repository = typeof repositories.$inferSelect
+export type ScanScheduleSettings = typeof scanScheduleSettings.$inferSelect
+export type ScheduledRepositoryQueueEntry =
+  typeof scheduledRepositoryQueue.$inferSelect
 export type Scan = typeof scans.$inferSelect
 export type ScannerRun = typeof scannerRuns.$inferSelect
 export type Finding = typeof findings.$inferSelect

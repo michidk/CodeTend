@@ -106,8 +106,10 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
   <img src="docs/repository-page.png" alt="CodeTend repository page showing the overall score, per-scanner grades, active findings and change-over-time charts" width="820">
 </p>
 
-1. **Add a repository**: URL, branch, cron schedule (UTC).
-2. **Scan now**, or wait for the schedule. Choose standard or bounded deep
+1. **Add a repository** from the repositories available to the configured
+   GitHub App or token, or use the URL fallback for another Git host.
+2. **Scan now**, or configure the global cron and queue cooldown in Settings.
+   Choose standard or bounded deep
    mode, whole repository or selected paths, and an optional cost ceiling.
 3. Watch the phase update live: cloning → indexing → knowledge → scanning →
    reconciling.
@@ -189,7 +191,7 @@ serves the production build instead.
 | `bun run eve:build` / `bun run eve:start` | Compile and serve the Eve agent |
 | `bun run db:generate` | Generate a migration after editing `src/db/schema.ts` |
 | `bun run db:migrate` | Apply committed migrations |
-| `bun run scripts/cli.ts add <name> <url> [branch] [cron]` | Scripting helper |
+| `bun run scripts/cli.ts add <name> <url> [branch]` | Scripting helper |
 
 </details>
 

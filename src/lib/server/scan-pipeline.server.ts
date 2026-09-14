@@ -15,6 +15,7 @@ import {
   type ScanTrigger,
   scannerRuns,
   scans,
+  scheduledRepositoryQueue,
 } from '@/db/schema'
 import { DomainError } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
@@ -26,7 +27,6 @@ import {
 } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
 import { agentScanners, enabledScanners, getScanner } from '@/lib/scanners'
-import { computeNextScanAt } from '@/lib/schedule'
 import {
   calculateOverallScore,
   calculateScannerScore,
@@ -186,17 +186,13 @@ export async function startScan(
   }
   if (!scan) throw new Error('Failed to create scan')
 
-  // Always advance the schedule, even for manual scans, so a manual scan
-  // never causes a second scheduled scan immediately afterwards.
-  await db
-    .update(repositories)
-    .set({
-      nextScanAt: repository.enabled
-        ? computeNextScanAt(repository.cronExpression, new Date())
-        : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(repositories.id, repositoryId))
+  // A manual scan satisfies any pending scheduled work for this repository,
+  // preventing the global queue from scanning it again immediately afterward.
+  if (trigger === 'manual') {
+    await db
+      .delete(scheduledRepositoryQueue)
+      .where(eq(scheduledRepositoryQueue.repositoryId, repositoryId))
+  }
 
   void runScanPipeline(scan.id, repository).catch((error) => {
     console.error(`[CodeTend] scan ${scan.id} crashed`, error)

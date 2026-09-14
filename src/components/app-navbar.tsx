@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Activity, Plus, Radar } from 'lucide-react'
+import { Activity, Plus, Radar, Settings } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,7 @@ export function AppNavbar() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
+  const settingsActive = isActive(pathname, '/settings', false)
 
   return (
     <>
@@ -65,7 +66,23 @@ export function AppNavbar() {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
-            <ThemeToggle />
+            <Button
+              asChild
+              size="icon"
+              variant={settingsActive ? 'default' : 'ghost'}
+            >
+              <Link
+                to="/settings"
+                aria-label="Settings"
+                aria-current={settingsActive ? 'page' : undefined}
+                title="Settings"
+              >
+                <Settings className="size-4" aria-hidden="true" />
+              </Link>
+            </Button>
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
             <Button asChild className="gap-1.5 px-3 sm:px-5">
               <Link to="/repositories/new">
                 <Plus className="size-4" />

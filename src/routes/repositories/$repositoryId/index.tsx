@@ -64,7 +64,6 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { enabledScanners } from '@/lib/scanners'
-import { describeCron } from '@/lib/schedule-presets'
 import { GRADE_DESCRIPTIONS, type Grade } from '@/lib/scoring'
 import { cancelScan, deleteRepository } from '@/lib/server/repositories'
 import {
@@ -164,11 +163,7 @@ function RepositoryPage() {
             >
               {repository.url}
             </a>{' '}
-            · branch <code>{repository.branch}</code> ·{' '}
-            {describeCron(repository.cronExpression)}
-            {repository.enabled
-              ? ` · next scan ${formatRelative(repository.nextScanAt)}`
-              : ' · schedule off'}
+            · branch <code>{repository.branch}</code>
           </>
         }
         leading={<GradeBadge grade={latestScan?.grade} size="lg" />}

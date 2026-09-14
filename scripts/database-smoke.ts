@@ -82,6 +82,8 @@ try {
     'finding_validations',
     'repository_security_profiles',
     'scan_artifacts',
+    'scan_schedule_settings',
+    'scheduled_repository_queue',
   ]
   const tables = await client<{ table_name: string }[]>`
     select table_name
@@ -128,8 +130,8 @@ try {
   try {
     await client.begin(async (transaction) => {
       const [repository] = await transaction<[{ id: number }]>`
-        insert into repositories (name, url, branch, cron_expression, enabled)
-        values ('database smoke test', 'https://github.com/example/test.git', 'main', '0 3 * * *', false)
+        insert into repositories (name, url, branch)
+        values ('database smoke test', 'https://github.com/example/test.git', 'main')
         returning id
       `
       await transaction`
@@ -173,8 +175,8 @@ try {
   try {
     await client.begin(async (transaction) => {
       const [repository] = await transaction<[{ id: number }]>`
-        insert into repositories (name, url, branch, cron_expression, enabled)
-        values ('patch smoke test', 'https://github.com/example/patch.git', 'main', '0 3 * * *', false)
+        insert into repositories (name, url, branch)
+        values ('patch smoke test', 'https://github.com/example/patch.git', 'main')
         returning id
       `
       const [finding] = await transaction<[{ id: number }]>`

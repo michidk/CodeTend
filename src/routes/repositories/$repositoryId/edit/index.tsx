@@ -38,8 +38,6 @@ function EditRepositoryPage() {
           name: repository.name,
           url: repository.url,
           branch: repository.branch,
-          cronExpression: repository.cronExpression,
-          enabled: repository.enabled,
         }}
         onSubmit={(values) =>
           updateRepository({ data: { ...values, id: repository.id } })

@@ -1,9 +1,17 @@
 import '@tanstack/react-start/server-only'
 
-import { and, eq, isNotNull, lte } from 'drizzle-orm'
+import { asc, eq, inArray, lte } from 'drizzle-orm'
 import { db } from '@/db'
-import { findingPatches, repositories } from '@/db/schema'
+import {
+  findingPatches,
+  repositories,
+  scanScheduleSettings,
+  scans,
+  scheduledRepositoryQueue,
+} from '@/db/schema'
 import { getServerEnv } from '@/lib/env.server'
+import { computeNextScanAt } from '@/lib/schedule'
+import { isScheduleDispatchReady } from '@/lib/scheduled-queue'
 import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
 import {
   pruneTransientPatchArtifacts,
@@ -14,6 +22,7 @@ import {
   startScan,
 } from '@/lib/server/scan-pipeline.server'
 import { pruneTransientUsageFiles } from '@/lib/server/scan-usage.server'
+import { ensureScheduleSettingsRow } from '@/lib/server/schedule-settings'
 
 const SCHEDULER_KEY = Symbol.for('codetend.scheduler')
 
@@ -23,10 +32,9 @@ interface SchedulerState {
 }
 
 /**
- * Lightweight in-process scheduler. Every tick finds enabled repositories
- * whose `nextScanAt` is due and starts a scan for each. `startScan` advances
- * `nextScanAt` and refuses to run two scans of one repository concurrently,
- * so a slow scan never piles up.
+ * Lightweight in-process scheduler. A due global schedule durably enqueues
+ * every repository as one batch. Each tick dispatches at most one queue entry,
+ * honoring the configured cooldown and the normal scan-capacity limits.
  */
 export function ensureScheduler(): void {
   const globalState = globalThis as { [SCHEDULER_KEY]?: SchedulerState }
@@ -82,20 +90,87 @@ async function tick(state: SchedulerState) {
   if (state.ticking) return
   state.ticking = true
   try {
-    const due = await db.query.repositories.findMany({
-      where: and(
-        eq(repositories.enabled, true),
-        isNotNull(repositories.nextScanAt),
-        lte(repositories.nextScanAt, new Date()),
-      ),
-    })
-    for (const repository of due) {
-      const scanId = await startScan(repository.id, 'schedule')
-      if (scanId)
-        console.info(
-          `[CodeTend] scheduled scan ${scanId} for ${repository.name}`,
-        )
+    const now = new Date()
+    let settings = await ensureScheduleSettingsRow()
+    if (settings.enabled && settings.nextRunAt && settings.nextRunAt <= now) {
+      const repositoryIds = await db
+        .select({ repositoryId: repositories.id })
+        .from(repositories)
+        .orderBy(asc(repositories.createdAt), asc(repositories.id))
+      if (repositoryIds.length > 0) {
+        await db
+          .insert(scheduledRepositoryQueue)
+          .values(repositoryIds)
+          .onConflictDoNothing()
+      }
+      const [advanced] = await db
+        .update(scanScheduleSettings)
+        .set({
+          nextRunAt: computeNextScanAt(settings.cronExpression, now),
+          updatedAt: now,
+        })
+        .where(lte(scanScheduleSettings.nextRunAt, now))
+        .returning()
+      settings = advanced ?? settings
+      console.info(
+        `[CodeTend] queued ${repositoryIds.length} repositories for scheduled scanning`,
+      )
     }
+
+    if (!settings.enabled) return
+    if (
+      !isScheduleDispatchReady(
+        settings.lastDispatchedAt,
+        settings.cooldownMinutes,
+        now,
+      )
+    ) {
+      return
+    }
+
+    const queue = await db
+      .select({
+        id: scheduledRepositoryQueue.id,
+        repositoryId: scheduledRepositoryQueue.repositoryId,
+        repositoryName: repositories.name,
+      })
+      .from(scheduledRepositoryQueue)
+      .innerJoin(
+        repositories,
+        eq(scheduledRepositoryQueue.repositoryId, repositories.id),
+      )
+      .orderBy(
+        asc(scheduledRepositoryQueue.enqueuedAt),
+        asc(scheduledRepositoryQueue.id),
+      )
+    if (queue.length === 0) return
+
+    const activeScans = await db.query.scans.findMany({
+      where: inArray(scans.status, ['queued', 'running']),
+      columns: { repositoryId: true },
+    })
+    const activeRepositoryIds = new Set(
+      activeScans.map((scan) => scan.repositoryId),
+    )
+    const next = queue.find(
+      (entry) => !activeRepositoryIds.has(entry.repositoryId),
+    )
+    if (!next) return
+
+    const scanId = await startScan(next.repositoryId, 'schedule')
+    if (!scanId) return
+    await db.transaction(async (transaction) => {
+      await transaction
+        .delete(scheduledRepositoryQueue)
+        .where(eq(scheduledRepositoryQueue.id, next.id))
+      await transaction
+        .update(scanScheduleSettings)
+        .set({ lastDispatchedAt: now, updatedAt: now })
+        .where(eq(scanScheduleSettings.id, settings.id))
+    })
+    console.info(
+      `[CodeTend] scheduled scan ${scanId} for ${next.repositoryName}`,
+    )
   } catch (error) {
     console.error('[CodeTend] scheduler tick failed', error)
   } finally {
