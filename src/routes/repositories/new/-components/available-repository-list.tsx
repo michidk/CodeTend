@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Archive, GitBranch, Lock, Search } from 'lucide-react'
+import { GitBranch, Lock, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -90,12 +90,6 @@ export function AvailableRepositoryList({
                       <Lock
                         className="size-3.5 shrink-0 text-muted-foreground"
                         aria-label="Private repository"
-                      />
-                    ) : null}
-                    {repository.archived ? (
-                      <Archive
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                        aria-label="Archived repository"
                       />
                     ) : null}
                   </div>

@@ -147,6 +147,7 @@ function toAvailableRepositories(
   rows: readonly GitHubRepositoryResponse[],
 ): AvailableGitHubRepository[] {
   return rows
+    .filter((repository) => !repository.archived)
     .map((repository) => ({
       name: repository.full_name,
       url: repository.clone_url,

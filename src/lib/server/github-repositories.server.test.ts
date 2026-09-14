@@ -14,7 +14,16 @@ describe('available GitHub repositories', () => {
     const urls: string[] = []
     const request = (async (input: string | URL | Request) => {
       urls.push(String(input))
-      return Response.json({ repositories: [repository] })
+      return Response.json({
+        repositories: [
+          repository,
+          {
+            ...repository,
+            full_name: 'example/archived-repo',
+            archived: true,
+          },
+        ],
+      })
     }) as typeof fetch
 
     const result = await listGitHubRepositoriesWithToken('token', request)
@@ -30,6 +39,22 @@ describe('available GitHub repositories', () => {
         archived: false,
       },
     ])
+  })
+
+  test('hides archived repositories', async () => {
+    const request = (async (_input: string | URL | Request) =>
+      Response.json([
+        repository,
+        {
+          ...repository,
+          full_name: 'example/archived-repo',
+          archived: true,
+        },
+      ])) as typeof fetch
+
+    const result = await listGitHubRepositoriesWithToken('token', request)
+
+    expect(result.map((row) => row.name)).toEqual(['example/private-repo'])
   })
 
   test('falls back to user repositories for a non-installation token', async () => {
