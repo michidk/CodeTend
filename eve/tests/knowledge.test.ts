@@ -36,6 +36,18 @@ const previous: PreviousKnowledge = {
       { name: 'API', paths: ['src/api'], responsibility: 'HTTP handlers' },
     ],
     concepts: [],
+    securityProfile: {
+      projectOverview: 'An HTTP API.',
+      assets: ['Application data'],
+      entryPoints: ['HTTP requests'],
+      trustBoundaries: ['Internet clients to the API'],
+      authAssumptions: [],
+      sensitiveDataPaths: [],
+      privilegedActions: [],
+      securityInvariants: [],
+      priorities: [],
+      exclusions: [],
+    },
   },
   sources: [
     { path: 'package.json', hash: 'p1' },
@@ -59,6 +71,20 @@ describe('assessKnowledgeStaleness', () => {
     )
     expect(report.refreshNeeded).toBe(false)
     expect(report.reason).toBe('All grounding files are unchanged.')
+  })
+
+  test('refreshes legacy knowledge without an inferred security profile', () => {
+    const legacy = {
+      ...previous,
+      summary: { ...previous.summary, securityProfile: undefined },
+    }
+    const report = assessKnowledgeStaleness(
+      legacy,
+      workspace({ 'package.json': 'p1', 'src/api/index.ts': 'a1' }),
+      2,
+    )
+    expect(report.refreshNeeded).toBe(true)
+    expect(report.reason).toContain('security profile has not been inferred')
   })
 
   test('refreshes when a grounding file changed or disappeared', () => {

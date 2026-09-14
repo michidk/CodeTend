@@ -6,22 +6,8 @@ import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
 import { parseIdParam } from '@/lib/route-params'
-import type { SecurityProfile } from '@/lib/security-scans'
 import { getRepositorySecurityProfile } from '@/lib/server/security-profile'
-import { SecurityProfileForm } from './-components/security-profile-form'
-
-const EMPTY_PROFILE: SecurityProfile = {
-  projectOverview: '',
-  assets: [],
-  entryPoints: [],
-  trustBoundaries: [],
-  authAssumptions: [],
-  sensitiveDataPaths: [],
-  privilegedActions: [],
-  securityInvariants: [],
-  priorities: [],
-  exclusions: [],
-}
+import { SecurityProfileView } from './-components/security-profile-form'
 
 export const Route = createFileRoute('/repositories/$repositoryId/security/')({
   loader: ({ params }) =>
@@ -58,7 +44,7 @@ function SecurityProfilePage() {
           </Link>
         }
         title="Security profile"
-        description="Editable threat-model context used for security discovery, validation, severity, and prioritization. Keep this aligned with deployed trust boundaries and product policy."
+        description="Threat-model context inferred from repository architecture, configuration, entry points, and data flows. It refreshes automatically after each complete repository scan."
         size="compact"
         actions={
           data.profile ? (
@@ -68,10 +54,13 @@ function SecurityProfilePage() {
           ) : null
         }
       />
-      <SecurityProfileForm
-        repositoryId={data.repository.id}
-        initial={data.profile?.profile ?? EMPTY_PROFILE}
-      />
+      {data.profile ? (
+        <SecurityProfileView profile={data.profile.profile} />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Run a complete repository scan to generate the security profile.
+        </p>
+      )}
     </Page>
   )
 }

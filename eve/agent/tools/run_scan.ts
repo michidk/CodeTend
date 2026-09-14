@@ -228,6 +228,7 @@ export default defineWorkflowTool({
               frameworks: output.frameworks,
               subsystems: output.subsystems,
               concepts: output.concepts,
+              securityProfile: output.securityProfile,
             },
             sources: resolveSources(output.sources, workspace),
             reason: staleness.reason,
@@ -267,8 +268,7 @@ export default defineWorkflowTool({
     completed += 1
     const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
 
-    const securityProfile =
-      request.securityProfile ?? securityProfileFromKnowledge(knowledge)
+    const securityProfile = securityProfileFromKnowledge(knowledge)
 
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.
@@ -365,10 +365,7 @@ export default defineWorkflowTool({
         knowledge,
         securityProfile: {
           profile: securityProfile,
-          generated:
-            request.securityProfile === null &&
-            request.target.kind === 'repository' &&
-            !sampled,
+          generated: request.target.kind === 'repository' && !sampled,
         },
         dependencyAudit,
         scanners: outcomes,
@@ -461,10 +458,7 @@ export default defineWorkflowTool({
       knowledge,
       securityProfile: {
         profile: securityProfile,
-        generated:
-          request.securityProfile === null &&
-          request.target.kind === 'repository' &&
-          !sampled,
+        generated: request.target.kind === 'repository' && !sampled,
       },
       dependencyAudit,
       scanners: outcomes,
@@ -542,21 +536,23 @@ function describeError(error: unknown): string {
 function securityProfileFromKnowledge(
   knowledge: KnowledgeResult,
 ): NonNullable<ScanRequest['securityProfile']> {
-  return {
-    projectOverview: knowledge.overview,
-    assets: knowledge.summary.subsystems.map(
-      (subsystem) =>
-        `${subsystem.name}: ${subsystem.responsibility} (${subsystem.paths.join(', ')})`,
-    ),
-    entryPoints: [],
-    trustBoundaries: [],
-    authAssumptions: [],
-    sensitiveDataPaths: [],
-    privilegedActions: [],
-    securityInvariants: [],
-    priorities: [],
-    exclusions: [],
-  }
+  return (
+    knowledge.summary.securityProfile ?? {
+      projectOverview: knowledge.overview,
+      assets: knowledge.summary.subsystems.map(
+        (subsystem) =>
+          `${subsystem.name}: ${subsystem.responsibility} (${subsystem.paths.join(', ')})`,
+      ),
+      entryPoints: [],
+      trustBoundaries: [],
+      authAssumptions: [],
+      sensitiveDataPaths: [],
+      privilegedActions: [],
+      securityInvariants: [],
+      priorities: [],
+      exclusions: [],
+    }
+  )
 }
 
 interface RawScannerResult {

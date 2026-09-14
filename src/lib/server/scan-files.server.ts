@@ -135,6 +135,20 @@ const knowledgeSummarySchema = z.object({
     )
     .default([]),
   concepts: z.array(z.string()).default([]),
+  securityProfile: z
+    .object({
+      projectOverview: z.string(),
+      assets: z.array(z.string()),
+      entryPoints: z.array(z.string()),
+      trustBoundaries: z.array(z.string()),
+      authAssumptions: z.array(z.string()),
+      sensitiveDataPaths: z.array(z.string()),
+      privilegedActions: z.array(z.string()),
+      securityInvariants: z.array(z.string()),
+      priorities: z.array(z.string()),
+      exclusions: z.array(z.string()),
+    })
+    .optional(),
 })
 
 const subsystemDependencyGraphSchema = z

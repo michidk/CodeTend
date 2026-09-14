@@ -65,6 +65,8 @@ export function assessKnowledgeStaleness(
       : 0
 
   const reasons: string[] = []
+  if (!previous.summary.securityProfile)
+    reasons.push('security profile has not been inferred yet')
   if (changedSources.length > 0)
     reasons.push(`${changedSources.length} grounding file(s) changed`)
   if (removedSources.length > 0)
@@ -109,6 +111,35 @@ export const knowledgeOutputSchema = {
       },
     },
     concepts: { type: 'array', items: { type: 'string' } },
+    securityProfile: {
+      type: 'object',
+      description:
+        'Source-grounded threat model inferred from architecture, entry points, configuration, authentication and data flows. Use empty arrays only when the repository contains no evidence for a field.',
+      properties: {
+        projectOverview: { type: 'string' },
+        assets: { type: 'array', items: { type: 'string' } },
+        entryPoints: { type: 'array', items: { type: 'string' } },
+        trustBoundaries: { type: 'array', items: { type: 'string' } },
+        authAssumptions: { type: 'array', items: { type: 'string' } },
+        sensitiveDataPaths: { type: 'array', items: { type: 'string' } },
+        privilegedActions: { type: 'array', items: { type: 'string' } },
+        securityInvariants: { type: 'array', items: { type: 'string' } },
+        priorities: { type: 'array', items: { type: 'string' } },
+        exclusions: { type: 'array', items: { type: 'string' } },
+      },
+      required: [
+        'projectOverview',
+        'assets',
+        'entryPoints',
+        'trustBoundaries',
+        'authAssumptions',
+        'sensitiveDataPaths',
+        'privilegedActions',
+        'securityInvariants',
+        'priorities',
+        'exclusions',
+      ],
+    },
     sources: {
       type: 'array',
       description:
@@ -123,6 +154,7 @@ export const knowledgeOutputSchema = {
     'frameworks',
     'subsystems',
     'concepts',
+    'securityProfile',
     'sources',
   ],
 } as const
@@ -133,6 +165,7 @@ export interface KnowledgeAgentOutput {
   frameworks: string[]
   subsystems: { name: string; paths: string[]; responsibility: string }[]
   concepts: string[]
+  securityProfile: NonNullable<PreviousKnowledge['summary']['securityProfile']>
   sources: string[]
 }
 

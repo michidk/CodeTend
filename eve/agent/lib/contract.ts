@@ -52,6 +52,7 @@ export interface KnowledgeSummary {
     responsibility: string
   }[]
   readonly concepts: string[]
+  readonly securityProfile?: SecurityProfile
 }
 
 export interface ScanRequest {

@@ -1,12 +1,5 @@
-import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
-import { getErrorMessage } from '@/lib/error-message'
 import type { SecurityProfile } from '@/lib/security-scans'
-import { updateRepositorySecurityProfile } from '@/lib/server/security-profile'
 
 const LIST_FIELDS = [
   ['assets', 'Assets'],
@@ -23,55 +16,17 @@ const LIST_FIELDS = [
   string,
 ][]
 
-export function SecurityProfileForm({
-  repositoryId,
-  initial,
-}: {
-  repositoryId: number
-  initial: SecurityProfile
-}) {
-  const router = useRouter()
-  const [profile, setProfile] = useState(initial)
-  const [saving, setSaving] = useState(false)
-
-  const save = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setSaving(true)
-    try {
-      await updateRepositorySecurityProfile({
-        data: { repositoryId, profile },
-      })
-      toast.success('Security profile saved')
-      await router.invalidate()
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Could not save the security profile'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
+export function SecurityProfileView({ profile }: { profile: SecurityProfile }) {
   return (
-    <form onSubmit={(event) => void save(event)} className="space-y-4">
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Project overview</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <Label htmlFor="security-project-overview">
-            Architecture and security context
-          </Label>
-          <textarea
-            id="security-project-overview"
-            value={profile.projectOverview}
-            onChange={(event) =>
-              setProfile((current) => ({
-                ...current,
-                projectOverview: event.target.value,
-              }))
-            }
-            rows={10}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
+        <CardContent>
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            {profile.projectOverview || 'No overview was inferred.'}
+          </p>
         </CardContent>
       </Card>
 
@@ -81,33 +36,22 @@ export function SecurityProfileForm({
             <CardHeader>
               <CardTitle>{label}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Label htmlFor={`security-${field}`}>One item per line</Label>
-              <textarea
-                id={`security-${field}`}
-                value={profile[field].join('\n')}
-                onChange={(event) =>
-                  setProfile((current) => ({
-                    ...current,
-                    [field]: event.target.value
-                      .split('\n')
-                      .map((value) => value.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                rows={6}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+            <CardContent>
+              {profile[field].length > 0 ? (
+                <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                  {profile[field].map((value) => (
+                    <li key={value}>{value}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Nothing was inferred from the repository.
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}
       </div>
-
-      <div className="flex justify-end">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Save security profile'}
-        </Button>
-      </div>
-    </form>
+    </div>
   )
 }
