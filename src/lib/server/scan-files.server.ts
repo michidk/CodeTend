@@ -100,6 +100,7 @@ export interface ScanRequestFile {
     readonly runner: 'auto' | 'docker' | 'disabled'
     readonly image: string
   }
+  readonly dependencyAudit: boolean
   readonly scanners: readonly {
     readonly id: string
     readonly name: string

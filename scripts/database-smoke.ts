@@ -80,6 +80,7 @@ try {
     'finding_events',
     'finding_patches',
     'finding_validations',
+    'global_scanner_settings',
     'repository_security_profiles',
     'scan_artifacts',
     'scan_schedule_settings',
@@ -97,6 +98,17 @@ try {
   )
   if (missingTables.length > 0) {
     throw new Error(`Missing security tables: ${missingTables.join(', ')}`)
+  }
+
+  const scannerRunColumns = await client<{ column_name: string }[]>`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'scanner_runs'
+      and column_name = 'scanner_definition'
+  `
+  if (scannerRunColumns.length !== 1) {
+    throw new Error('Missing scanner run definition snapshot column')
   }
 
   const requiredPatchColumns = [

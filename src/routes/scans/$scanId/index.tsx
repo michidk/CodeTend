@@ -39,7 +39,7 @@ import {
   shortSha,
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
-import { enabledScanners } from '@/lib/scanners'
+import { getScanner } from '@/lib/scanners'
 import type { ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
@@ -77,6 +77,12 @@ function ScanPage() {
     scan.cacheReadTokens == null
       ? null
       : scan.cacheReadTokens + (scan.cacheWriteTokens ?? 0)
+  const scannerNames = Object.fromEntries(
+    scan.scannerRuns.map((run) => [
+      run.scannerId,
+      run.scannerDefinition?.shortName ?? run.scannerId,
+    ]),
+  )
 
   const stop = async () => {
     try {
@@ -279,22 +285,20 @@ function ScanPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {enabledScanners.map((scanner) => {
-              const run = scan.scannerRuns.find(
-                (entry) => entry.scannerId === scanner.id,
-              )
+            {scan.scannerRuns.map((run) => {
+              const scanner = run.scannerDefinition ?? getScanner(run.scannerId)
               return (
-                <TableRow key={scanner.id}>
+                <TableRow key={run.scannerId}>
                   <TableCell className="font-semibold">
                     <Link
                       to="/repositories/$repositoryId/scanners/$scannerId"
                       params={{
                         repositoryId: String(scan.repositoryId),
-                        scannerId: scanner.id,
+                        scannerId: run.scannerId,
                       }}
                       className="text-link hover:underline"
                     >
-                      {scanner.name}
+                      {scanner?.name ?? run.scannerId}
                     </Link>
                   </TableCell>
                   <TableCell>
@@ -370,6 +374,7 @@ function ScanPage() {
                   priorityScore: occurrence.priorityScore,
                 }}
                 showScanner
+                scannerName={scannerNames[occurrence.finding.scannerId]}
               />
             ))}
           </div>

@@ -63,7 +63,6 @@ import {
   shortSha,
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
-import { enabledScanners } from '@/lib/scanners'
 import { GRADE_DESCRIPTIONS, type Grade } from '@/lib/scoring'
 import { cancelScan, deleteRepository } from '@/lib/server/repositories'
 import {
@@ -117,6 +116,7 @@ function RepositoryPage() {
     history,
     timeline,
     knowledge,
+    scanners,
   } = detail
 
   const scored = history.filter(
@@ -322,7 +322,7 @@ function RepositoryPage() {
           Scanner scores
         </SectionHeading>
         <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-          {enabledScanners.map((scanner) => {
+          {scanners.map((scanner) => {
             const run = scannerRuns.find(
               (entry) => entry.scannerId === scanner.id,
             )
@@ -386,7 +386,12 @@ function RepositoryPage() {
         ) : (
           <div className="space-y-2">
             {openFindings.map((finding) => (
-              <FindingCard key={finding.id} finding={finding} showScanner />
+              <FindingCard
+                key={finding.id}
+                finding={finding}
+                showScanner
+                scannerName={detail.scannerLabels[finding.scannerId]}
+              />
             ))}
           </div>
         )}
@@ -410,7 +415,12 @@ function RepositoryPage() {
           </p>
           <div className="space-y-2">
             {ignoredFindings.map((finding) => (
-              <FindingCard key={finding.id} finding={finding} showScanner />
+              <FindingCard
+                key={finding.id}
+                finding={finding}
+                showScanner
+                scannerName={detail.scannerLabels[finding.scannerId]}
+              />
             ))}
           </div>
         </section>

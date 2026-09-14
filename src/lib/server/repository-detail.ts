@@ -15,11 +15,11 @@ import {
   PRIORITY_ORDER,
   SEVERITY_ORDER,
 } from '@/lib/findings'
-import { enabledScanners } from '@/lib/scanners'
 import {
   FINDING_SUMMARY_COLUMNS,
   FINDING_SUMMARY_RELATIONS,
 } from '@/lib/server/finding-detail'
+import { listGlobalScanners } from '@/lib/server/scanner-settings'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
@@ -80,6 +80,7 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
         scannerRuns: {
           columns: {
             scannerId: true,
+            scannerDefinition: true,
             score: true,
             status: true,
           },
@@ -96,35 +97,40 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
         (scan) => scan.status === 'queued' || scan.status === 'running',
       ) ?? null
 
-    const [openFindings, ignoredFindings, knowledge] = await Promise.all([
-      db.query.findings.findMany({
-        where: and(
-          eq(findings.repositoryId, repositoryId),
-          inArray(findings.state, [...OPEN_FINDING_STATES]),
-        ),
-        columns: FINDING_SUMMARY_COLUMNS,
-        with: FINDING_SUMMARY_RELATIONS,
-      }),
-      db.query.findings.findMany({
-        where: and(
-          eq(findings.repositoryId, repositoryId),
-          isNotNull(findings.disposition),
-        ),
-        orderBy: [desc(findings.triagedAt)],
-        columns: FINDING_SUMMARY_COLUMNS,
-        with: FINDING_SUMMARY_RELATIONS,
-      }),
-      db.query.repositoryKnowledge.findFirst({
-        where: eq(repositoryKnowledge.repositoryId, repositoryId),
-        columns: {
-          summary: true,
-          refreshedAt: true,
-          commitSha: true,
-          fileCount: true,
-          sources: true,
-        },
-      }),
-    ])
+    const [openFindings, ignoredFindings, knowledge, configuredScanners] =
+      await Promise.all([
+        db.query.findings.findMany({
+          where: and(
+            eq(findings.repositoryId, repositoryId),
+            inArray(findings.state, [...OPEN_FINDING_STATES]),
+          ),
+          columns: FINDING_SUMMARY_COLUMNS,
+          with: FINDING_SUMMARY_RELATIONS,
+        }),
+        db.query.findings.findMany({
+          where: and(
+            eq(findings.repositoryId, repositoryId),
+            isNotNull(findings.disposition),
+          ),
+          orderBy: [desc(findings.triagedAt)],
+          columns: FINDING_SUMMARY_COLUMNS,
+          with: FINDING_SUMMARY_RELATIONS,
+        }),
+        db.query.repositoryKnowledge.findFirst({
+          where: eq(repositoryKnowledge.repositoryId, repositoryId),
+          columns: {
+            summary: true,
+            refreshedAt: true,
+            commitSha: true,
+            fileCount: true,
+            sources: true,
+          },
+        }),
+        listGlobalScanners(),
+      ])
+    const enabledScanners = configuredScanners.filter(
+      (scanner) => scanner.enabled,
+    )
 
     const scored = history
       .filter(
@@ -158,6 +164,17 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       latestScan: latest,
       runningScan: running,
       scannerRuns: latest?.scannerRuns ?? [],
+      scanners: enabledScanners,
+      scannerLabels: Object.fromEntries([
+        ...configuredScanners.map(
+          (scanner) => [scanner.id, scanner.shortName] as const,
+        ),
+        ...(latest?.scannerRuns.flatMap((run) =>
+          run.scannerDefinition
+            ? [[run.scannerId, run.scannerDefinition.shortName] as const]
+            : [],
+        ) ?? []),
+      ]) as Record<string, string>,
       openFindings,
       ignoredFindings,
       openFindingsByScanner: Object.fromEntries(
@@ -230,6 +247,7 @@ export const getScannerDetail = createServerFn({ method: 'GET' })
         scanId: scannerRuns.scanId,
         score: scannerRuns.score,
         status: scannerRuns.status,
+        scannerDefinition: scannerRuns.scannerDefinition,
         finishedAt: scannerRuns.finishedAt,
         scanCreatedAt: scans.createdAt,
         scanStatus: scans.status,
@@ -285,8 +303,14 @@ export const getScannerDetail = createServerFn({ method: 'GET' })
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, 25)
 
+    const configuredScanner = (await listGlobalScanners()).find(
+      (scanner) => scanner.id === data.scannerId,
+    )
+    const scanner = latestRunRow?.scannerDefinition ?? configuredScanner ?? null
+
     return {
       repository,
+      scanner,
       latestRun,
       runs: runs
         .filter((run) => run.status === 'completed')

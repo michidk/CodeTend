@@ -36,10 +36,13 @@ capacity is full.
 
 ## Scanners
 
-Defined in [`src/lib/scanners.ts`](../src/lib/scanners.ts). Every enabled
-scanner runs on every scan as its own Eve subagent session with read-only
-filesystem access (`bash`, `read_file`, `glob`, `grep`) and, when available,
-GitNexus MCP tools.
+Built-in definitions live in
+[`src/lib/scanners.ts`](../src/lib/scanners.ts). PostgreSQL stores global
+enable overrides and operator-defined custom scanners; each scan copies its
+active definitions into the scanner-run rows so an in-progress or historical
+scan is unaffected by later settings changes. Every enabled agent scanner runs
+as its own Eve subagent session with read-only filesystem access (`bash`,
+`read_file`, `glob`, `grep`) and, when available, GitNexus MCP tools.
 
 Architecture & Modularity · Duplication & Abstraction · Dead & Obsolete Code ·
 Complexity & Maintainability · Tests & Testability · Reliability & Error
@@ -53,10 +56,17 @@ problem is not reported (and scored) by two scanners.
 
 ### Adding a scanner
 
-Append an entry with `id`, `name`, `shortName`, `description`, `weight`,
-`enabled`, `prompt` and `fixPromptTitle`. Nothing else changes: the pipeline,
-scoring, charts, scanner pages and fix prompts iterate the registry. The
-shared analysis contract (evidence-first, language-agnostic, structured
+Operators can add an organization-specific agent scanner from the Scanners
+page by supplying its identity, weight, review instructions and fix-prompt
+guidance. Custom definitions apply globally, can be enabled or disabled, and
+can be removed without deleting their existing findings or scan history.
+
+To ship a scanner as a built-in, append an entry with `id`, `name`,
+`shortName`, `description`, `weight`, `enabled`, `prompt` and
+`fixPromptTitle`. The pipeline, scoring, charts, scanner pages and fix prompts
+resolve the built-in registry together with persisted settings.
+
+The shared analysis contract (evidence-first, language-agnostic, structured
 findings, hypothesis verification) lives in
 [`eve/agent/subagents/scanner/instructions.md`](../eve/agent/subagents/scanner/instructions.md).
 

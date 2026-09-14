@@ -27,7 +27,7 @@ import {
   scannerResultJsonSchema,
 } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
-import { agentScanners, enabledScanners, getScanner } from '@/lib/scanners'
+import { getScanner, type ScannerDefinition } from '@/lib/scanners'
 import {
   calculateOverallScore,
   calculateScannerScore,
@@ -66,6 +66,7 @@ import {
   type ScanUsage,
   usageColumns,
 } from '@/lib/server/scan-usage.server'
+import { listGlobalScanners } from '@/lib/server/scanner-settings'
 import { enrichDependencyAudit } from '@/lib/server/vulnerability-enrichment.server'
 import { enrichSourceSecurityFinding } from '@/lib/vulnerabilities'
 
@@ -91,6 +92,19 @@ export async function startScan(
     where: eq(repositories.id, repositoryId),
   })
   if (!repository) throw new Error('Repository not found')
+
+  const hasEnabledScanner = (await listGlobalScanners()).some(
+    (scanner) => scanner.enabled,
+  )
+  if (!hasEnabledScanner) {
+    if (trigger === 'manual') {
+      throw new DomainError(
+        'conflict',
+        'No scanners are enabled. Enable a scanner and try again.',
+      )
+    }
+    return null
+  }
 
   const active = await db.query.scans.findFirst({
     where: and(
@@ -289,6 +303,18 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       return
     }
 
+    const activeScanners = (await listGlobalScanners()).filter(
+      (scanner) => scanner.enabled,
+    )
+    if (activeScanners.length === 0) {
+      throw new Error(
+        'No scanners are enabled. Enable a scanner and try again.',
+      )
+    }
+    const activeAgentScanners = activeScanners.filter(
+      (scanner) => scanner.kind !== 'dependency-audit',
+    )
+
     const gitnexus = env.GITNEXUS_ENABLED ? await ensureGitNexusServer() : false
     await throwIfCancellationRequested(scanId)
 
@@ -311,9 +337,10 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     ])
 
     await db.insert(scannerRuns).values(
-      enabledScanners.map((scanner) => ({
+      activeScanners.map((scanner) => ({
         scanId,
         scannerId: scanner.id,
+        scannerDefinition: scanner,
         status: 'pending' as const,
       })),
     )
@@ -340,6 +367,9 @@ async function runScanPipeline(scanId: number, repository: Repository) {
         runner: env.TECDEBT_VALIDATION_RUNNER,
         image: env.TECDEBT_VALIDATION_IMAGE,
       },
+      dependencyAudit: activeScanners.some(
+        (scanner) => scanner.kind === 'dependency-audit',
+      ),
       repositoryId: repository.id,
       repositoryName: repository.name,
       repositoryUrl: repository.url,
@@ -353,7 +383,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
             fileCount: knowledge.fileCount,
           }
         : null,
-      scanners: agentScanners.map((scanner) => ({
+      scanners: activeAgentScanners.map((scanner) => ({
         id: scanner.id,
         name: scanner.name,
         prompt: scanner.prompt,
@@ -461,6 +491,16 @@ async function persistScanResult(
     columns: { mode: true, target: true, maxFiles: true, maxCostUsd: true },
   })
   if (!scanConfiguration) throw new Error('Scan configuration disappeared')
+  const scannerRunRows = await db.query.scannerRuns.findMany({
+    where: eq(scannerRuns.scanId, scanId),
+    columns: { scannerId: true, scannerDefinition: true },
+  })
+  const scannerDefinitions = new Map(
+    scannerRunRows.flatMap((run): [string, ScannerDefinition][] => {
+      const definition = run.scannerDefinition ?? getScanner(run.scannerId)
+      return definition ? [[run.scannerId, definition]] : []
+    }),
+  )
   const countsPerScanner: FindingCounts[] = []
   const scoreInputs: {
     scanner: { id: string; weight: number }
@@ -468,20 +508,24 @@ async function persistScanResult(
   }[] = []
   let failedScanners = 0
 
-  const dependencyAudit = await persistDependencyAudit({
-    scanId,
-    repository,
-    commitSha: result.commitSha,
-    audit: result.dependencyAudit,
-    finishedAt,
-  })
-  countsPerScanner.push(dependencyAudit.counts)
-  scoreInputs.push(dependencyAudit.scoreInput)
-  if (dependencyAudit.failed) failedScanners += 1
+  const dependencyScanner = scannerDefinitions.get('vulnerabilities')
+  if (dependencyScanner) {
+    const dependencyAudit = await persistDependencyAudit({
+      scanId,
+      repository,
+      scanner: dependencyScanner,
+      commitSha: result.commitSha,
+      audit: result.dependencyAudit,
+      finishedAt,
+    })
+    countsPerScanner.push(dependencyAudit.counts)
+    scoreInputs.push(dependencyAudit.scoreInput)
+    if (dependencyAudit.failed) failedScanners += 1
+  }
 
   for (const outcome of result.scanners) {
     await throwIfCancellationRequested(scanId)
-    const scanner = getScanner(outcome.scannerId)
+    const scanner = scannerDefinitions.get(outcome.scannerId)
     if (!scanner) continue
 
     // A safety-classifier refusal ends the step with no content, so the
@@ -622,7 +666,8 @@ async function persistScanResult(
 
   const overallScore = calculateOverallScore(scoreInputs)
   const counts = sumCounts(countsPerScanner)
-  const allFailed = failedScanners === enabledScanners.length
+  const allFailed =
+    scannerDefinitions.size > 0 && failedScanners === scannerDefinitions.size
   const incompleteCoverage = result.coverage.completeness !== 'complete'
   const costExceeded =
     scanConfiguration.maxCostUsd !== null &&
@@ -755,6 +800,7 @@ async function persistFindingValidations(input: {
 async function persistDependencyAudit(input: {
   readonly scanId: number
   readonly repository: Repository
+  readonly scanner: ScannerDefinition
   readonly commitSha: string
   readonly audit: NonNullable<
     Awaited<ReturnType<typeof readScanResult>>
@@ -768,8 +814,7 @@ async function persistDependencyAudit(input: {
   }
   readonly failed: boolean
 }> {
-  const scanner = getScanner('vulnerabilities')
-  if (!scanner) throw new Error('Vulnerable Dependencies scanner is missing')
+  const scanner = input.scanner
 
   let failed =
     input.audit.status !== 'completed' || input.audit.report === undefined

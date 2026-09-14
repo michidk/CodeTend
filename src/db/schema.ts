@@ -30,14 +30,16 @@ import type {
   ValidationStatus,
   VulnerabilityMetadata,
 } from '@/lib/findings'
-import type {
-  ScanCoverage,
-  ScanManifest,
-  ScanMode,
-  ScanTarget,
-  SecurityProfile,
+import type { CustomScannerDefinition } from '@/lib/scanner-configuration'
+import type { ScannerDefinition } from '@/lib/scanners'
+import {
+  DEFAULT_SCAN_FILE_GLOB,
+  type ScanCoverage,
+  type ScanManifest,
+  type ScanMode,
+  type ScanTarget,
+  type SecurityProfile,
 } from '@/lib/security-scans'
-import { DEFAULT_SCAN_FILE_GLOB } from '@/lib/security-scans'
 
 const createdAt = timestamp('created_at', { withTimezone: true })
   .notNull()
@@ -88,6 +90,15 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   fileGlob: text('file_glob').notNull().default(DEFAULT_SCAN_FILE_GLOB),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+})
+
+/** Enable overrides for built-ins and complete definitions for custom scanners. */
+export const globalScannerSettings = pgTable('global_scanner_settings', {
+  scannerId: text('scanner_id').primaryKey(),
+  enabled: boolean('enabled').notNull().default(true),
+  definition: jsonb('definition').$type<CustomScannerDefinition>(),
   createdAt,
   updatedAt,
 })
@@ -282,6 +293,8 @@ export const scannerRuns = pgTable(
       .notNull()
       .references(() => scans.id, { onDelete: 'cascade' }),
     scannerId: text('scanner_id').notNull(),
+    /** Immutable scanner definition used for this run. */
+    scannerDefinition: jsonb('scanner_definition').$type<ScannerDefinition>(),
     status: text('status')
       .$type<ScannerRunStatus>()
       .notNull()
@@ -665,6 +678,7 @@ export const scanArtifactsRelations = relations(scanArtifacts, ({ one }) => ({
 
 export type Repository = typeof repositories.$inferSelect
 export type ScanScheduleSettings = typeof scanScheduleSettings.$inferSelect
+export type GlobalScannerSetting = typeof globalScannerSettings.$inferSelect
 export type ScheduledRepositoryQueueEntry =
   typeof scheduledRepositoryQueue.$inferSelect
 export type Scan = typeof scans.$inferSelect

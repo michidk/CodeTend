@@ -1,21 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Page, PageHeader } from '@/components/page-layout'
-import { Badge } from '@/components/ui/badge'
+import { RouteError } from '@/components/route-error'
+import { DetailPending } from '@/components/route-pending'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SCANNERS } from '@/lib/scanners'
 import { CONFIDENCE_FACTOR, SEVERITY_PENALTY } from '@/lib/scoring'
+import { getGlobalScanners } from '@/lib/server/scanner-settings'
+import { ScannerSettings } from './-components/scanner-settings'
 
 export const Route = createFileRoute('/scanners/')({
+  loader: () => getGlobalScanners(),
   component: ScannersPage,
+  pendingComponent: DetailPending,
+  errorComponent: ({ error }) => <RouteError error={error} />,
 })
 
 function ScannersPage() {
+  const scanners = Route.useLoaderData()
   return (
     <Page width="wide">
       <PageHeader
         title="Scanners"
-        description="Every enabled scanner runs on every full scan as its own Eve subagent with read-only access to the fresh checkout."
-        help="Add a scanner by appending an entry with id, name, prompt and weight to src/lib/scanners.ts. Scores are derived deterministically from findings; the model never invents numbers."
+        description="Choose which scanners run across every repository and add organization-specific review dimensions."
+        help="Scanner settings are global. Changes affect new scans; scans already in progress keep the scanner definitions they started with. Scores are derived deterministically from findings; the model never invents numbers."
       />
       <Card>
         <CardHeader>
@@ -54,34 +60,7 @@ function ScannersPage() {
           </div>
         </CardContent>
       </Card>
-      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-        {SCANNERS.map((scanner) => (
-          <Card key={scanner.id}>
-            <CardHeader>
-              <CardTitle className="flex flex-wrap items-center gap-2">
-                {scanner.name}
-                <Badge variant="secondary">weight {scanner.weight}</Badge>
-                {!scanner.enabled ? (
-                  <Badge variant="outline">disabled</Badge>
-                ) : null}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {scanner.description}
-              </p>
-            </CardHeader>
-            <CardContent>
-              <details className="text-sm">
-                <summary className="cursor-pointer font-semibold text-link">
-                  Prompt
-                </summary>
-                <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-                  {scanner.prompt}
-                </p>
-              </details>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <ScannerSettings scanners={scanners} />
     </Page>
   )
 }

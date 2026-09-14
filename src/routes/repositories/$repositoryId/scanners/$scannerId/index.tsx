@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { CopyButton } from '@/components/copy-button'
 import { EntityNotFound } from '@/components/entity-not-found'
@@ -15,21 +15,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatRelative, shortSha } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
-import { getScanner } from '@/lib/scanners'
 import { getScannerDetail } from '@/lib/server/repository-detail'
 
 export const Route = createFileRoute(
   '/repositories/$repositoryId/scanners/$scannerId/',
 )({
-  loader: ({ params }) => {
-    if (!getScanner(params.scannerId)) throw notFound()
-    return getScannerDetail({
+  loader: ({ params }) =>
+    getScannerDetail({
       data: {
         repositoryId: parseIdParam(params.repositoryId),
         scannerId: params.scannerId,
       },
-    })
-  },
+    }),
   staleTime: 5_000,
   component: ScannerDetailPage,
   pendingComponent: RoutePending,
@@ -40,14 +37,19 @@ export const Route = createFileRoute(
 
 function ScannerDetailPage() {
   const detail = Route.useLoaderData()
-  const { scannerId } = Route.useParams()
-  const scanner = getScanner(scannerId)
-  if (!detail || !scanner) {
+  if (!detail?.scanner) {
     return (
       <EntityNotFound entity="Scanner" backTo="/" backLabel="Go to dashboard" />
     )
   }
-  const { repository, latestRun, runs, openFindings, resolvedFindings } = detail
+  const {
+    repository,
+    scanner,
+    latestRun,
+    runs,
+    openFindings,
+    resolvedFindings,
+  } = detail
   const fixPrompt = latestRun?.fixPrompt ?? null
 
   return (

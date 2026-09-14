@@ -16,6 +16,8 @@ export interface ScannerDefinition {
   /** Relative weight when combining scanner scores into the overall score. */
   readonly weight: number
   readonly enabled: boolean
+  /** Custom scanners are operator-defined and can be removed. */
+  readonly custom?: boolean
   /** Dimension-specific review instructions handed to the scanner agent. */
   readonly prompt: string
   /** Title of the aggregated coding-agent prompt, e.g. "Fix Architecture Issues". */

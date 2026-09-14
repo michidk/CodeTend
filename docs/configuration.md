@@ -5,7 +5,9 @@ working local layout; Docker Compose maps the same names into the `app` and
 `eve` services. The app validates its variables on startup with Zod and
 reports the affected names. The global repository cron, enabled state, and
 cooldown between queued repositories are stored in PostgreSQL and edited on
-the Settings page.
+the Settings page. Scanner enablement and custom scanner definitions are also
+stored in PostgreSQL and managed on the Scanners page. These settings apply to
+every repository; a running scan keeps the definitions it started with.
 
 The `TECDEBT_*` prefix is retained for configuration compatibility after the
 project was renamed to CodeTend.

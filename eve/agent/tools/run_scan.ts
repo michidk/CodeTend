@@ -113,9 +113,17 @@ export default defineWorkflowTool({
       ),
     }))
 
-    const auditing: Progress = { phase: 'dependency audit', detail: 'OSV' }
-    yield auditing
-    const dependencyAudit = await auditDependencies(workspace)
+    let dependencyAudit: Awaited<ReturnType<typeof auditDependencies>> = {
+      status: 'unavailable',
+      error: 'The dependency scanner was disabled for this scan.',
+    }
+    // Requests from an older app omit this flag and retain the old enabled
+    // behavior during rolling deployments.
+    if (request.dependencyAudit !== false) {
+      const auditing: Progress = { phase: 'dependency audit', detail: 'OSV' }
+      yield auditing
+      dependencyAudit = await auditDependencies(workspace)
+    }
 
     let gitnexusRepo: string | null = null
     if (request.gitnexus) {
@@ -267,13 +275,16 @@ export default defineWorkflowTool({
       )
     }
 
-    const coverage = aggregateCoverage(
-      outcomes,
-      eligibleTargetFiles.length - targetFiles.length,
-      maxFiles,
-      allTargetFiles.length - eligibleTargetFiles.length,
-      fileGlob,
-    )
+    const coverage =
+      scanners.length === 0
+        ? dependencyOnlyCoverage(allTargetFiles.length)
+        : aggregateCoverage(
+            outcomes,
+            eligibleTargetFiles.length - targetFiles.length,
+            maxFiles,
+            allTargetFiles.length - eligibleTargetFiles.length,
+            fileGlob,
+          )
     const candidates = outcomes
       .filter((outcome) => outcome.scannerId === 'security')
       .flatMap((outcome) => {
@@ -483,6 +494,25 @@ function aggregateCoverage(
             },
           ]
         : coverage.excluded,
+  }
+}
+
+function dependencyOnlyCoverage(targetFileCount: number): ScanCoverage {
+  return {
+    completeness: 'complete',
+    reviewed: [],
+    deferred: [],
+    excluded:
+      targetFileCount > 0
+        ? [
+            {
+              path: `${targetFileCount} source files`,
+              reason:
+                'No enabled agent scanner required source-file review; only deterministic scanning ran.',
+            },
+          ]
+        : [],
+    openQuestions: [],
   }
 }
 

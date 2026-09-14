@@ -68,11 +68,13 @@ export function FindingCard({
   finding,
   snapshot,
   showScanner = false,
+  scannerName,
   defaultOpen = false,
 }: {
   readonly finding: FindingSummary
   readonly snapshot?: FindingSnapshot
   readonly showScanner?: boolean
+  readonly scannerName?: string
   readonly defaultOpen?: boolean
 }) {
   const scanner = getScanner(finding.scannerId)
@@ -110,8 +112,10 @@ export function FindingCard({
               <Badge variant="outline" className="capitalize">
                 effort: {finding.effort}
               </Badge>
-              {showScanner && scanner ? (
-                <Badge variant="secondary">{scanner.shortName}</Badge>
+              {showScanner ? (
+                <Badge variant="secondary">
+                  {scannerName ?? scanner?.shortName ?? finding.scannerId}
+                </Badge>
               ) : null}
               {reopenedByScanner ? (
                 <Badge className="border-transparent bg-destructive/15 text-destructive-text">

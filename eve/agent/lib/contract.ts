@@ -79,6 +79,8 @@ export interface ScanRequest {
     readonly runner: 'auto' | 'docker' | 'disabled'
     readonly image: string
   }
+  /** Whether to run the deterministic OSV dependency scanner. */
+  readonly dependencyAudit?: boolean
   readonly scanners: readonly ScanRequestScanner[]
   readonly outputSchema: Record<string, unknown>
 }
