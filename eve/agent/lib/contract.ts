@@ -169,6 +169,23 @@ export interface ScanResult {
   readonly finishedAt: string
 }
 
+/** Durable, replayable output written while a scan is still running. */
+export interface ScanCheckpoint {
+  readonly version: 1
+  readonly scanId: number
+  readonly requestFingerprint: string
+  readonly commitSha: string
+  readonly fileCount: number
+  readonly gitnexusUsed: boolean
+  readonly knowledge: KnowledgeResult
+  readonly securityProfile: ScanResult['securityProfile']
+  readonly dependencyAudit: DependencyAuditResult
+  readonly scanners: readonly ScannerOutcome[]
+  readonly targetFiles: readonly string[]
+  readonly targetFileCount: number
+  readonly updatedAt: string
+}
+
 export interface ScanCoverage {
   readonly completeness: 'complete' | 'partial' | 'unknown'
   readonly reviewed: readonly string[]

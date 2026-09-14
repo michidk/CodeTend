@@ -2,6 +2,7 @@ import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
 import type {
   KnowledgeResult,
+  ScanCheckpoint,
   ScanCoverage,
   ScannerOutcome,
   ScanRequest,
@@ -28,9 +29,11 @@ import {
   extractSubsystemDependencyGraph,
   indexWithGitNexus,
   nowIso,
+  readScanCheckpoint,
   readScanRequest,
   resolveTargetFiles,
   validateCandidates,
+  writeScanCheckpoint,
   writeScanResult,
 } from '../lib/steps'
 
@@ -75,6 +78,17 @@ export default defineWorkflowTool({
     'use workflow'
 
     const request: ScanRequest = await readScanRequest(scanId)
+    const requestFingerprint = JSON.stringify({
+      repositoryId: request.repositoryId,
+      repositoryUrl: request.repositoryUrl,
+      branch: request.branch,
+      target: request.target,
+      maxFiles: request.maxFiles,
+      fileGlob: request.fileGlob,
+      scanners: request.scanners.map((scanner) => scanner.id),
+      dependencyAudit: request.dependencyAudit !== false,
+      validation: request.validation,
+    })
     const total =
       5 +
       request.scanners.length +
@@ -258,9 +272,27 @@ export default defineWorkflowTool({
 
     // Every scanner is an independent subagent session; one failing scanner
     // never discards the others' results.
-    const outcomes: ScannerOutcome[] = []
-    for (let start = 0; start < scanners.length; start += SCANNER_CONCURRENCY) {
-      const batch = scanners.slice(start, start + SCANNER_CONCURRENCY)
+    const priorCheckpoint = await readScanCheckpoint(scanId)
+    const checkpointMatches =
+      priorCheckpoint?.version === 1 &&
+      priorCheckpoint.scanId === scanId &&
+      priorCheckpoint.requestFingerprint === requestFingerprint &&
+      priorCheckpoint.commitSha === workspace.commitSha
+    const outcomes: ScannerOutcome[] = checkpointMatches
+      ? [...priorCheckpoint.scanners]
+      : []
+    const completedScannerIds = new Set(
+      outcomes.map((outcome) => outcome.scannerId),
+    )
+    const remainingScanners = scanners.filter(
+      (scanner) => !completedScannerIds.has(scanner.id),
+    )
+    for (
+      let start = 0;
+      start < remainingScanners.length;
+      start += SCANNER_CONCURRENCY
+    ) {
+      const batch = remainingScanners.slice(start, start + SCANNER_CONCURRENCY)
       yield {
         phase: 'scanning',
         detail: `Running ${batch.map((scanner) => scanner.name).join(', ')}`,
@@ -323,6 +355,28 @@ export default defineWorkflowTool({
       )
       outcomes.push(...batchOutcomes)
       completed += batch.length
+      const checkpoint: ScanCheckpoint = {
+        version: 1,
+        scanId,
+        requestFingerprint,
+        commitSha: workspace.commitSha,
+        fileCount: workspace.fileCount,
+        gitnexusUsed: gitnexusRepo !== null,
+        knowledge,
+        securityProfile: {
+          profile: securityProfile,
+          generated:
+            request.securityProfile === null &&
+            request.target.kind === 'repository' &&
+            !sampled,
+        },
+        dependencyAudit,
+        scanners: outcomes,
+        targetFiles,
+        targetFileCount: eligibleTargetFiles.length,
+        updatedAt: await nowIso(),
+      }
+      await writeScanCheckpoint(checkpoint)
       yield {
         phase: 'scanning',
         detail: `${outcomes.length} of ${scanners.length} scanners completed`,

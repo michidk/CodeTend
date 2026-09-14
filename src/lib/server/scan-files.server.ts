@@ -274,6 +274,27 @@ const scanResultFileSchema = z.object({
 
 export type ScanResultFile = z.infer<typeof scanResultFileSchema>
 
+const scanCheckpointFileSchema = scanResultFileSchema
+  .pick({
+    scanId: true,
+    commitSha: true,
+    fileCount: true,
+    gitnexusUsed: true,
+    knowledge: true,
+    securityProfile: true,
+    dependencyAudit: true,
+    scanners: true,
+    targetFiles: true,
+    targetFileCount: true,
+  })
+  .extend({
+    version: z.literal(1),
+    requestFingerprint: z.string().min(1),
+    updatedAt: z.string(),
+  })
+
+export type ScanCheckpointFile = z.infer<typeof scanCheckpointFileSchema>
+
 const patchResultFileSchema = z.object({
   patchId: z.number().int().positive(),
   status: z.enum(['proposed', 'verified', 'failed']),
@@ -385,6 +406,28 @@ export async function readScanResult(
   return scanResultFileSchema.parse(parsed)
 }
 
+export async function readScanCheckpoint(
+  scanId: number,
+): Promise<ScanCheckpointFile | null> {
+  try {
+    const raw = await readFile(
+      join(resultsDir(), `scan-${scanId}.checkpoint.json`),
+      'utf8',
+    )
+    return scanCheckpointFileSchema.parse(JSON.parse(raw) as unknown)
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return null
+    }
+    throw error
+  }
+}
+
 /** Resolves once Eve has written the result file, or rejects after `timeoutMs`. */
 export async function waitForScanResult(
   scanId: number,
@@ -454,6 +497,10 @@ export async function removeScanArtifacts(scanId: number): Promise<void> {
     rm(join(requestsDir(), `scan-${scanId}.json.tmp`), { force: true }),
     rm(join(resultsDir(), `scan-${scanId}.json`), { force: true }),
     rm(join(resultsDir(), `scan-${scanId}.json.tmp`), { force: true }),
+    rm(join(resultsDir(), `scan-${scanId}.checkpoint.json`), { force: true }),
+    rm(join(resultsDir(), `scan-${scanId}.checkpoint.json.tmp`), {
+      force: true,
+    }),
   ])
 }
 
@@ -470,7 +517,7 @@ export async function pruneTransientScanArtifacts(
       continue
     }
     for (const entry of entries) {
-      const match = /^scan-(\d+)\.json(?:\.tmp)?$/.exec(entry)
+      const match = /^scan-(\d+)(?:\.checkpoint)?\.json(?:\.tmp)?$/.exec(entry)
       if (!match) continue
       const scanId = Number(match[1])
       if (protectedScanIds.has(scanId)) continue

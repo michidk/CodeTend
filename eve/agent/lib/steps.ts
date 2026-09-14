@@ -3,6 +3,7 @@ import type {
   DependencyAuditResult,
   PatchRequest,
   PatchResult,
+  ScanCheckpoint,
   ScanRequest,
   ScanResult,
   SubsystemDependencyGraph,
@@ -945,6 +946,39 @@ export async function writeScanResult(result: ScanResult): Promise<void> {
   await mkdir(resultsDir(), { recursive: true })
   const target = `${resultsDir()}/scan-${result.scanId}.json`
   await writeFile(`${target}.tmp`, JSON.stringify(result, null, 2))
+  await rename(`${target}.tmp`, target)
+}
+
+export async function readScanCheckpoint(
+  scanId: number,
+): Promise<ScanCheckpoint | null> {
+  'use step'
+  const { readFile } = await import('node:fs/promises')
+  try {
+    return JSON.parse(
+      await readFile(`${resultsDir()}/scan-${scanId}.checkpoint.json`, 'utf8'),
+    ) as ScanCheckpoint
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return null
+    }
+    throw error
+  }
+}
+
+export async function writeScanCheckpoint(
+  checkpoint: ScanCheckpoint,
+): Promise<void> {
+  'use step'
+  const { mkdir, rename, writeFile } = await import('node:fs/promises')
+  await mkdir(resultsDir(), { recursive: true })
+  const target = `${resultsDir()}/scan-${checkpoint.scanId}.checkpoint.json`
+  await writeFile(`${target}.tmp`, JSON.stringify(checkpoint, null, 2))
   await rename(`${target}.tmp`, target)
 }
 

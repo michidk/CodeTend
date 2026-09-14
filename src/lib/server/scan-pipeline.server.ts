@@ -54,6 +54,7 @@ import {
 } from '@/lib/server/gitnexus.server'
 import { sealScanArtifacts } from '@/lib/server/scan-artifacts'
 import {
+  readScanCheckpoint,
   readScanResult,
   removeScanArtifacts,
   removeScanWorkspace,
@@ -450,9 +451,18 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     // The live stream drives UI phases, but the result file is the source of
     // truth: Eve's session is durable and keeps running even if this HTTP
     // stream drops, so the scan completes whenever the file appears.
+    const ingestCheckpoint = async () => {
+      const checkpoint = await readScanCheckpoint(scanId)
+      if (checkpoint) {
+        await persistScanCheckpoint(scanId, repository, checkpoint)
+      }
+    }
     const outcome = await Promise.race([
       session
-        .settle((progress) => setProgress(scanId, progress))
+        .settle(async (progress) => {
+          await setProgress(scanId, progress)
+          await ingestCheckpoint()
+        })
         .catch((error) => {
           console.warn(
             `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
@@ -460,7 +470,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
           )
           return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
         }),
-      waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null),
+      waitForResultWithCheckpoints(scanId, SCAN_TIMEOUT_MS, ingestCheckpoint),
     ])
 
     const result = await readScanResult(scanId)
@@ -495,6 +505,122 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       )
     }
   }
+}
+
+async function waitForResultWithCheckpoints(
+  scanId: number,
+  timeoutMs: number,
+  ingest: () => Promise<void>,
+): Promise<null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if ((await readScanResult(scanId)) !== null) return null
+    await ingest()
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
+  }
+  await waitForScanResult(scanId, 1)
+  return null
+}
+
+async function persistScanCheckpoint(
+  scanId: number,
+  repository: Repository,
+  checkpoint: NonNullable<Awaited<ReturnType<typeof readScanCheckpoint>>>,
+) {
+  if (checkpoint.scanId !== scanId) return
+  const scan = await db.query.scans.findFirst({
+    where: eq(scans.id, scanId),
+    columns: { target: true },
+  })
+  if (!scan) return
+  const runs = await db.query.scannerRuns.findMany({
+    where: eq(scannerRuns.scanId, scanId),
+    columns: { scannerId: true, status: true, scannerDefinition: true },
+  })
+  const pending = new Map(
+    runs
+      .filter((run) => run.status !== 'completed' && run.status !== 'failed')
+      .map((run) => [run.scannerId, run]),
+  )
+  for (const outcome of checkpoint.scanners) {
+    const run = pending.get(outcome.scannerId)
+    if (!run) continue
+    const scanner = run.scannerDefinition ?? getScanner(run.scannerId)
+    if (!scanner) continue
+    if (outcome.status !== 'completed' || !outcome.result) {
+      await db
+        .update(scannerRuns)
+        .set({
+          status: 'failed',
+          error: outcome.error ?? 'Scanner failed.',
+          startedAt: new Date(outcome.startedAt),
+          finishedAt: new Date(outcome.finishedAt),
+        })
+        .where(
+          and(
+            eq(scannerRuns.scanId, scanId),
+            eq(scannerRuns.scannerId, scanner.id),
+          ),
+        )
+      continue
+    }
+    const scannerResult = {
+      ...outcome.result,
+      findings:
+        scanner.id === 'security'
+          ? outcome.result.findings.map(enrichSourceSecurityFinding)
+          : outcome.result.findings,
+    }
+    const reconciled = await reconcileScannerFindings({
+      repositoryId: repository.id,
+      scanId,
+      scannerId: scanner.id,
+      result: scannerResult,
+      authoritative: false,
+      coverage: { ...outcome.result.coverage, completeness: 'unknown' },
+      target: scan.target,
+      targetFiles: checkpoint.targetFiles,
+    })
+    const openFindings = reconciled.findings.filter((entry) =>
+      OPEN_FINDING_STATES.includes(entry.state),
+    )
+    const score = calculateScannerScore(
+      openFindings.map((entry) => entry.finding),
+    )
+    await db
+      .update(scannerRuns)
+      .set({
+        status: 'completed',
+        score,
+        summary: scannerResult.summary,
+        fixPrompt: buildFixPrompt({
+          scanner,
+          repositoryName: repository.name,
+          repositoryUrl: repository.url,
+          branch: repository.branch,
+          commitSha: checkpoint.commitSha,
+          findings: openFindings.map((entry) => entry.finding),
+        }),
+        startedAt: new Date(outcome.startedAt),
+        finishedAt: new Date(outcome.finishedAt),
+      })
+      .where(
+        and(
+          eq(scannerRuns.scanId, scanId),
+          eq(scannerRuns.scannerId, scanner.id),
+        ),
+      )
+  }
+  await db
+    .update(scans)
+    .set({
+      commitSha: checkpoint.commitSha,
+      fileCount: checkpoint.fileCount,
+      reviewedFileCount: checkpoint.targetFiles.length,
+      targetFileCount: checkpoint.targetFileCount,
+      gitnexusUsed: checkpoint.gitnexusUsed,
+    })
+    .where(and(eq(scans.id, scanId), eq(scans.status, 'running')))
 }
 
 async function persistScanResult(
@@ -959,13 +1085,24 @@ async function adoptScan(
       await cancelScanRecord(scanId, repository.id)
       return
     }
+    const checkpoint = await readScanCheckpoint(scanId)
+    if (checkpoint) {
+      await persistScanCheckpoint(scanId, repository, checkpoint)
+    }
     if ((await readScanResult(scanId)) === null) {
       if (Date.now() - createdAt.getTime() > ORPHAN_GRACE_MS) {
-        throw new Error(
-          'The application restarted while this scan was running.',
+        console.info(
+          `[CodeTend] scan ${scanId} is older than the recovery grace period; preserving its checkpoint while waiting for Eve's durable workflow`,
         )
       }
-      await waitForScanResult(scanId, Math.max(remaining, 60_000))
+      await waitForResultWithCheckpoints(
+        scanId,
+        Math.max(remaining, 60_000),
+        async () => {
+          const next = await readScanCheckpoint(scanId)
+          if (next) await persistScanCheckpoint(scanId, repository, next)
+        },
+      )
     }
     const result = await readScanResult(scanId)
     if (!result) throw new Error('Scan result file disappeared.')
