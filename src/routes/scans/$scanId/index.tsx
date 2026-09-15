@@ -2,7 +2,6 @@ import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, Download, Square } from 'lucide-react'
 import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
-import { FindingCard } from '@/components/health/finding-card'
 import {
   formatScore,
   GradeBadge,
@@ -44,6 +43,7 @@ import { getScanner } from '@/lib/scanners'
 import { DEFAULT_SCAN_FILE_GLOB, type ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
+import { FindingGroups } from './-components/finding-groups'
 
 export const Route = createFileRoute('/scans/$scanId/')({
   loader: ({ params }) => getScanDetail({ data: parseIdParam(params.scanId) }),
@@ -81,7 +81,9 @@ function ScanPage() {
   const scannerNames = Object.fromEntries(
     scan.scannerRuns.map((run) => [
       run.scannerId,
-      run.scannerDefinition?.shortName ?? run.scannerId,
+      run.scannerDefinition?.shortName ??
+        getScanner(run.scannerId)?.shortName ??
+        run.scannerId,
     ]),
   )
 
@@ -366,23 +368,10 @@ function ScanPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {scan.occurrences.map((occurrence) => (
-              <FindingCard
-                key={occurrence.id}
-                finding={occurrence.finding}
-                snapshot={{
-                  state: occurrence.state,
-                  severity: occurrence.severity,
-                  confidence: occurrence.confidence,
-                  priority: occurrence.priority,
-                  priorityScore: occurrence.priorityScore,
-                }}
-                showScanner
-                scannerName={scannerNames[occurrence.finding.scannerId]}
-              />
-            ))}
-          </div>
+          <FindingGroups
+            occurrences={scan.occurrences}
+            scannerNames={scannerNames}
+          />
         )}
       </section>
 
