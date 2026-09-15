@@ -13,16 +13,20 @@ import {
   repositories,
   scans,
 } from '@/db/schema'
+import { OPEN_FINDING_STATES } from '@/lib/findings'
+import { buildFixPrompt } from '@/lib/fix-prompt'
 import {
   MCP_TOOL_CATALOG,
   MCP_TOOL_NAMES,
   type McpScope,
   type McpToolName,
 } from '@/lib/mcp/catalog'
+import { updateFindingDisposition } from '@/lib/server/finding-triage'
 import {
   requestScanCancellation,
   startScan,
 } from '@/lib/server/scan-pipeline.server'
+import { listGlobalScanners } from '@/lib/server/scanner-settings'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const readOnlyAnnotations = {
@@ -58,6 +62,13 @@ const scanListOutput = z.object({
 const scanOutput = z.object({ scan: jsonObject.nullable() })
 const findingOutput = z.object({ finding: jsonObject.nullable() })
 const scanMutationOutput = z.object({ scanId: z.number().int().positive() })
+const findingMutationOutput = z.object({ finding: jsonObject })
+const fixPromptOutput = z.object({
+  repositoryId: z.number().int().positive(),
+  scannerId: z.string(),
+  findingCount: z.number().int().min(0),
+  prompt: z.string(),
+})
 
 type ListInput = { offset: number; limit: number }
 type ScanListInput = ListInput & {
@@ -80,8 +91,12 @@ export type McpLoaders = {
   listScans(input: ScanListInput): Promise<unknown>
   getScan(scanId: number): Promise<unknown>
   getFinding(findingId: number): Promise<unknown>
+  generateFixPrompt(repositoryId: number, scannerId: string): Promise<unknown>
   triggerScan(repositoryId: number): Promise<unknown>
   cancelScan(scanId: number): Promise<unknown>
+  markFindingFalsePositive(findingId: number, note: string): Promise<unknown>
+  acceptFindingRisk(findingId: number, note: string): Promise<unknown>
+  reopenFinding(findingId: number): Promise<unknown>
 }
 
 const defaultLoaders: McpLoaders = {
@@ -214,6 +229,55 @@ const defaultLoaders: McpLoaders = {
     return { finding: finding ?? null }
   },
 
+  async generateFixPrompt(repositoryId, scannerId) {
+    const [repository, scannerDefinitions, latestScan, openFindings] =
+      await Promise.all([
+        db.query.repositories.findFirst({
+          where: eq(repositories.id, repositoryId),
+        }),
+        listGlobalScanners(),
+        db.query.scans.findFirst({
+          where: and(
+            eq(scans.repositoryId, repositoryId),
+            inArray(scans.status, ['completed', 'partial']),
+          ),
+          orderBy: [desc(scans.createdAt)],
+          columns: { commitSha: true },
+        }),
+        db.query.findings.findMany({
+          where: and(
+            eq(findings.repositoryId, repositoryId),
+            eq(findings.scannerId, scannerId),
+            inArray(findings.state, [...OPEN_FINDING_STATES]),
+          ),
+        }),
+      ])
+    if (!repository) throw new Error('Repository not found')
+    const scanner = scannerDefinitions.find(
+      (candidate) => candidate.id === scannerId,
+    )
+    if (!scanner) throw new Error('Scanner not found')
+    return {
+      repositoryId,
+      scannerId,
+      findingCount: openFindings.length,
+      prompt: buildFixPrompt({
+        scanner,
+        repositoryName: repository.name,
+        repositoryUrl: repository.url,
+        branch: repository.branch,
+        commitSha: latestScan?.commitSha ?? null,
+        findings: openFindings.map((finding) => ({
+          ...finding,
+          classification: finding.classification ?? undefined,
+          vulnerability: finding.vulnerability ?? undefined,
+          priority: finding.priority ?? undefined,
+          priorityScore: finding.priorityScore ?? undefined,
+        })),
+      }),
+    }
+  },
+
   async triggerScan(repositoryId) {
     ensureScheduler()
     const repository = await db.query.repositories.findFirst({
@@ -238,6 +302,33 @@ const defaultLoaders: McpLoaders = {
     if (!scan) throw new Error('Queued or running scan not found')
     await requestScanCancellation(scanId)
     return { scanId }
+  },
+
+  async markFindingFalsePositive(findingId, note) {
+    const finding = await updateFindingDisposition({
+      findingId,
+      disposition: 'false_positive',
+      note,
+    })
+    return { finding }
+  },
+
+  async acceptFindingRisk(findingId, note) {
+    const finding = await updateFindingDisposition({
+      findingId,
+      disposition: 'accepted_risk',
+      note,
+    })
+    return { finding }
+  },
+
+  async reopenFinding(findingId) {
+    const finding = await updateFindingDisposition({
+      findingId,
+      disposition: null,
+      note: '',
+    })
+    return { finding }
   },
 }
 
@@ -376,6 +467,26 @@ export function createCodeTendMcpServer(
         result(findingOutput, () => loaders.getFinding(findingId)),
     )
 
+  if (allowed('generate_fix_prompt'))
+    server.registerTool(
+      'generate_fix_prompt',
+      {
+        title: 'Generate fix prompt',
+        description:
+          'Generate a coding-agent prompt from the current open findings for one repository scanner.',
+        inputSchema: z.object({
+          repositoryId: z.int().positive(),
+          scannerId: z.string().trim().min(1).max(60),
+        }),
+        outputSchema: fixPromptOutput,
+        annotations: readOnlyAnnotations,
+      },
+      ({ repositoryId, scannerId }) =>
+        result(fixPromptOutput, () =>
+          loaders.generateFixPrompt(repositoryId, scannerId),
+        ),
+    )
+
   if (allowed('trigger_scan'))
     server.registerTool(
       'trigger_scan',
@@ -403,6 +514,61 @@ export function createCodeTendMcpServer(
       },
       ({ scanId }) =>
         result(scanMutationOutput, () => loaders.cancelScan(scanId)),
+    )
+
+  if (allowed('mark_finding_false_positive'))
+    server.registerTool(
+      'mark_finding_false_positive',
+      {
+        title: 'Mark finding false positive',
+        description:
+          'Resolve a finding as a false positive and record optional operator context.',
+        inputSchema: z.object({
+          findingId: z.int().positive(),
+          note: z.string().trim().max(2_000).default(''),
+        }),
+        outputSchema: findingMutationOutput,
+        annotations: writeAnnotations,
+      },
+      ({ findingId, note }) =>
+        result(findingMutationOutput, () =>
+          loaders.markFindingFalsePositive(findingId, note),
+        ),
+    )
+
+  if (allowed('accept_finding_risk'))
+    server.registerTool(
+      'accept_finding_risk',
+      {
+        title: 'Accept finding risk',
+        description:
+          'Resolve a finding as an accepted risk and record why it is acceptable.',
+        inputSchema: z.object({
+          findingId: z.int().positive(),
+          note: z.string().trim().min(5).max(2_000),
+        }),
+        outputSchema: findingMutationOutput,
+        annotations: writeAnnotations,
+      },
+      ({ findingId, note }) =>
+        result(findingMutationOutput, () =>
+          loaders.acceptFindingRisk(findingId, note),
+        ),
+    )
+
+  if (allowed('reopen_finding'))
+    server.registerTool(
+      'reopen_finding',
+      {
+        title: 'Reopen finding',
+        description:
+          'Remove a false-positive or accepted-risk disposition and return the finding to active.',
+        inputSchema: z.object({ findingId: z.int().positive() }),
+        outputSchema: findingMutationOutput,
+        annotations: writeAnnotations,
+      },
+      ({ findingId }) =>
+        result(findingMutationOutput, () => loaders.reopenFinding(findingId)),
     )
 
   return server

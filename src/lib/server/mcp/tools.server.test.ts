@@ -53,8 +53,31 @@ function fakeLoaders(): McpLoaders {
     }),
     getScan: async () => ({ scan: null }),
     getFinding: async () => ({ finding: null }),
+    generateFixPrompt: async (repositoryId, scannerId) => ({
+      repositoryId,
+      scannerId,
+      findingCount: 2,
+      prompt: '# Fix findings',
+    }),
     triggerScan: async () => ({ scanId: 42 }),
     cancelScan: async () => ({ scanId: 42 }),
+    markFindingFalsePositive: async (findingId) => ({
+      finding: {
+        id: findingId,
+        state: 'resolved',
+        disposition: 'false_positive',
+      },
+    }),
+    acceptFindingRisk: async (findingId) => ({
+      finding: {
+        id: findingId,
+        state: 'resolved',
+        disposition: 'accepted_risk',
+      },
+    }),
+    reopenFinding: async (findingId) => ({
+      finding: { id: findingId, state: 'active', disposition: null },
+    }),
   }
 }
 
@@ -69,6 +92,7 @@ describe('CodeTend MCP tools', () => {
       'list_scans',
       'get_scan',
       'get_finding',
+      'generate_fix_prompt',
     ])
     expect(
       message.result.tools.every(
@@ -92,6 +116,31 @@ describe('CodeTend MCP tools', () => {
       arguments: { repositoryId: 7 },
     })
     expect(triggered.result.structuredContent).toEqual({ scanId: 42 })
+
+    const triaged = await call(handler, 'tools/call', {
+      name: 'mark_finding_false_positive',
+      arguments: { findingId: 9, note: 'Confirmed generated fixture.' },
+    })
+    expect(triaged.result.structuredContent).toEqual({
+      finding: {
+        id: 9,
+        state: 'resolved',
+        disposition: 'false_positive',
+      },
+    })
+  })
+
+  test('generates a bounded fix prompt through a read token', async () => {
+    const generated = await call(handlers(fakeLoaders()), 'tools/call', {
+      name: 'generate_fix_prompt',
+      arguments: { repositoryId: 7, scannerId: 'architecture' },
+    })
+    expect(generated.result.structuredContent).toEqual({
+      repositoryId: 7,
+      scannerId: 'architecture',
+      findingCount: 2,
+      prompt: '# Fix findings',
+    })
   })
 
   test('owner policy can hide an otherwise scoped tool', async () => {

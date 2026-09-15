@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
-import { MCP_SCOPE_VALUES } from '@/lib/mcp/catalog'
+import { MCP_SCOPE_VALUES, MCP_TOOL_CATALOG } from '@/lib/mcp/catalog'
 import { getOAuthSigningKey } from './auth.server'
 import type { McpConfig } from './config.server'
 import { MCP_READ_SCOPE } from './config.server'
@@ -562,7 +562,9 @@ describe('remote MCP OAuth HTTP flow', () => {
       },
       async () => ({
         enabled: true,
-        disabledTools: ['trigger_scan', 'cancel_scan'],
+        disabledTools: MCP_TOOL_CATALOG.filter(
+          (tool) => tool.scope === 'codetend:write',
+        ).map((tool) => tool.name),
       }),
     )
     // A scope survives while any tool using it is enabled, so dropping write

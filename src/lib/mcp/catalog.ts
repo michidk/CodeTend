@@ -60,6 +60,14 @@ export const MCP_TOOL_CATALOG = [
     scope: 'codetend:read',
   },
   {
+    name: 'generate_fix_prompt',
+    title: 'Generate fix prompt',
+    description:
+      "Generate a coding-agent prompt from a scanner's current open findings.",
+    group: 'Read',
+    scope: 'codetend:read',
+  },
+  {
     name: 'trigger_scan',
     title: 'Trigger scan',
     description: 'Queue a default scan for a tracked repository.',
@@ -73,11 +81,32 @@ export const MCP_TOOL_CATALOG = [
     group: 'Control scans',
     scope: 'codetend:write',
   },
+  {
+    name: 'mark_finding_false_positive',
+    title: 'Mark finding false positive',
+    description: 'Resolve a finding as a false positive with optional context.',
+    group: 'Manage findings',
+    scope: 'codetend:write',
+  },
+  {
+    name: 'accept_finding_risk',
+    title: 'Accept finding risk',
+    description: 'Resolve a finding as an accepted risk with required context.',
+    group: 'Manage findings',
+    scope: 'codetend:write',
+  },
+  {
+    name: 'reopen_finding',
+    title: 'Reopen finding',
+    description: 'Remove a manual disposition and return a finding to active.',
+    group: 'Manage findings',
+    scope: 'codetend:write',
+  },
 ] as const satisfies ReadonlyArray<{
   name: string
   title: string
   description: string
-  group: 'Read' | 'Control scans'
+  group: 'Read' | 'Control scans' | 'Manage findings'
   scope: McpScope
 }>
 

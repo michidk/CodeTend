@@ -152,9 +152,13 @@ codex mcp add codetend --url https://codetend.example.com/api/mcp
 codex mcp login codetend
 ```
 
-Use **Settings → AI access (MCP)** to pause access, enable tools, or revoke a
-client. See [configuration](docs/configuration.md#oauth-protected-mcp) for the
-proxy and security boundary.
+The read scope can inspect repositories, scans and findings and generate a
+current coding-agent fix prompt for a repository scanner. The separately
+granted write scope can start or cancel scans, mark findings as false positives
+or accepted risks, and reopen manually triaged findings. Use **Settings → AI
+access (MCP)** to pause access, enable individual tools, or revoke a client. See
+[configuration](docs/configuration.md#oauth-protected-mcp) for the proxy and
+security boundary.
 
 ## 🧱 Tech stack
 
