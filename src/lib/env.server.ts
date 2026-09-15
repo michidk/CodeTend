@@ -45,6 +45,8 @@ const serverSchema = {
   GITNEXUS_ENABLED: booleanString.default(false),
   GITNEXUS_MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3907),
   TECDEBT_MODEL: z.string().trim().min(1).default('gpt-5.6-sol'),
+  HODOR_SECRET: optionalString,
+  MCP_ALLOWED_ORIGINS: optionalString,
 }
 
 type RuntimeEnvironment = Record<string, string | undefined>
@@ -105,6 +107,8 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       GITNEXUS_ENABLED: runtimeEnvironment.GITNEXUS_ENABLED,
       GITNEXUS_MCP_PORT: runtimeEnvironment.GITNEXUS_MCP_PORT,
       TECDEBT_MODEL: runtimeEnvironment.TECDEBT_MODEL,
+      HODOR_SECRET: runtimeEnvironment.HODOR_SECRET,
+      MCP_ALLOWED_ORIGINS: runtimeEnvironment.MCP_ALLOWED_ORIGINS,
     },
     emptyStringAsUndefined: true,
     isServer: true,

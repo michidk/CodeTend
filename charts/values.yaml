@@ -56,6 +56,11 @@ ingress:
           pathType: Prefix
   tls: []
 
+mcp:
+  enabled: false
+  # Optional browser Origin allowlist. Native MCP clients omit Origin.
+  allowedOrigins: []
+
 resources:
   limits:
     cpu: "1"
@@ -218,6 +223,11 @@ hodor:
   # Clients whose real address falls in these CIDRs skip the login gate
   # entirely (for example a private tailnet).
   bypassCidrs: []
+  # Extra unauthenticated machine endpoints. MCP adds only its protocol,
+  # discovery, registration, token and revocation paths automatically.
+  bypassPaths: []
+  # MCP requires the public Host header for issuer and audience validation.
+  preserveHost: false
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:

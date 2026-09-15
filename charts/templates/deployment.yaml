@@ -4,6 +4,9 @@
 {{- if and .Values.hodor.trustedProxyCidrs (not .Values.hodor.trustProxy) -}}
 {{- fail "hodor.trustProxy must be true when hodor.trustedProxyCidrs is set, because Hodor rejects the combination at startup" -}}
 {{- end -}}
+{{- if and .Values.mcp.enabled (not .Values.hodor.enabled) -}}
+{{- fail "hodor.enabled must be true when MCP is enabled because OAuth consent requires owner authentication" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -88,6 +91,17 @@ spec:
               value: "false"
             - name: GITNEXUS_ENABLED
               value: "false"
+            {{- if .Values.mcp.enabled }}
+            - name: HODOR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "hodor.existingSecret is required when MCP is enabled" .Values.hodor.existingSecret }}
+                  key: {{ .Values.hodor.existingSecretSecretKey }}
+            {{- if .Values.mcp.allowedOrigins }}
+            - name: MCP_ALLOWED_ORIGINS
+              value: {{ join "," .Values.mcp.allowedOrigins | quote }}
+            {{- end }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -188,6 +202,12 @@ spec:
             - name: BYPASS_CIDRS
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- with (include "codetend.hodorBypassPaths" .) }}
+            - name: BYPASS_PATHS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: PRESERVE_HOST
+              value: {{ include "codetend.hodorPreserveHost" . | quote }}
           livenessProbe:
             httpGet:
               path: /_gate/health
