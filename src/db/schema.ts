@@ -578,6 +578,91 @@ export const findingPatches = pgTable(
   ],
 )
 
+/** Dynamically registered public OAuth clients for the first-party MCP server. */
+export const oauthClients = pgTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+})
+
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    codeHash: text('code_hash').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    codeChallengeMethod: text('code_challenge_method').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt,
+  },
+  (table) => [index('oauth_authorization_codes_client_idx').on(table.clientId)],
+)
+
+export const oauthTokens = pgTable(
+  'oauth_tokens',
+  {
+    accessTokenId: text('access_token_id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    accessTokenExpiresAt: timestamp('access_token_expires_at', {
+      withTimezone: true,
+    }).notNull(),
+    refreshTokenHash: text('refresh_token_hash'),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at', {
+      withTimezone: true,
+    }),
+    originatingAuthorizationCodeHash: text(
+      'originating_authorization_code_hash',
+    ),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('oauth_tokens_refresh_token_hash_idx').on(
+      table.refreshTokenHash,
+    ),
+    index('oauth_tokens_client_idx').on(table.clientId),
+    index('oauth_tokens_authorization_code_idx').on(
+      table.originatingAuthorizationCodeHash,
+    ),
+  ],
+)
+
+export const mcpAuditEvents = pgTable(
+  'mcp_audit_events',
+  {
+    id: serial('id').primaryKey(),
+    event: text('event').notNull(),
+    outcome: text('outcome').notNull(),
+    clientId: text('client_id'),
+    toolName: text('tool_name'),
+    createdAt,
+  },
+  (table) => [index('mcp_audit_events_created_at_idx').on(table.createdAt)],
+)
+
+/** Singleton owner policy controlling MCP availability and tool discovery. */
+export const mcpSettings = pgTable('mcp_settings', {
+  id: text('id').primaryKey().default('instance'),
+  enabled: boolean('enabled').notNull().default(true),
+  disabledTools: jsonb('disabled_tools')
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  createdAt,
+  updatedAt,
+})
+
 export const repositoriesRelations = relations(
   repositories,
   ({ many, one }) => ({

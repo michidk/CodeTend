@@ -79,6 +79,9 @@ agent.
   concurrency limits.
 - 🔒 **Yours, end to end.** PostgreSQL you run, any OpenAI-compatible model
   endpoint you choose, your own login gate in front, no telemetry.
+- 🤖 **Ask your coding agent.** An optional OAuth-protected MCP endpoint lets
+  Codex and other clients inspect repositories, scans, findings, and knowledge;
+  a separate owner-approved scope can start or cancel scans.
 
 ## 🔄 How it works
 
@@ -137,6 +140,21 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
    concrete code change that contradicts the note.
 7. Download the manifest, findings, investigation report, Markdown report or SARIF for
    any scan.
+
+### MCP clients
+
+When the Helm deployment enables `mcp.enabled`, CodeTend serves MCP on its own
+origin and uses the existing Hodor owner session for OAuth consent. Add it to
+Codex with:
+
+```bash
+codex mcp add codetend --url https://codetend.example.com/api/mcp
+codex mcp login codetend
+```
+
+Use **Settings → AI access (MCP)** to pause access, enable tools, or revoke a
+client. See [configuration](docs/configuration.md#oauth-protected-mcp) for the
+proxy and security boundary.
 
 ## 🧱 Tech stack
 

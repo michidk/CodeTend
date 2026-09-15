@@ -115,6 +115,26 @@ Secret reference for DATABASE_URL, shared by the app container and the migration
   {{- end }}
 {{- end }}
 
+{{/* Machine-facing MCP paths that must pass around Hodor's login form. */}}
+{{- define "codetend.hodorBypassPaths" -}}
+{{- $paths := .Values.hodor.bypassPaths | default list -}}
+{{- if .Values.mcp.enabled -}}
+{{- $paths = concat $paths (list
+  "/api/mcp"
+  "/.well-known/oauth-protected-resource/api/mcp"
+  "/.well-known/oauth-authorization-server"
+  "/oauth/register"
+  "/oauth/token"
+  "/oauth/revoke") -}}
+{{- end -}}
+{{- join "," (uniq $paths) -}}
+{{- end -}}
+
+{{/* MCP validates the original public host instead of the upstream address. */}}
+{{- define "codetend.hodorPreserveHost" -}}
+{{- or .Values.hodor.preserveHost .Values.mcp.enabled | ternary "true" "false" -}}
+{{- end -}}
+
 {{/*
 Environment shared by the app and Eve containers: model endpoint, clone credentials,
 data directory and the per-scan guardrails Eve reads directly.

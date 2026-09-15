@@ -33,6 +33,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@jmondi/oauth2-server": "^5",
+    "@modelcontextprotocol/server": "^2",
     "@t3-oss/env-core": "^0.13.11",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-devtools": "^0.10.12",
@@ -45,6 +47,7 @@
     "cron-parser": "^5.10.1",
     "drizzle-orm": "^0.45.2",
     "eve": "0.54.3",
+    "jose": "^6",
     "lucide-react": "^1.46.0",
     "postgres": "^3.4.9",
     "react": "^19.3.0",

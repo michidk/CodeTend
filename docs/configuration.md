@@ -32,6 +32,28 @@ boundary in front of it.
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing available repositories and cloning private HTTPS repositories. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN` |
 | `GITHUB_TOKEN` | – | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured |
+| `HODOR_SECRET` | – | Enables the first-party OAuth-protected MCP endpoint using the same 32+ character secret configured as Hodor `SECRET`; the app derives a separate OAuth signing key |
+| `MCP_ALLOWED_ORIGINS` | – | Comma-separated allowlist for browser MCP clients; native clients omit `Origin` |
+
+### OAuth-protected MCP
+
+CodeTend serves MCP at `/api/mcp` on its normal public origin. It includes
+OAuth 2.1 discovery, dynamic client registration, PKCE authorization, refresh
+token rotation, revocation, owner-selectable tool policy, and audit events.
+The Helm chart wires the machine-facing paths around Hodor's login form while
+keeping `/oauth/authorize` owner-authenticated. Enable it with `mcp.enabled`;
+do not expose the app port or MCP paths around Hodor through another proxy.
+
+Connect Codex after deployment:
+
+```bash
+codex mcp add codetend --url https://codetend.example.com/api/mcp
+codex mcp login codetend
+```
+
+The owner can pause MCP, hide individual tools, and revoke clients from the
+CodeTend Settings page. The `codetend:write` scope controls scan-trigger and
+scan-cancellation tools; read access alone cannot spend model budget.
 
 ## Cost and concurrency guardrails
 

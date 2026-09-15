@@ -3,6 +3,7 @@ import {
   defaultStreamHandler,
 } from '@tanstack/react-start/server'
 import { withSecurityHeaders } from '@/lib/http-security'
+import { handleMcpHttpRequest } from '@/lib/server/mcp/http.server'
 
 const startHandler = createStartHandler(defaultStreamHandler)
 
@@ -13,6 +14,10 @@ const startHandler = createStartHandler(defaultStreamHandler)
  */
 export default {
   async fetch(request: Request): Promise<Response> {
-    return withSecurityHeaders(await startHandler(request), request)
+    const mcpResponse = await handleMcpHttpRequest(request)
+    return withSecurityHeaders(
+      mcpResponse ?? (await startHandler(request)),
+      request,
+    )
   },
 }
