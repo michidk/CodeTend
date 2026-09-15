@@ -7,7 +7,10 @@ import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { validateRepositoryLocation } from '@/lib/repository-access'
-import { MAX_SCAN_MAX_FILES, scanTargetSchema } from '@/lib/security-scans'
+import {
+  MAX_SCAN_INPUT_TOKEN_BUDGET,
+  scanTargetSchema,
+} from '@/lib/security-scans'
 import { listAvailableGitHubRepositories } from '@/lib/server/github-repositories.server'
 import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import {
@@ -291,7 +294,11 @@ export const triggerConfiguredScan = createServerFn({ method: 'POST' })
     z.object({
       repositoryId: positiveId,
       target: scanTargetSchema,
-      maxFiles: z.number().int().positive().max(MAX_SCAN_MAX_FILES),
+      maxInputTokens: z
+        .number()
+        .int()
+        .min(10_000)
+        .max(MAX_SCAN_INPUT_TOKEN_BUDGET),
       maxCostUsd: z.number().positive().max(10_000).nullable(),
     }),
   )
@@ -299,7 +306,7 @@ export const triggerConfiguredScan = createServerFn({ method: 'POST' })
     ensureScheduler()
     const scanId = await startScan(data.repositoryId, 'manual', {
       target: data.target,
-      maxFiles: data.maxFiles,
+      maxInputTokens: data.maxInputTokens,
       maxCostUsd: data.maxCostUsd,
     })
     if (scanId === null) {

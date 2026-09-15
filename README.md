@@ -63,7 +63,8 @@ agent.
 - 🔁 **Findings with a lifecycle.** A finding is a stable fingerprint, not a
   line number. On every rescan the scanner must re-verify each open finding,
   and the app derives `new → active → improved → resolved → regressed` from
-  its own persisted results, coverage-aware and never from Git history.
+  its own persisted results. Resolution requires an explicit re-verification
+  verdict and is never inferred from absence in a bounded scan.
 - 🛡️ **Real vulnerability data.** Google's OSV Scanner matches exact lockfile
   versions; CodeTend computes CVSS locally, joins FIRST EPSS and the CISA KEV
   catalog, and keeps raw severity separate from contextual priority.
@@ -121,10 +122,9 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 1. **Add a repository** from the repositories available to the configured
    GitHub App or token, or use the URL fallback for another Git host.
 2. **Scan now**, or configure the global cron and queue cooldown in Settings.
-   Choose a concrete file review budget, whole repository or selected paths,
-   and an optional cost ceiling. The global Settings file glob filters the
-   target before larger matching sets are sampled deterministically and
-   recorded as partial coverage.
+   Choose an input-token investigation budget, whole repository or selected
+   paths, and an optional cost ceiling. Each scanner orients from repository
+   structure and chooses evidence appropriate to its own dimension.
 3. Watch the phase update live: cloning → indexing → knowledge → scanning →
    reconciling.
 4. The repository page shows the overall score and grade, per-scanner scores,
@@ -135,7 +135,7 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 6. Mark a finding **false positive** or **accepted risk** with a context note.
    The disposition is durable; a scanner can only reopen it by citing a
    concrete code change that contradicts the note.
-7. Download the manifest, findings, coverage, Markdown report or SARIF for
+7. Download the manifest, findings, investigation report, Markdown report or SARIF for
    any scan.
 
 ## 🧱 Tech stack

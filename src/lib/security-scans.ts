@@ -3,19 +3,13 @@ import { z } from 'zod'
 export const SCAN_MODES = ['standard', 'deep'] as const
 export type ScanMode = (typeof SCAN_MODES)[number]
 
-export const DEFAULT_SCAN_MAX_FILES = 300
-export const MAX_SCAN_MAX_FILES = 10_000
-export const SCAN_FILE_BUDGET_PRESETS = [100, 300, 1_000] as const
+export const DEFAULT_SCAN_INPUT_TOKEN_BUDGET = 250_000
+export const MAX_SCAN_INPUT_TOKEN_BUDGET = 5_000_000
+export const SCAN_INPUT_TOKEN_BUDGET_PRESETS = [
+  100_000, 250_000, 500_000,
+] as const
 export const DEFAULT_SCAN_FILE_GLOB =
   '**/*.{c,cc,cpp,cxx,cs,css,dart,ex,exs,fs,fsx,go,gql,graphql,groovy,h,hh,hpp,hxx,hs,htm,html,java,js,jsx,kt,kts,less,lua,m,mjs,mm,php,pl,pm,proto,py,pyi,r,rb,rs,sass,scala,scss,sh,sol,sql,svelte,swift,tf,ts,tsx,vue,zig}'
-export const MAX_SCAN_FILE_GLOB_LENGTH = 1_000
-
-export const scanFileGlobSchema = z
-  .string()
-  .trim()
-  .min(1, 'Enter a file glob.')
-  .max(MAX_SCAN_FILE_GLOB_LENGTH, 'The file glob is too long.')
-
 const repositoryPathSchema = z
   .string()
   .trim()
@@ -66,6 +60,71 @@ export const securityProfileSchema = z.object({
 })
 export type SecurityProfile = z.infer<typeof securityProfileSchema>
 
+export const investigationSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('repository'),
+    aspect: z.string().min(1).max(500),
+  }),
+  z.object({
+    kind: z.literal('module'),
+    name: z.string().min(1).max(300),
+    paths: z.array(repositoryPathSchema).max(50).default([]),
+  }),
+  z.object({
+    kind: z.literal('dependency'),
+    from: z.string().min(1).max(500),
+    to: z.string().min(1).max(500),
+  }),
+  z.object({ kind: z.literal('file'), path: repositoryPathSchema }),
+  z.object({
+    kind: z.literal('symbol'),
+    path: repositoryPathSchema,
+    symbol: z.string().min(1).max(300),
+  }),
+])
+export type InvestigationSubject = z.infer<typeof investigationSubjectSchema>
+
+export const investigationEvidenceSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('file'),
+    path: repositoryPathSchema,
+    startLine: z.number().int().positive().optional(),
+    endLine: z.number().int().positive().optional(),
+    summary: z.string().min(1).max(1_000),
+  }),
+  z.object({
+    kind: z.literal('repository-structure'),
+    paths: z.array(repositoryPathSchema).min(1).max(100),
+    summary: z.string().min(1).max(1_000),
+  }),
+  z.object({
+    kind: z.literal('dependency-edge'),
+    from: z.string().min(1).max(500),
+    to: z.string().min(1).max(500),
+    summary: z.string().min(1).max(1_000),
+  }),
+  z.object({
+    kind: z.literal('tool-result'),
+    tool: z.string().min(1).max(200),
+    summary: z.string().min(1).max(1_000),
+  }),
+  z.object({
+    kind: z.literal('command'),
+    command: z.string().min(1).max(1_000),
+    summary: z.string().min(1).max(1_000),
+  }),
+])
+export type InvestigationEvidence = z.infer<typeof investigationEvidenceSchema>
+
+export const investigationReportSchema = z.object({
+  strategy: z.string().min(10).max(3_000),
+  focusAreas: z.array(investigationSubjectSchema).max(100).default([]),
+  evidence: z.array(investigationEvidenceSchema).max(300).default([]),
+  blindSpots: z.array(z.string().min(1).max(1_000)).max(100).default([]),
+  confidence: z.enum(['low', 'medium', 'high']),
+})
+export type InvestigationReport = z.infer<typeof investigationReportSchema>
+
 export const scanCoverageSchema = z.object({
   completeness: z.enum(['complete', 'partial', 'unknown']),
   reviewed: z.array(z.string()),
@@ -76,17 +135,14 @@ export const scanCoverageSchema = z.object({
 export type ScanCoverage = z.infer<typeof scanCoverageSchema>
 
 export interface ScanManifest {
-  readonly schemaVersion: '1'
+  readonly schemaVersion: '2'
   readonly scanId: number
   readonly repositoryId: number
   readonly repositoryUrl: string
   readonly revision: string
   readonly target: ScanTarget
   readonly mode: ScanMode
-  readonly maxFiles: number
-  readonly fileGlob: string
-  readonly reviewedFileCount: number | null
-  readonly targetFileCount: number | null
+  readonly maxInputTokens: number
   readonly model: string | null
   readonly scannerVersions: Record<string, string>
   readonly artifactHashes: Record<string, string>
@@ -105,35 +161,32 @@ export function targetIncludesPath(target: ScanTarget, path: string): boolean {
   )
 }
 
-export function coverageAllowsResolution(input: {
-  readonly authoritative?: boolean
-  readonly coverage?: ScanCoverage
+export function investigationAllowsResolution(input: {
   readonly target?: ScanTarget
-  readonly targetFiles?: readonly string[]
   readonly findingPaths: readonly string[]
+  readonly findingSubject?: InvestigationSubject | null
+  readonly explicitVerdict: boolean
 }): boolean {
-  if (input.authoritative) return true
-  if (input.coverage?.completeness !== 'complete') return false
-  if (input.findingPaths.length === 0) return false
+  if (!input.explicitVerdict) return false
   const target = input.target
+  if (target?.kind === 'paths' && input.findingPaths.length === 0) {
+    const subject = input.findingSubject
+    if (
+      !subject ||
+      subject.kind === 'repository' ||
+      subject.kind === 'dependency'
+    )
+      return false
+    const subjectPaths =
+      subject.kind === 'module' ? subject.paths : [subject.path]
+    if (!subjectPaths.some((path) => targetIncludesPath(target, path)))
+      return false
+  }
   if (
     target &&
     input.findingPaths.some((path) => !targetIncludesPath(target, path))
   ) {
     return false
   }
-  if (
-    input.targetFiles &&
-    input.findingPaths.some((path) => !input.targetFiles?.includes(path))
-  ) {
-    return false
-  }
-  return input.findingPaths.every(
-    (path) =>
-      !input.coverage?.deferred.some(
-        (entry) =>
-          entry.path === path ||
-          path.startsWith(`${entry.path.replace(/\/$/, '')}/`),
-      ),
-  )
+  return true
 }

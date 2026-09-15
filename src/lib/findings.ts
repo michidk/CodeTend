@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import {
+  investigationEvidenceSchema,
+  investigationReportSchema,
+  investigationSubjectSchema,
+} from '@/lib/security-scans'
 
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 export type Severity = (typeof SEVERITIES)[number]
@@ -289,10 +294,18 @@ export const scannerFindingSchema = z.object({
     .describe(
       'trivial: minutes, one place; small: an hour or two, a few files; medium: a day or two, one subsystem; large: multi-day or cross-cutting.',
     ),
+  subject: investigationSubjectSchema
+    .default({ kind: 'repository', aspect: 'repository-wide concern' })
+    .describe('The repository, module, dependency, file, or symbol affected.'),
+  evidence: z
+    .array(investigationEvidenceSchema)
+    .min(1)
+    .max(30)
+    .describe('Inspected evidence supporting the finding.'),
   locations: z
     .array(findingLocationSchema)
-    .min(1)
     .max(12)
+    .default([])
     .describe(
       'Inspected locations only, primary location first, repository-relative paths.',
     ),
@@ -406,40 +419,9 @@ export const scannerResultSchema = z.object({
     .array(hypothesisVerdictSchema)
     .default([])
     .describe('Exactly one verdict per hypothesis listed in the task.'),
-  coverage: z
-    .object({
-      completeness: z.enum(['complete', 'partial', 'unknown']),
-      reviewed: z.array(z.string().min(1).max(500)).max(500).default([]),
-      deferred: z
-        .array(
-          z.object({
-            path: z.string().min(1).max(500),
-            reason: z.string().min(1).max(1_000),
-          }),
-        )
-        .max(200)
-        .default([]),
-      excluded: z
-        .array(
-          z.object({
-            path: z.string().min(1).max(500),
-            reason: z.string().min(1).max(1_000),
-          }),
-        )
-        .max(200)
-        .default([]),
-      openQuestions: z.array(z.string().min(1).max(1_000)).max(50).default([]),
-    })
-    .default({
-      completeness: 'unknown',
-      reviewed: [],
-      deferred: [],
-      excluded: [],
-      openQuestions: [],
-    })
-    .describe(
-      'Honest scan coverage. Never claim complete coverage when relevant surfaces were sampled, skipped, or unavailable.',
-    ),
+  investigation: investigationReportSchema.describe(
+    'How this bounded investigation chose its focus, what evidence it inspected, and its remaining blind spots.',
+  ),
 })
 export type ScannerResult = z.infer<typeof scannerResultSchema>
 

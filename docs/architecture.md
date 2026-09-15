@@ -104,7 +104,7 @@ then derives states from *our persisted results* (never Git history):
 | open finding returned again, same severity | `active` |
 | open finding returned with lower severity or scanner verdict `improved` | `improved` |
 | open finding returned with higher severity, or a resolved finding reappears | `regressed` |
-| scanner verdict `resolved`, or the scanner verified every other hypothesis and omitted this one | `resolved` |
+| scanner explicitly re-verifies the finding and returns `resolved` | `resolved` |
 | open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
 | operator marks a finding false positive or accepted risk | `resolved` with a durable manual disposition; future matches stay suppressed |
 | scanner cites a concrete change that contradicts the recorded disposition context | `regressed`; the disposition is cleared |
@@ -117,9 +117,9 @@ disposition involved and the reason. The finding card shows this as a history
 log, and a finding whose ignore context the scanner invalidated is flagged
 "reopened by scanner" with the scanner's assessment until someone acts on it.
 
-Lifecycle resolution is coverage aware: an omitted finding is not marked fixed
-unless its original path was inside a complete reviewed target. Path and diff
-scans cannot silently resolve findings outside their scope. Manual dispositions
+Lifecycle resolution is evidence aware: an omitted finding is never marked
+fixed by a bounded investigation. Resolution requires an explicit verdict, and
+path scans cannot resolve repository-level findings outside their scope. Manual dispositions
 are durable: scanners receive the recorded context, default to keeping the
 finding suppressed, and may reopen it as a regression only when they can cite a
 concrete code change that contradicts that context. Disagreeing with the
@@ -146,11 +146,13 @@ snapshots all enrichment on each finding occurrence.
 ## Security review pipeline
 
 Security Hygiene follows a staged review: durable repository security context,
-refined by the knowledge agent and operator → candidate discovery → safe isolated validation → attack-path
-and impact analysis → contextual ranking → coverage-aware lifecycle. Operators
-set a global source-file glob and a maximum file sample per repository. The
-glob is applied before deterministic, risk-biased sampling, and matching target
-files deferred by the budget force partial coverage.
+refined by the knowledge agent and operator → scanner-directed investigation →
+safe isolated validation → attack-path and impact analysis → contextual ranking
+→ explicit-verdict lifecycle. Operators set a cumulative input-token budget per
+repository. Each scanner orients from the repository tree, manifests, prior
+attention, findings, and graph intelligence, then selects representative
+evidence for its own dimension. Scan success never implies whole-repository
+coverage.
 
 Executable validation is fail closed. Commands run sequentially in a disposable
 Docker container with no network, all capabilities dropped,

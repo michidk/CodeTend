@@ -1,7 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getScanArtifact } from '@/lib/server/scan-artifacts'
 
-const KINDS = new Set(['manifest', 'findings', 'coverage', 'report', 'sarif'])
+const KINDS = new Set([
+  'manifest',
+  'findings',
+  'coverage',
+  'investigation',
+  'report',
+  'sarif',
+])
 
 export const Route = createFileRoute('/api/scans/$scanId/artifacts/$kind/')({
   server: {
@@ -17,7 +24,13 @@ export const Route = createFileRoute('/api/scans/$scanId/artifacts/$kind/')({
         }
         const artifact = await getScanArtifact(
           scanId,
-          kind as 'manifest' | 'findings' | 'coverage' | 'report' | 'sarif',
+          kind as
+            | 'manifest'
+            | 'findings'
+            | 'coverage'
+            | 'investigation'
+            | 'report'
+            | 'sarif',
         )
         if (!artifact) {
           return Response.json(

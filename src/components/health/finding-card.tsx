@@ -24,6 +24,10 @@ import type { Finding, FindingEvent } from '@/db/schema'
 import { getErrorMessage } from '@/lib/error-message'
 import { formatLocation } from '@/lib/fix-prompt'
 import { getScanner } from '@/lib/scanners'
+import type {
+  InvestigationEvidence,
+  InvestigationSubject,
+} from '@/lib/security-scans'
 import {
   type FindingDetail,
   getFindingDetail,
@@ -195,6 +199,23 @@ function FindingDetailPanel({
         <Section title="Root cause">{finding.rootCause}</Section>
       ) : null}
       <Section title="Evidence">{finding.description}</Section>
+      {finding.subject ? (
+        <Section title="Subject">{formatSubject(finding.subject)}</Section>
+      ) : null}
+      {finding.evidence.length > 0 ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Investigation evidence
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-muted-foreground">
+            {finding.evidence.map((evidence) => (
+              <li key={JSON.stringify(evidence)}>
+                {formatInvestigationEvidence(evidence)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {finding.codeEvidence && finding.codeEvidence.length > 0 ? (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -292,22 +313,24 @@ function FindingDetailPanel({
           values={finding.preventiveControls}
         />
       ) : null}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Locations
-        </p>
-        <ul className="mt-1 space-y-0.5">
-          {finding.locations.map((location) => (
-            <li
-              key={`${location.path}:${location.startLine ?? ''}:${location.symbol ?? ''}`}
-            >
-              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                {formatLocation(location)}
-              </code>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {finding.locations.length > 0 ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Locations
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {finding.locations.map((location) => (
+              <li
+                key={`${location.path}:${location.startLine ?? ''}:${location.symbol ?? ''}`}
+              >
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  {formatLocation(location)}
+                </code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <FindingTriageControls
         findingId={finding.id}
         disposition={finding.disposition}
@@ -401,6 +424,36 @@ function StringList({
       </ul>
     </div>
   )
+}
+
+function formatSubject(subject: InvestigationSubject): string {
+  switch (subject.kind) {
+    case 'repository':
+      return `Repository · ${subject.aspect}`
+    case 'module':
+      return `Module · ${subject.name}${subject.paths.length ? ` (${subject.paths.join(', ')})` : ''}`
+    case 'dependency':
+      return `Dependency · ${subject.from} → ${subject.to}`
+    case 'file':
+      return `File · ${subject.path}`
+    case 'symbol':
+      return `Symbol · ${subject.path} (${subject.symbol})`
+  }
+}
+
+function formatInvestigationEvidence(evidence: InvestigationEvidence): string {
+  switch (evidence.kind) {
+    case 'file':
+      return `${evidence.path}${evidence.startLine ? `:${evidence.startLine}` : ''} — ${evidence.summary}`
+    case 'repository-structure':
+      return `${evidence.paths.join(', ')} — ${evidence.summary}`
+    case 'dependency-edge':
+      return `${evidence.from} → ${evidence.to} — ${evidence.summary}`
+    case 'tool-result':
+      return `${evidence.tool} — ${evidence.summary}`
+    case 'command':
+      return `${evidence.command} — ${evidence.summary}`
+  }
 }
 
 function Section({

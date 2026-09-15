@@ -183,7 +183,7 @@ function patchValidationRequest(
     previousCommitSha: null,
     target: { kind: 'repository' },
     maxCostUsd: null,
-    maxFiles: 1,
+    maxInputTokens: 10_000,
     securityProfile: null,
     validation: request.validation,
     scanners: [],

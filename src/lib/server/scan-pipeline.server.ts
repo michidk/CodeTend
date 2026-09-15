@@ -1,6 +1,16 @@
 import '@tanstack/react-start/server-only'
 
-import { and, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm'
 import { db } from '@/db'
 import {
   type FindingCounts,
@@ -36,8 +46,7 @@ import {
   gradeForScore,
 } from '@/lib/scoring'
 import {
-  DEFAULT_SCAN_FILE_GLOB,
-  DEFAULT_SCAN_MAX_FILES,
+  DEFAULT_SCAN_INPUT_TOKEN_BUDGET,
   DEFAULT_SCAN_TARGET,
   type ScanTarget,
 } from '@/lib/security-scans'
@@ -89,8 +98,7 @@ export async function startScan(
   trigger: ScanTrigger,
   options: {
     readonly target?: ScanTarget
-    readonly maxFiles?: number
-    readonly fileGlob?: string
+    readonly maxInputTokens?: number
     readonly maxCostUsd?: number | null
   } = {},
 ): Promise<number | null> {
@@ -188,7 +196,7 @@ export async function startScan(
 
   const globalSettings = await db.query.scanScheduleSettings.findFirst({
     where: eq(scanScheduleSettings.id, 1),
-    columns: { maxFiles: true, fileGlob: true },
+    columns: { maxInputTokens: true },
   })
   let scan: { id: number } | undefined
   try {
@@ -199,14 +207,10 @@ export async function startScan(
         trigger,
         mode: 'standard',
         target: options.target ?? DEFAULT_SCAN_TARGET,
-        maxFiles:
-          options.maxFiles ??
-          globalSettings?.maxFiles ??
-          DEFAULT_SCAN_MAX_FILES,
-        fileGlob:
-          options.fileGlob ??
-          globalSettings?.fileGlob ??
-          DEFAULT_SCAN_FILE_GLOB,
+        maxInputTokens:
+          options.maxInputTokens ??
+          globalSettings?.maxInputTokens ??
+          DEFAULT_SCAN_INPUT_TOKEN_BUDGET,
         maxCostUsd:
           options.maxCostUsd ?? env.TECDEBT_DEFAULT_SCAN_COST_USD ?? null,
         status: 'queued',
@@ -284,8 +288,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       where: eq(scans.id, scanId),
       columns: {
         target: true,
-        maxFiles: true,
-        fileGlob: true,
+        maxInputTokens: true,
         maxCostUsd: true,
       },
     })
@@ -330,23 +333,39 @@ async function runScanPipeline(scanId: number, repository: Repository) {
     const gitnexus = env.GITNEXUS_ENABLED ? await ensureGitNexusServer() : false
     await throwIfCancellationRequested(scanId)
 
-    const [knowledge, securityProfile, openFindings] = await Promise.all([
-      db.query.repositoryKnowledge.findFirst({
-        where: eq(repositoryKnowledge.repositoryId, repository.id),
-      }),
-      db.query.repositorySecurityProfiles.findFirst({
-        where: eq(repositorySecurityProfiles.repositoryId, repository.id),
-      }),
-      db.query.findings.findMany({
-        where: and(
-          eq(findings.repositoryId, repository.id),
-          or(
-            inArray(findings.state, [...OPEN_FINDING_STATES]),
-            isNotNull(findings.disposition),
+    const [knowledge, securityProfile, openFindings, recentAttention] =
+      await Promise.all([
+        db.query.repositoryKnowledge.findFirst({
+          where: eq(repositoryKnowledge.repositoryId, repository.id),
+        }),
+        db.query.repositorySecurityProfiles.findFirst({
+          where: eq(repositorySecurityProfiles.repositoryId, repository.id),
+        }),
+        db.query.findings.findMany({
+          where: and(
+            eq(findings.repositoryId, repository.id),
+            or(
+              inArray(findings.state, [...OPEN_FINDING_STATES]),
+              isNotNull(findings.disposition),
+            ),
           ),
-        ),
-      }),
-    ])
+        }),
+        db
+          .select({
+            scannerId: scannerRuns.scannerId,
+            investigation: scannerRuns.investigation,
+          })
+          .from(scannerRuns)
+          .innerJoin(scans, eq(scannerRuns.scanId, scans.id))
+          .where(
+            and(
+              eq(scans.repositoryId, repository.id),
+              isNotNull(scannerRuns.investigation),
+            ),
+          )
+          .orderBy(desc(scans.createdAt))
+          .limit(Math.max(5, activeAgentScanners.length * 5)),
+      ])
 
     await db.insert(scannerRuns).values(
       activeScanners.map((scanner) => ({
@@ -370,8 +389,7 @@ async function runScanPipeline(scanId: number, repository: Repository) {
       scanId,
       previousCommitSha: previousScan?.commitSha ?? null,
       target: scanConfiguration.target,
-      maxFiles: scanConfiguration.maxFiles,
-      fileGlob: scanConfiguration.fileGlob,
+      maxInputTokens: scanConfiguration.maxInputTokens,
       maxCostUsd: scanConfiguration.maxCostUsd,
       securityProfile: securityProfile?.profile ?? null,
       validation: {
@@ -399,6 +417,12 @@ async function runScanPipeline(scanId: number, repository: Repository) {
         id: scanner.id,
         name: scanner.name,
         prompt: scanner.prompt,
+        attentionHistory: recentAttention
+          .filter((entry) => entry.scannerId === scanner.id)
+          .flatMap((entry) =>
+            entry.investigation ? [entry.investigation] : [],
+          )
+          .slice(0, 5),
         hypotheses: openFindings
           .filter((finding) => finding.scannerId === scanner.id)
           .map((finding) => ({
@@ -407,6 +431,8 @@ async function runScanPipeline(scanId: number, repository: Repository) {
             title: finding.title,
             severity: finding.severity,
             description: finding.description,
+            subject: finding.subject,
+            evidence: finding.evidence,
             locations: finding.locations,
             classification: finding.classification,
             securityContext: finding.securityContext,
@@ -590,10 +616,7 @@ async function persistScanCheckpointUnlocked(
       scanId,
       scannerId: scanner.id,
       result: scannerResult,
-      authoritative: false,
-      coverage: { ...outcome.result.coverage, completeness: 'unknown' },
       target: scan.target,
-      targetFiles: checkpoint.targetFiles,
     })
     const openFindings = reconciled.findings.filter((entry) =>
       OPEN_FINDING_STATES.includes(entry.state),
@@ -607,6 +630,7 @@ async function persistScanCheckpointUnlocked(
         status: 'completed',
         score,
         summary: scannerResult.summary,
+        investigation: scannerResult.investigation,
         fixPrompt: buildFixPrompt({
           scanner,
           repositoryName: repository.name,
@@ -630,8 +654,6 @@ async function persistScanCheckpointUnlocked(
     .set({
       commitSha: checkpoint.commitSha,
       fileCount: checkpoint.fileCount,
-      reviewedFileCount: checkpoint.targetFiles.length,
-      targetFileCount: checkpoint.targetFileCount,
       gitnexusUsed: checkpoint.gitnexusUsed,
     })
     .where(and(eq(scans.id, scanId), eq(scans.status, 'running')))
@@ -657,7 +679,12 @@ async function persistScanResultUnlocked(
   const usage = await loadScanUsage(scanId)
   const scanConfiguration = await db.query.scans.findFirst({
     where: eq(scans.id, scanId),
-    columns: { mode: true, target: true, maxFiles: true, maxCostUsd: true },
+    columns: {
+      mode: true,
+      target: true,
+      maxInputTokens: true,
+      maxCostUsd: true,
+    },
   })
   if (!scanConfiguration) throw new Error('Scan configuration disappeared')
   const scannerRunRows = await db.query.scannerRuns.findMany({
@@ -738,12 +765,7 @@ async function persistScanResultUnlocked(
       scanId,
       scannerId: scanner.id,
       result: scannerResult,
-      coverage:
-        result.targetFiles.length < result.targetFileCount
-          ? result.coverage
-          : outcome.result.coverage,
       target: scanConfiguration.target,
-      targetFiles: result.targetFiles,
     })
     countsPerScanner.push(reconciled.counts)
 
@@ -770,6 +792,7 @@ async function persistScanResultUnlocked(
         status: 'completed',
         score,
         summary: scannerResult.summary,
+        investigation: scannerResult.investigation,
         fixPrompt,
         startedAt: new Date(outcome.startedAt),
         finishedAt: new Date(outcome.finishedAt),
@@ -783,9 +806,7 @@ async function persistScanResultUnlocked(
       )
   }
 
-  const knowledgeAuthoritative =
-    scanConfiguration.target.kind === 'repository' &&
-    result.targetFiles.length === result.targetFileCount
+  const knowledgeAuthoritative = scanConfiguration.target.kind === 'repository'
   if (knowledgeAuthoritative && result.knowledge.overview.trim().length > 0) {
     await db
       .insert(repositoryKnowledge)
@@ -846,19 +867,21 @@ async function persistScanResultUnlocked(
   const counts = sumCounts(countsPerScanner)
   const allFailed =
     scannerDefinitions.size > 0 && failedScanners === scannerDefinitions.size
-  const incompleteCoverage = result.coverage.completeness !== 'complete'
   const costExceeded =
     scanConfiguration.maxCostUsd !== null &&
     usage?.total.estimatedCostUsd !== null &&
     usage?.total.estimatedCostUsd !== undefined &&
     usage.total.estimatedCostUsd > scanConfiguration.maxCostUsd
+  const tokenBudgetExceeded =
+    usage?.total.inputTokens !== undefined &&
+    usage.total.inputTokens > scanConfiguration.maxInputTokens
 
   await db
     .update(scans)
     .set({
       status: allFailed
         ? 'failed'
-        : failedScanners > 0 || incompleteCoverage || costExceeded
+        : failedScanners > 0 || costExceeded || tokenBudgetExceeded
           ? 'partial'
           : 'completed',
       phase: 'done',
@@ -868,26 +891,23 @@ async function persistScanResultUnlocked(
         total: 1,
         scannerCompleted: result.scanners.length,
         scannerTotal: result.scanners.length,
-        targetFileCount: result.targetFiles.length,
       },
       commitSha: result.commitSha,
       fileCount: result.fileCount,
-      reviewedFileCount: result.targetFiles.length,
-      targetFileCount: result.targetFileCount,
       gitnexusUsed: result.gitnexusUsed,
       knowledgeRefreshed: knowledgeAuthoritative && result.knowledge.refreshed,
       overallScore,
       grade: gradeForScore(overallScore),
       counts,
       model: usage?.model ?? null,
-      coverage: result.coverage,
+      investigation: result.investigation,
       ...usageColumns(usage?.total),
       error: allFailed
         ? 'Every scanner failed.'
         : costExceeded
           ? `The completed scan exceeded its $${scanConfiguration.maxCostUsd?.toFixed(2)} estimated cost limit.`
-          : incompleteCoverage
-            ? 'Scan coverage is incomplete; review deferred surfaces and open questions.'
+          : tokenBudgetExceeded
+            ? `The investigation exceeded its ${scanConfiguration.maxInputTokens.toLocaleString()} input-token budget.`
             : null,
       finishedAt,
     })
@@ -1034,14 +1054,15 @@ async function persistDependencyAudit(input: {
       summary,
       findings: freshFindings,
       hypothesisVerdicts: [],
-      coverage: {
-        completeness: failed ? 'unknown' : 'complete',
-        reviewed: failed
-          ? []
-          : ['Supported dependency manifests and lockfiles'],
-        deferred: [],
-        excluded: [],
-        openQuestions: failed ? [error ?? 'Dependency audit failed.'] : [],
+      investigation: {
+        strategy:
+          'Deterministically inspected supported dependency manifests and lockfiles with OSV.',
+        focusAreas: [
+          { kind: 'repository', aspect: 'declared and locked dependencies' },
+        ],
+        evidence: [],
+        blindSpots: failed ? [error ?? 'Dependency audit failed.'] : [],
+        confidence: failed ? 'low' : 'high',
       },
     },
     authoritative: !failed,
@@ -1067,6 +1088,16 @@ async function persistDependencyAudit(input: {
       status: failed ? 'failed' : 'completed',
       score,
       summary,
+      investigation: {
+        strategy:
+          'Deterministically inspected supported dependency manifests and lockfiles with OSV.',
+        focusAreas: [
+          { kind: 'repository', aspect: 'declared and locked dependencies' },
+        ],
+        evidence: [],
+        blindSpots: failed ? [error ?? 'Dependency audit failed.'] : [],
+        confidence: failed ? 'low' : 'high',
+      },
       fixPrompt,
       error,
       startedAt: input.finishedAt,

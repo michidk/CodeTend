@@ -14,9 +14,8 @@ import {
   isValidCronExpression,
 } from '@/lib/schedule'
 import {
-  MAX_SCAN_FILE_GLOB_LENGTH,
-  MAX_SCAN_MAX_FILES,
-  SCAN_FILE_BUDGET_PRESETS,
+  MAX_SCAN_INPUT_TOKEN_BUDGET,
+  SCAN_INPUT_TOKEN_BUDGET_PRESETS,
 } from '@/lib/security-scans'
 import type { getScheduleSettings } from '@/lib/server/schedule-settings'
 import { updateScheduleSettings } from '@/lib/server/schedule-settings'
@@ -35,30 +34,27 @@ export function ScheduleSettingsForm({
   const [cooldownMinutes, setCooldownMinutes] = useState(
     String(settings.cooldownMinutes),
   )
-  const [maxFiles, setMaxFiles] = useState(String(settings.maxFiles))
-  const [fileGlob, setFileGlob] = useState(settings.fileGlob)
+  const [maxInputTokens, setMaxInputTokens] = useState(
+    String(settings.maxInputTokens),
+  )
   const [submitting, setSubmitting] = useState(false)
 
   const cronValid = isValidCronExpression(cronExpression)
   const cooldown = Number(cooldownMinutes)
   const cooldownValid =
     Number.isInteger(cooldown) && cooldown >= 0 && cooldown <= 10_080
-  const fileBudget = Number(maxFiles)
-  const fileBudgetValid =
-    Number.isInteger(fileBudget) &&
-    fileBudget >= 1 &&
-    fileBudget <= MAX_SCAN_MAX_FILES
-  const fileGlobValid =
-    fileGlob.trim().length > 0 &&
-    fileGlob.trim().length <= MAX_SCAN_FILE_GLOB_LENGTH
+  const tokenBudget = Number(maxInputTokens)
+  const tokenBudgetValid =
+    Number.isInteger(tokenBudget) &&
+    tokenBudget >= 10_000 &&
+    tokenBudget <= MAX_SCAN_INPUT_TOKEN_BUDGET
   const nextRun = cronValid
     ? computeNextScanAt(cronExpression, new Date())
     : null
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!cronValid || !cooldownValid || !fileBudgetValid || !fileGlobValid)
-      return
+    if (!cronValid || !cooldownValid || !tokenBudgetValid) return
     setSubmitting(true)
     try {
       await updateScheduleSettings({
@@ -66,8 +62,7 @@ export function ScheduleSettingsForm({
           cronExpression: cronExpression.trim(),
           enabled,
           cooldownMinutes: cooldown,
-          maxFiles: fileBudget,
-          fileGlob: fileGlob.trim(),
+          maxInputTokens: tokenBudget,
         },
       })
       toast.success('Schedule settings saved')
@@ -141,56 +136,39 @@ export function ScheduleSettingsForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="schedule-max-files">
-              Review budget per repository (files) *
+            <Label htmlFor="schedule-max-input-tokens">
+              Investigation budget per repository (input tokens) *
             </Label>
             <div className="flex flex-wrap gap-2">
-              {SCAN_FILE_BUDGET_PRESETS.map((value) => (
+              {SCAN_INPUT_TOKEN_BUDGET_PRESETS.map((value) => (
                 <Button
                   key={value}
                   type="button"
                   size="sm"
-                  variant={maxFiles === String(value) ? 'default' : 'outline'}
-                  onClick={() => setMaxFiles(String(value))}
+                  variant={
+                    maxInputTokens === String(value) ? 'default' : 'outline'
+                  }
+                  onClick={() => setMaxInputTokens(String(value))}
                 >
                   {value.toLocaleString()}
                 </Button>
               ))}
             </div>
             <Input
-              id="schedule-max-files"
+              id="schedule-max-input-tokens"
               required
               type="number"
-              min={1}
-              max={MAX_SCAN_MAX_FILES}
+              min={10_000}
+              max={MAX_SCAN_INPUT_TOKEN_BUDGET}
               step={1}
-              aria-invalid={!fileBudgetValid}
-              value={maxFiles}
-              onChange={(event) => setMaxFiles(event.target.value)}
+              aria-invalid={!tokenBudgetValid}
+              value={maxInputTokens}
+              onChange={(event) => setMaxInputTokens(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Every queued repository uses this maximum file sample. CodeTend
-              applies the file glob first, prioritizes high-signal matches, and
-              marks larger matching targets as partial coverage.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="scan-file-glob">Review file glob *</Label>
-            <Input
-              id="scan-file-glob"
-              required
-              className="font-mono"
-              maxLength={MAX_SCAN_FILE_GLOB_LENGTH}
-              aria-invalid={!fileGlobValid}
-              value={fileGlob}
-              onChange={(event) => setFileGlob(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Applied before the file budget for manual and scheduled scans. Use
-              a standard glob such as <code>{'**/*.{ts,tsx,js,jsx}'}</code>.
-              Dependency manifests are still handled separately by the
-              dependency audit.
+              Shared across scanner-directed investigations. Each scanner
+              chooses its own evidence from repository structure, searches,
+              files, and dependency-graph results.
             </p>
           </div>
 
@@ -234,11 +212,7 @@ export function ScheduleSettingsForm({
         <Button
           type="submit"
           disabled={
-            !cronValid ||
-            !cooldownValid ||
-            !fileBudgetValid ||
-            !fileGlobValid ||
-            submitting
+            !cronValid || !cooldownValid || !tokenBudgetValid || submitting
           }
         >
           {submitting ? 'Saving…' : 'Save settings'}

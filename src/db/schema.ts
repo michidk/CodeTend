@@ -35,6 +35,10 @@ import type { CustomScannerDefinition } from '@/lib/scanner-configuration'
 import type { ScannerDefinition } from '@/lib/scanners'
 import {
   DEFAULT_SCAN_FILE_GLOB,
+  DEFAULT_SCAN_INPUT_TOKEN_BUDGET,
+  type InvestigationEvidence,
+  type InvestigationReport,
+  type InvestigationSubject,
   type ScanCoverage,
   type ScanManifest,
   type ScanMode,
@@ -89,6 +93,9 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   cooldownMinutes: integer('cooldown_minutes').notNull().default(5),
   maxFiles: integer('max_files').notNull().default(300),
   fileGlob: text('file_glob').notNull().default(DEFAULT_SCAN_FILE_GLOB),
+  maxInputTokens: integer('max_input_tokens')
+    .notNull()
+    .default(DEFAULT_SCAN_INPUT_TOKEN_BUDGET),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
   createdAt,
@@ -234,6 +241,9 @@ export const scans = pgTable(
     maxCostUsd: real('max_cost_usd'),
     maxFiles: integer('max_files').notNull().default(300),
     fileGlob: text('file_glob').notNull().default(DEFAULT_SCAN_FILE_GLOB),
+    maxInputTokens: integer('max_input_tokens')
+      .notNull()
+      .default(DEFAULT_SCAN_INPUT_TOKEN_BUDGET),
     reviewedFileCount: integer('reviewed_file_count'),
     targetFileCount: integer('target_file_count'),
     cancellationRequestedAt: timestamp('cancellation_requested_at', {
@@ -263,6 +273,7 @@ export const scans = pgTable(
     /** Number of model calls (root turn plus every subagent step). */
     modelCalls: integer('model_calls'),
     coverage: jsonb('coverage').$type<ScanCoverage>(),
+    investigation: jsonb('investigation').$type<InvestigationReport>(),
     manifest: jsonb('manifest').$type<ScanManifest>(),
     error: text('error'),
     startedAt: timestamp('started_at', { withTimezone: true }),
@@ -304,6 +315,7 @@ export const scannerRuns = pgTable(
       .default('pending'),
     score: real('score'),
     summary: text('summary'),
+    investigation: jsonb('investigation').$type<InvestigationReport>(),
     fixPrompt: text('fix_prompt'),
     error: text('error'),
     eveSessionId: text('eve_session_id'),
@@ -346,6 +358,11 @@ export const findings = pgTable(
     whyItMatters: text('why_it_matters').notNull(),
     recommendation: text('recommendation').notNull(),
     effort: text('effort').$type<Effort>().notNull(),
+    subject: jsonb('subject').$type<InvestigationSubject>(),
+    evidence: jsonb('evidence')
+      .$type<InvestigationEvidence[]>()
+      .notNull()
+      .default([]),
     locations: jsonb('locations')
       .$type<FindingLocation[]>()
       .notNull()
@@ -405,6 +422,11 @@ export const findingOccurrences = pgTable(
     state: text('state').$type<FindingState>().notNull(),
     severity: text('severity').$type<Severity>().notNull(),
     confidence: text('confidence').$type<Confidence>().notNull(),
+    subject: jsonb('subject').$type<InvestigationSubject>(),
+    evidence: jsonb('evidence')
+      .$type<InvestigationEvidence[]>()
+      .notNull()
+      .default([]),
     classification: jsonb('classification').$type<FindingClassification>(),
     securityContext: jsonb('security_context').$type<SecurityContext>(),
     rootCause: text('root_cause'),
@@ -489,7 +511,14 @@ export const scanArtifacts = pgTable(
       .notNull()
       .references(() => scans.id, { onDelete: 'cascade' }),
     kind: text('kind')
-      .$type<'manifest' | 'findings' | 'coverage' | 'report' | 'sarif'>()
+      .$type<
+        | 'manifest'
+        | 'findings'
+        | 'coverage'
+        | 'investigation'
+        | 'report'
+        | 'sarif'
+      >()
       .notNull(),
     contentType: text('content_type').notNull(),
     sha256: text('sha256').notNull(),

@@ -455,30 +455,20 @@ export async function writePatchResult(result: PatchResult): Promise<void> {
   await rename(`${target}.tmp`, target)
 }
 
-/** Resolves the concrete, repository-relative files covered by this scan. */
-export async function resolveTargetFiles(
+/** Resolves repository-relative paths changed by a diff-scoped scan. */
+export async function resolveDiffTargetFiles(
   request: ScanRequest,
   workspace: WorkspaceManifest,
 ): Promise<string[]> {
   'use step'
-  if (request.target.kind === 'repository') {
-    return workspace.files.map((file) => file.path)
-  }
-  if (request.target.kind === 'paths') {
-    const scopes = request.target.paths.map(normalizeTargetPath)
-    return workspace.files
-      .map((file) => file.path)
-      .filter((path) =>
-        scopes.some((scope) => path === scope || path.startsWith(`${scope}/`)),
-      )
-  }
+  if (request.target.kind !== 'diff') return []
 
   const diff = await run(
     'git',
     [
       'diff',
       '--name-only',
-      '--diff-filter=ACMRT',
+      '--diff-filter=ACDMRT',
       request.target.base,
       request.target.head,
       '--',
@@ -486,7 +476,6 @@ export async function resolveTargetFiles(
     { cwd: workspace.hostPath, timeoutMs: 2 * 60_000 },
   )
   assertOk(diff, 'git diff target resolution')
-  const known = new Set(workspace.files.map((file) => file.path))
   return [
     ...new Set(
       diff.stdout
@@ -494,9 +483,7 @@ export async function resolveTargetFiles(
         .filter((path) => path.trim().length > 0)
         .map(normalizeTargetPath),
     ),
-  ]
-    .filter((path) => known.has(path))
-    .sort()
+  ].sort()
 }
 
 function normalizeTargetPath(path: string): string {

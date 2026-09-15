@@ -14,9 +14,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getErrorMessage } from '@/lib/error-message'
 import {
-  DEFAULT_SCAN_MAX_FILES,
-  MAX_SCAN_MAX_FILES,
-  SCAN_FILE_BUDGET_PRESETS,
+  DEFAULT_SCAN_INPUT_TOKEN_BUDGET,
+  MAX_SCAN_INPUT_TOKEN_BUDGET,
+  SCAN_INPUT_TOKEN_BUDGET_PRESETS,
   type ScanTarget,
 } from '@/lib/security-scans'
 import { triggerConfiguredScan } from '@/lib/server/repositories'
@@ -32,7 +32,9 @@ export function ScanDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onStarted: () => Promise<void>
 }) {
-  const [maxFiles, setMaxFiles] = useState(String(DEFAULT_SCAN_MAX_FILES))
+  const [maxInputTokens, setMaxInputTokens] = useState(
+    String(DEFAULT_SCAN_INPUT_TOKEN_BUDGET),
+  )
   const [scope, setScope] = useState<'repository' | 'paths'>('repository')
   const [pathText, setPathText] = useState('')
   const [maxCost, setMaxCost] = useState('')
@@ -48,14 +50,14 @@ export function ScanDialog({
       return
     }
     const parsedCost = maxCost.trim() ? Number(maxCost) : null
-    const parsedMaxFiles = Number(maxFiles)
+    const parsedMaxInputTokens = Number(maxInputTokens)
     if (
-      !Number.isInteger(parsedMaxFiles) ||
-      parsedMaxFiles < 1 ||
-      parsedMaxFiles > MAX_SCAN_MAX_FILES
+      !Number.isInteger(parsedMaxInputTokens) ||
+      parsedMaxInputTokens < 10_000 ||
+      parsedMaxInputTokens > MAX_SCAN_INPUT_TOKEN_BUDGET
     ) {
       toast.error(
-        `The file budget must be between 1 and ${MAX_SCAN_MAX_FILES}.`,
+        `The token budget must be between 10,000 and ${MAX_SCAN_INPUT_TOKEN_BUDGET.toLocaleString()}.`,
       )
       return
     }
@@ -75,7 +77,7 @@ export function ScanDialog({
         data: {
           repositoryId,
           target,
-          maxFiles: parsedMaxFiles,
+          maxInputTokens: parsedMaxInputTokens,
           maxCostUsd: parsedCost,
         },
       })
@@ -95,43 +97,45 @@ export function ScanDialog({
         <DialogHeader>
           <DialogTitle>Start security review</DialogTitle>
           <DialogDescription>
-            Set how many files the model-backed review may inspect. CodeTend
-            applies the global review file glob, prioritizes high-signal
-            matches, and records matching files outside the sample as partial
-            coverage.
+            Set the effort available to this bounded investigation. Each scanner
+            discovers its own focus from the repository structure, searches,
+            existing findings, and code intelligence.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="scan-max-files">Review budget (files) *</Label>
+            <Label htmlFor="scan-max-input-tokens">
+              Investigation budget (input tokens) *
+            </Label>
             <div className="flex flex-wrap gap-2">
-              {SCAN_FILE_BUDGET_PRESETS.map((value) => (
+              {SCAN_INPUT_TOKEN_BUDGET_PRESETS.map((value) => (
                 <Button
                   key={value}
                   type="button"
                   size="sm"
-                  variant={maxFiles === String(value) ? 'default' : 'outline'}
-                  onClick={() => setMaxFiles(String(value))}
+                  variant={
+                    maxInputTokens === String(value) ? 'default' : 'outline'
+                  }
+                  onClick={() => setMaxInputTokens(String(value))}
                 >
                   {value.toLocaleString()}
                 </Button>
               ))}
             </div>
             <Input
-              id="scan-max-files"
+              id="scan-max-input-tokens"
               required
               type="number"
-              min={1}
-              max={MAX_SCAN_MAX_FILES}
+              min={10_000}
+              max={MAX_SCAN_INPUT_TOKEN_BUDGET}
               step={1}
-              value={maxFiles}
-              onChange={(event) => setMaxFiles(event.target.value)}
+              value={maxInputTokens}
+              onChange={(event) => setMaxInputTokens(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              At most this many matching target files are available to the
-              knowledge and scanner agents. Configure the file-extension glob in
-              Settings.
+              This budget is divided across the enabled model-backed scanners.
+              File count is not used as a proxy for investigation depth.
             </p>
           </div>
 

@@ -16,8 +16,8 @@ import {
   type ScannerResult,
   SEVERITY_ORDER,
 } from '@/lib/findings'
-import type { ScanCoverage, ScanTarget } from '@/lib/security-scans'
-import { coverageAllowsResolution } from '@/lib/security-scans'
+import type { ScanTarget } from '@/lib/security-scans'
+import { investigationAllowsResolution } from '@/lib/security-scans'
 import { recordFindingEvent } from '@/lib/server/finding-events.server'
 
 export interface ReconciledFinding {
@@ -47,7 +47,7 @@ const EMPTY_COUNTS: FindingCounts = {
  * - unmatched result           → new
  * - matched open finding       → active, improved (lower severity or scanner verdict) or regressed (higher severity)
  * - matched resolved finding   → regressed
- * - open finding not returned  → resolved (also when the scanner says so)
+ * - open finding not returned  → carried forward unless explicitly resolved
  *
  * This compares our own persisted results, never Git history.
  */
@@ -60,10 +60,7 @@ export async function reconcileScannerFindings(input: {
   }
   /** A deterministic complete inventory can positively resolve omitted rows. */
   authoritative?: boolean
-  /** Coverage gates resolution so an unreviewed path never looks fixed. */
-  coverage?: ScanCoverage
   target?: ScanTarget
-  targetFiles?: readonly string[]
 }): Promise<ReconciliationOutcome> {
   const existing = await db.query.findings.findMany({
     where: and(
@@ -286,17 +283,13 @@ export async function reconcileScannerFindings(input: {
     (finding) =>
       !touched.has(finding.id) && OPEN_FINDING_STATES.includes(finding.state),
   )
-  const verifiedAll =
-    input.authoritative === true ||
-    (untouchedOpen.length > 0 &&
-      untouchedOpen.every((finding) => verdictById.has(finding.id)))
   const resolvedIds: number[] = []
   const carriedIds: number[] = []
   for (const finding of untouchedOpen) {
     const verdict = verdictById.get(finding.id)?.verdict
     if (
-      (verdict === 'resolved' || (verifiedAll && verdict === undefined)) &&
-      resolutionIsCovered(input, finding)
+      (verdict === 'resolved' || input.authoritative === true) &&
+      resolutionIsCovered(input, finding, verdict === 'resolved')
     ) {
       resolvedIds.push(finding.id)
     } else if (verdict === 'confirmed' || verdict === 'improved') {
@@ -397,8 +390,8 @@ export async function reconcileScannerFindings(input: {
     if (!previous) continue
     const carryNote =
       verdictById.get(id)?.verdict === 'resolved'
-        ? 'Carried forward: the scan did not prove coverage of the original affected path.'
-        : 'Carried forward: the scanner did not report on this finding.'
+        ? 'Carried forward: the resolved verdict was outside the configured target.'
+        : 'Carried forward: this bounded investigation did not explicitly verify the finding.'
     await db
       .update(findings)
       .set({ state: 'active', updatedAt: now })
@@ -454,6 +447,11 @@ function toScannerFinding(finding: Finding): EnrichedScannerFinding {
     whyItMatters: finding.whyItMatters,
     recommendation: finding.recommendation,
     effort: finding.effort,
+    subject: finding.subject ?? {
+      kind: 'repository',
+      aspect: 'legacy finding without a typed subject',
+    },
+    evidence: finding.evidence,
     locations: finding.locations,
     classification: finding.classification ?? undefined,
     securityContext: finding.securityContext ?? undefined,
@@ -506,6 +504,8 @@ function findingColumns(fresh: EnrichedScannerFinding) {
     whyItMatters: fresh.whyItMatters,
     recommendation: fresh.recommendation,
     effort: fresh.effort,
+    subject: fresh.subject,
+    evidence: [...fresh.evidence],
     locations: fresh.locations,
     classification: fresh.classification ?? null,
     securityContext: fresh.securityContext ?? null,
@@ -537,6 +537,8 @@ async function recordOccurrence(
       state,
       severity: fresh.severity,
       confidence: fresh.confidence,
+      subject: fresh.subject,
+      evidence: [...fresh.evidence],
       classification: fresh.classification ?? null,
       securityContext: fresh.securityContext ?? null,
       rootCause: fresh.rootCause ?? null,
@@ -571,15 +573,17 @@ function dedupeByFingerprint(
 function resolutionIsCovered(
   input: {
     authoritative?: boolean
-    coverage?: ScanCoverage
     target?: ScanTarget
-    targetFiles?: readonly string[]
   },
   finding: Finding,
+  explicitVerdict: boolean,
 ): boolean {
-  return coverageAllowsResolution({
-    ...input,
+  if (input.authoritative) return true
+  return investigationAllowsResolution({
+    target: input.target,
     findingPaths: finding.locations.map((location) => location.path),
+    findingSubject: finding.subject,
+    explicitVerdict,
   })
 }
 

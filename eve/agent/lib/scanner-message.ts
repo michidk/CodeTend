@@ -1,4 +1,5 @@
 import type {
+  InvestigationReport,
   KnowledgeResult,
   ScanRequest,
   ScanRequestScanner,
@@ -19,7 +20,8 @@ export function scannerAgentMessage(input: {
   gitnexusRepo: string | null
   previousCommitSha: string | null
   target: ScanRequest['target']
-  targetFiles: readonly string[]
+  maxInputTokens: number
+  attentionHistory: readonly InvestigationReport[]
   securityProfile: SecurityProfile | null
 }): string {
   const { scanner, workspace, knowledge } = input
@@ -54,7 +56,7 @@ export function scannerAgentMessage(input: {
     `Checkout path inside your sandbox (read-only): ${input.repoPath}`,
     `Commit: ${workspace.commitSha}`,
     `Tracked files: ${workspace.fileCount}`,
-    `Review sample: ${input.targetFiles.length} files`,
+    `Investigation budget: approximately ${input.maxInputTokens.toLocaleString()} cumulative input tokens`,
     `Top-level entries: ${workspace.topLevel.join(', ')}`,
     `Languages: ${knowledge.summary.languages.join(', ') || 'unknown — infer them'}`,
     `Frameworks: ${knowledge.summary.frameworks.join(', ') || 'unknown — infer them'}`,
@@ -63,19 +65,13 @@ export function scannerAgentMessage(input: {
 
   parts.push('', '## Scan target', targetDescription(input.target))
   parts.push(
-    'Files in this review sample:',
-    '<review-sample>',
-    ...input.targetFiles.map((path) => `- ${path}`),
-    '</review-sample>',
-    input.targetFiles.length > 0
-      ? 'Inspect only files in this review sample. Report only findings whose root cause or newly introduced attack path is in one of these files. Do not claim complete target coverage when the sample excludes target files.'
-      : 'No target files matched the configured review file glob. Do not inspect repository files or report new findings.',
+    'This is a bounded investigation, not an attempt to read every target file. Start from the repository structure, manifests, entry points, knowledge, searches, and graph tools. Choose the evidence most useful for your dimension and stop when further exploration is unlikely to change the result. You may inspect any repository content inside the configured target.',
   )
 
   if (input.gitnexusRepo) {
     parts.push(
       '',
-      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (always pass repo: "${input.gitnexusRepo}"). Useful tools: query (semantic/keyword search over symbols and execution flows), context (callers/callees of a symbol), impact (blast radius), check (import cycles), trace (paths between symbols). It is an accelerator only; follow results only into files in the review sample. Those files are the ground truth and languages GitNexus does not parse must still be analyzed directly.`,
+      `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}" (always pass repo: "${input.gitnexusRepo}"). Useful tools: query (semantic/keyword search over symbols and execution flows), context (callers/callees of a symbol), impact (blast radius), check (import cycles), trace (paths between symbols). It is an accelerator only; repository files remain the ground truth and languages GitNexus does not parse must still be analyzed directly.`,
     )
   }
 
@@ -137,6 +133,12 @@ export function scannerAgentMessage(input: {
                 `  securityContext: ${JSON.stringify(hypothesis.securityContext)}`,
               ]
             : []),
+          ...(hypothesis.subject
+            ? [`  subject: ${JSON.stringify(hypothesis.subject)}`]
+            : []),
+          ...(hypothesis.evidence?.length
+            ? [`  priorEvidence: ${JSON.stringify(hypothesis.evidence)}`]
+            : []),
           ...(hypothesis.disposition
             ? [
                 `  manualDisposition: ${hypothesis.disposition}`,
@@ -149,21 +151,33 @@ export function scannerAgentMessage(input: {
     )
   }
 
+  if (input.attentionHistory.length > 0) {
+    parts.push(
+      '',
+      '## Recent investigation attention',
+      'Use this history to avoid repeatedly examining only the same attractive areas. Revisit it when changes or open findings warrant it; otherwise rotate toward stale or previously blind areas.',
+      '<attention-history>',
+      JSON.stringify(input.attentionHistory.slice(0, 5), null, 2),
+      '</attention-history>',
+    )
+  }
+
   parts.push(
     '',
     '## Task',
     scanner.hypotheses.length > 0
-      ? 'First verify every in-sample hypothesis above. Then analyze the review sample for this dimension and report any distinct new problems you find with clear evidence. Return the structured result.'
+      ? 'First explicitly verify every hypothesis above. Then conduct a bounded investigation for this dimension and report any distinct new problems you find with clear evidence. Return the structured result.'
       : input.target.kind === 'repository'
-        ? 'Analyze the repository review sample for this dimension and return the structured result.'
-        : 'Analyze the configured target review sample for this dimension and return the structured result.',
-    'Report coverage honestly: list the reviewed surfaces, every deferred or excluded area with a reason, and open questions. Use partial or unknown rather than complete when sampling, context limits, missing generated code, unavailable tools, or unresolved paths leave a material gap; the app only lets a scan resolve a tracked finding when coverage of its paths is complete.',
+        ? 'Conduct a bounded, self-directed investigation of the repository for this dimension and return the structured result.'
+        : 'Conduct a bounded, self-directed investigation of the configured target and return the structured result.',
+    'In `investigation`, explain your selection strategy, record repository/module/file/tool evidence actually inspected, disclose material blind spots, and give confidence in this investigation. Do not claim complete repository coverage.',
   )
   return parts.join('\n')
 }
 
 function targetDescription(target: ScanRequest['target']): string {
-  if (target.kind === 'repository') return 'Complete repository.'
+  if (target.kind === 'repository')
+    return 'Repository-wide scope, investigated through representative sampling.'
   if (target.kind === 'paths')
     return `Selected paths: ${target.paths.join(', ')}`
   return `Committed diff from ${target.base} to ${target.head}.`

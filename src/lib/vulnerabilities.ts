@@ -280,6 +280,14 @@ export function dependencyFindingsFromMatches(
           ? `Upgrade ${match.packageName} to ${fixedVersions[0]} or a later compatible release, regenerate ${match.manifestPath} with the repository package manager, and verify the affected behavior.`
           : `Review the ${primary} advisory and replace, remove, or otherwise mitigate ${match.packageName}; OSV does not currently identify a fixed version.`,
       effort: 'small',
+      subject: { kind: 'file' as const, path: match.manifestPath },
+      evidence: [
+        {
+          kind: 'file' as const,
+          path: match.manifestPath,
+          summary: `Lockfile resolves ${match.packageName}@${match.version}; OSV matched the exact package version.`,
+        },
+      ],
       locations: [{ path: match.manifestPath }],
       classification: { cwes, owasp: [] },
       vulnerability,

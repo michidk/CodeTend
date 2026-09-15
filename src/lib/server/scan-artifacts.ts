@@ -15,7 +15,13 @@ import {
 } from '@/lib/scan-artifacts'
 import type { ScanManifest } from '@/lib/security-scans'
 
-type ArtifactKind = 'manifest' | 'findings' | 'coverage' | 'report' | 'sarif'
+type ArtifactKind =
+  | 'manifest'
+  | 'findings'
+  | 'coverage'
+  | 'investigation'
+  | 'report'
+  | 'sarif'
 
 interface Artifact {
   readonly kind: ArtifactKind
@@ -65,6 +71,8 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
       confidence: occurrence.confidence,
       priority: occurrence.priority,
       taxonomy: occurrence.classification,
+      subject: occurrence.subject ?? occurrence.finding.subject,
+      evidence: occurrence.evidence,
       locations: occurrence.finding.locations,
       rootCause: occurrence.rootCause,
       codeEvidence: occurrence.codeEvidence,
@@ -76,12 +84,12 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
       vulnerability: occurrence.vulnerability,
     })),
   }
-  const coverage = scan.coverage ?? {
-    completeness: 'unknown' as const,
-    reviewed: [],
-    deferred: [],
-    excluded: [],
-    openQuestions: ['This scan did not produce structured coverage.'],
+  const investigation = scan.investigation ?? {
+    strategy: 'This legacy scan did not produce an investigation report.',
+    focusAreas: [],
+    evidence: [],
+    blindSpots: ['Investigation history is unavailable for this scan.'],
+    confidence: 'low' as const,
   }
   const sarif = toSarifDocument(
     scan.repository.url,
@@ -91,17 +99,14 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
   const report = toMarkdownScanReport({
     repository: scan.repository.name,
     revision: scan.commitSha,
-    maxFiles: scan.maxFiles,
-    fileGlob: scan.fileGlob,
-    reviewedFileCount: scan.reviewedFileCount,
-    targetFileCount: scan.targetFileCount,
+    maxInputTokens: scan.maxInputTokens,
     target: scan.target,
-    coverage,
+    investigation,
     findings: findingDocument.findings,
   })
   const baseArtifacts: Artifact[] = [
     jsonArtifact('findings', findingDocument),
-    jsonArtifact('coverage', coverage),
+    jsonArtifact('investigation', investigation),
     jsonArtifact('sarif', sarif, 'application/sarif+json'),
     {
       kind: 'report',
@@ -116,19 +121,16 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
     ]),
   )
   const manifest: ScanManifest = {
-    schemaVersion: '1',
+    schemaVersion: '2',
     scanId,
     repositoryId: scan.repositoryId,
     repositoryUrl: scan.repository.url,
     revision: scan.commitSha,
     target: scan.target,
     mode: scan.mode,
-    maxFiles: scan.maxFiles,
-    fileGlob: scan.fileGlob,
-    reviewedFileCount: scan.reviewedFileCount,
-    targetFileCount: scan.targetFileCount,
+    maxInputTokens: scan.maxInputTokens,
     model: scan.model,
-    scannerVersions: { contract: '1' },
+    scannerVersions: { contract: '2' },
     artifactHashes,
     createdAt: new Date().toISOString(),
   }

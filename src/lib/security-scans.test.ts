@@ -1,18 +1,11 @@
 import { describe, expect, test } from 'bun:test'
+import { scannerResultSchema } from './findings'
 import {
-  coverageAllowsResolution,
+  investigationAllowsResolution,
   scanTargetSchema,
   securityProfileSchema,
   targetIncludesPath,
 } from './security-scans'
-
-const completeCoverage = {
-  completeness: 'complete' as const,
-  reviewed: ['src/auth'],
-  deferred: [],
-  excluded: [],
-  openQuestions: [],
-}
 
 describe('scan targets', () => {
   test('matches exact files and descendants without crossing sibling prefixes', () => {
@@ -38,59 +31,50 @@ describe('scan targets', () => {
   })
 })
 
-describe('coverage-aware lifecycle', () => {
-  test('resolves only findings positively covered by the target', () => {
+describe('investigation-aware lifecycle', () => {
+  test('requires an explicit verdict inside the configured target', () => {
     expect(
-      coverageAllowsResolution({
-        coverage: completeCoverage,
+      investigationAllowsResolution({
+        explicitVerdict: true,
         target: { kind: 'paths', paths: ['src/auth'] },
         findingPaths: ['src/auth/session.ts'],
       }),
     ).toBe(true)
     expect(
-      coverageAllowsResolution({
-        coverage: completeCoverage,
+      investigationAllowsResolution({
+        explicitVerdict: true,
         target: { kind: 'paths', paths: ['src/auth'] },
         findingPaths: ['src/payments/card.ts'],
       }),
     ).toBe(false)
   })
 
-  test('never resolves through partial, deferred, or out-of-diff coverage', () => {
+  test('never infers resolution from absence in a bounded investigation', () => {
     expect(
-      coverageAllowsResolution({
-        coverage: { ...completeCoverage, completeness: 'partial' },
-        findingPaths: ['src/auth/session.ts'],
-      }),
-    ).toBe(false)
-    expect(
-      coverageAllowsResolution({
-        coverage: {
-          ...completeCoverage,
-          deferred: [
-            { path: 'src/auth', reason: 'generated code unavailable' },
-          ],
-        },
-        findingPaths: ['src/auth/session.ts'],
-      }),
-    ).toBe(false)
-    expect(
-      coverageAllowsResolution({
-        coverage: completeCoverage,
-        target: { kind: 'diff', base: '1'.repeat(40), head: '2'.repeat(40) },
-        targetFiles: ['src/routes.ts'],
+      investigationAllowsResolution({
+        explicitVerdict: false,
         findingPaths: ['src/auth/session.ts'],
       }),
     ).toBe(false)
   })
 
-  test('never resolves a finding outside an explicit review sample', () => {
+  test('supports explicit resolution for repository-level findings', () => {
     expect(
-      coverageAllowsResolution({
-        coverage: completeCoverage,
+      investigationAllowsResolution({
+        explicitVerdict: true,
         target: { kind: 'repository' },
-        targetFiles: ['src/routes.ts'],
-        findingPaths: ['src/auth/session.ts'],
+        findingPaths: [],
+      }),
+    ).toBe(true)
+  })
+
+  test('does not resolve repository-level subjects in a path investigation', () => {
+    expect(
+      investigationAllowsResolution({
+        explicitVerdict: true,
+        target: { kind: 'paths', paths: ['src/auth'] },
+        findingPaths: [],
+        findingSubject: { kind: 'repository', aspect: 'module layout' },
       }),
     ).toBe(false)
   })
@@ -111,4 +95,44 @@ test('security profiles retain explicit empty defaults', () => {
     priorities: [],
     exclusions: [],
   })
+})
+
+test('scanner results support repository findings without file locations', () => {
+  const result = scannerResultSchema.parse({
+    summary: 'The module layout was investigated from repository structure.',
+    findings: [
+      {
+        fingerprint: 'mixed-module-ownership',
+        title: 'Feature and infrastructure ownership are mixed',
+        severity: 'medium',
+        confidence: 'high',
+        description:
+          'The root layout and dependency graph place unrelated responsibilities together.',
+        whyItMatters: 'Routine changes cross ownership boundaries.',
+        recommendation:
+          'Separate feature ownership from infrastructure adapters.',
+        effort: 'medium',
+        subject: { kind: 'repository', aspect: 'module ownership' },
+        evidence: [
+          {
+            kind: 'repository-structure',
+            paths: ['src/features', 'src/lib'],
+            summary: 'The same responsibilities are split across both roots.',
+          },
+        ],
+        locations: [],
+      },
+    ],
+    hypothesisVerdicts: [],
+    investigation: {
+      strategy:
+        'Oriented from the tree and inspected representative dependency boundaries.',
+      focusAreas: [{ kind: 'repository', aspect: 'module ownership' }],
+      evidence: [],
+      blindSpots: ['Runtime-only dependency injection'],
+      confidence: 'medium',
+    },
+  })
+  expect(result.findings[0]?.locations).toEqual([])
+  expect(result.findings[0]?.subject.kind).toBe('repository')
 })

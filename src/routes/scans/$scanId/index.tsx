@@ -40,7 +40,7 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { getScanner } from '@/lib/scanners'
-import { DEFAULT_SCAN_FILE_GLOB, type ScanTarget } from '@/lib/security-scans'
+import type { ScanTarget } from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
 import { FindingGroups } from './-components/finding-groups'
@@ -121,9 +121,7 @@ function ScanPage() {
             {scan.gitnexusUsed ? ' · GitNexus' : ''}
             {scan.knowledgeRefreshed ? ' · knowledge refreshed' : ''}
             {' · '}
-            {scan.reviewedFileCount ?? '–'} of {scan.targetFileCount ?? '–'}
-            {' target files reviewed · '}
-            {scan.maxFiles}-file budget · {describeFileFilter(scan.fileGlob)} ·{' '}
+            {formatTokens(scan.maxInputTokens)} input-token budget ·{' '}
             {describeTarget(scan.target)}
           </>
         }
@@ -158,37 +156,42 @@ function ScanPage() {
         </Card>
       ) : null}
 
-      <section aria-labelledby="coverage-heading" className="space-y-3">
-        <SectionHeading id="coverage-heading" color="bg-candy-mint">
-          Security review coverage
+      <section aria-labelledby="investigation-heading" className="space-y-3">
+        <SectionHeading id="investigation-heading" color="bg-candy-mint">
+          Investigation
         </SectionHeading>
         <Card>
           <CardContent className="space-y-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="capitalize">
-                {scan.coverage?.completeness ?? 'unknown'} coverage
+                {scan.investigation?.confidence ?? 'unknown'} confidence
               </Badge>
               <span className="text-muted-foreground">
-                {scan.coverage?.reviewed.length ?? 0} reviewed surfaces ·{' '}
-                {scan.coverage?.deferred.length ?? 0} deferred ·{' '}
-                {scan.coverage?.excluded.length ?? 0} excluded
+                {scan.investigation?.focusAreas.length ?? 0} focus areas ·{' '}
+                {scan.investigation?.evidence.length ?? 0} evidence records
               </span>
             </div>
-            {scan.coverage?.reviewed.length ? (
-              <StringList title="Reviewed" values={scan.coverage.reviewed} />
+            {scan.investigation?.strategy ? (
+              <p className="text-muted-foreground">
+                {scan.investigation.strategy}
+              </p>
             ) : null}
-            {scan.coverage?.deferred.length ? (
+            {scan.scannerRuns.some((run) => run.investigation) ? (
               <StringList
-                title="Deferred"
-                values={scan.coverage.deferred.map(
-                  (entry) => `${entry.path}: ${entry.reason}`,
+                title="Scanner strategies"
+                values={scan.scannerRuns.flatMap((run) =>
+                  run.investigation
+                    ? [
+                        `${scannerNames[run.scannerId]}: ${run.investigation.strategy}`,
+                      ]
+                    : [],
                 )}
               />
             ) : null}
-            {scan.coverage?.openQuestions.length ? (
+            {scan.investigation?.blindSpots.length ? (
               <StringList
-                title="Open questions"
-                values={scan.coverage.openQuestions}
+                title="Known blind spots"
+                values={scan.investigation.blindSpots}
               />
             ) : null}
             {scan.artifacts.length > 0 ? (
@@ -387,12 +390,6 @@ function describeTarget(target: ScanTarget): string {
   if (target.kind === 'repository') return 'entire repository'
   if (target.kind === 'paths') return `${target.paths.length} selected path(s)`
   return `diff ${shortSha(target.base)}…${shortSha(target.head)}`
-}
-
-function describeFileFilter(fileGlob: string): string {
-  return fileGlob === DEFAULT_SCAN_FILE_GLOB
-    ? 'source files'
-    : 'custom file filter'
 }
 
 function StringList({

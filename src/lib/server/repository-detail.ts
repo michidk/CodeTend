@@ -34,6 +34,7 @@ const SCAN_HISTORY_COLUMNS = {
   mode: true,
   maxFiles: true,
   fileGlob: true,
+  maxInputTokens: true,
   reviewedFileCount: true,
   targetFileCount: true,
   cancellationRequestedAt: true,

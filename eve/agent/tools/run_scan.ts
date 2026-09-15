@@ -1,19 +1,14 @@
 import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
 import type {
+  InvestigationReport,
   KnowledgeResult,
   ScanCheckpoint,
-  ScanCoverage,
   ScannerOutcome,
   ScanRequest,
   ScanResult,
 } from '../lib/contract'
 import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
-import {
-  DEFAULT_SCAN_FILE_GLOB,
-  matchesReviewFileGlob,
-  selectReviewFiles,
-} from '../lib/file-sampling'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -31,7 +26,7 @@ import {
   nowIso,
   readScanCheckpoint,
   readScanRequest,
-  resolveTargetFiles,
+  resolveDiffTargetFiles,
   validateCandidates,
   writeScanCheckpoint,
   writeScanResult,
@@ -56,7 +51,6 @@ interface Progress {
   readonly total: number
   readonly scannerCompleted?: number
   readonly scannerTotal?: number
-  readonly targetFileCount?: number
   readonly completedScanners?: number
   readonly failed?: number
 }
@@ -68,7 +62,7 @@ interface Progress {
  */
 export default defineWorkflowTool({
   description:
-    'Run a full repository health scan for a scan id prepared by the CodeTend app. Clones the repository, refreshes repository knowledge, runs every specialized scanner and writes the result file.',
+    'Run a bounded repository health investigation for a scan id prepared by the CodeTend app. Clones the repository, refreshes repository knowledge, runs every specialized scanner and writes the result file.',
   inputSchema: z.object({ scanId: z.number().int().positive() }),
   label: {
     start: ({ scanId }) => `Scan #${scanId}`,
@@ -83,8 +77,7 @@ export default defineWorkflowTool({
       repositoryUrl: request.repositoryUrl,
       branch: request.branch,
       target: request.target,
-      maxFiles: request.maxFiles,
-      fileGlob: request.fileGlob,
+      maxInputTokens: request.maxInputTokens,
       scanners: request.scanners.map((scanner) => scanner.id),
       dependencyAudit: request.dependencyAudit !== false,
       validation: request.validation,
@@ -108,38 +101,29 @@ export default defineWorkflowTool({
     const workspace = await cloneRepository(request)
     completed += 1
     const repoPath = sandboxRepoPath(workspace.name)
-    const allTargetFiles = await resolveTargetFiles(request, workspace)
-    const fileGlob = request.fileGlob ?? DEFAULT_SCAN_FILE_GLOB
-    const eligibleTargetFiles = allTargetFiles.filter((path) =>
-      matchesReviewFileGlob(path, fileGlob),
-    )
-    const priorityPaths = request.scanners.flatMap((scanner) =>
-      scanner.hypotheses.flatMap((hypothesis) =>
-        hypothesis.locations.map((location) => location.path),
-      ),
-    )
-    const eligibleTargetFileSet = new Set(eligibleTargetFiles)
-    // Requests written by an older app during a rolling deployment do not
-    // carry maxFiles; keep the new runtime bounded in that compatibility case.
-    const maxFiles = request.maxFiles ?? 300
-    const targetFiles = selectReviewFiles({
-      candidates: workspace.files.filter((file) =>
-        eligibleTargetFileSet.has(file.path),
-      ),
-      maxFiles,
-      fileGlob,
-      priorityPaths,
-    })
-    const sampled = targetFiles.length < eligibleTargetFiles.length
-    const targetFileSet = new Set(targetFiles)
+    const scanTarget = request.target
+    const diffTargetFiles =
+      scanTarget.kind === 'diff'
+        ? new Set(await resolveDiffTargetFiles(request, workspace))
+        : null
     const scanners = request.scanners.map((scanner) => ({
       ...scanner,
       hypotheses: scanner.hypotheses.filter(
         (hypothesis) =>
-          hypothesis.locations.length > 0 &&
-          hypothesis.locations.every((location) =>
-            targetFileSet.has(location.path),
-          ),
+          hypothesis.locations.length === 0 ||
+          scanTarget.kind === 'repository' ||
+          (scanTarget.kind === 'paths'
+            ? hypothesis.locations.some((location) =>
+                scanTarget.paths.some(
+                  (scope) =>
+                    location.path === scope ||
+                    location.path.startsWith(`${scope.replace(/\/$/, '')}/`) ||
+                    scope.startsWith(`${location.path.replace(/\/$/, '')}/`),
+                ),
+              )
+            : hypothesis.locations.some((location) =>
+                diffTargetFiles?.has(location.path),
+              )),
       ),
     }))
 
@@ -157,7 +141,6 @@ export default defineWorkflowTool({
         total,
         scannerCompleted: 0,
         scannerTotal: scanners.length,
-        targetFileCount: targetFiles.length,
       }
       yield auditing
       dependencyAudit = await auditDependencies(workspace)
@@ -173,7 +156,6 @@ export default defineWorkflowTool({
         total,
         scannerCompleted: 0,
         scannerTotal: scanners.length,
-        targetFileCount: targetFiles.length,
       }
       yield indexing
       const indexed = await indexWithGitNexus(workspace)
@@ -188,7 +170,6 @@ export default defineWorkflowTool({
       total,
       scannerCompleted: 0,
       scannerTotal: scanners.length,
-      targetFileCount: targetFiles.length,
     }
     yield knowledgePhase
     const staleness = assessKnowledgeStaleness(
@@ -214,8 +195,6 @@ export default defineWorkflowTool({
           previous: request.knowledge,
           staleness,
           gitnexusRepo,
-          targetFiles,
-          targetFileCount: eligibleTargetFiles.length,
           securityProfile: request.securityProfile,
         }),
         outputSchema: knowledgeOutputSchema,
@@ -256,7 +235,6 @@ export default defineWorkflowTool({
       total,
       scannerCompleted: 0,
       scannerTotal: scanners.length,
-      targetFileCount: targetFiles.length,
     }
     yield dependencyGraphPhase
     const dependencyGraph =
@@ -304,7 +282,6 @@ export default defineWorkflowTool({
         total,
         scannerCompleted: outcomes.length,
         scannerTotal: scanners.length,
-        targetFileCount: targetFiles.length,
       } satisfies Progress
       const pending = new Map(
         batch.map((scanner) => [
@@ -324,7 +301,13 @@ export default defineWorkflowTool({
               gitnexusRepo,
               previousCommitSha: request.previousCommitSha ?? null,
               target: request.target,
-              targetFiles,
+              maxInputTokens: Math.max(
+                10_000,
+                Math.floor(
+                  request.maxInputTokens / Math.max(1, scanners.length),
+                ),
+              ),
+              attentionHistory: scanner.attentionHistory,
               securityProfile,
             })
             try {
@@ -384,12 +367,10 @@ export default defineWorkflowTool({
           knowledge,
           securityProfile: {
             profile: securityProfile,
-            generated: request.target.kind === 'repository' && !sampled,
+            generated: request.target.kind === 'repository',
           },
           dependencyAudit,
           scanners: outcomes,
-          targetFiles,
-          targetFileCount: eligibleTargetFiles.length,
           updatedAt: await nowIso(),
         }
         await writeScanCheckpoint(checkpoint)
@@ -400,21 +381,11 @@ export default defineWorkflowTool({
           total,
           scannerCompleted: outcomes.length,
           scannerTotal: scanners.length,
-          targetFileCount: targetFiles.length,
         } satisfies Progress
       }
     }
 
-    const coverage =
-      scanners.length === 0
-        ? dependencyOnlyCoverage(allTargetFiles.length)
-        : aggregateCoverage(
-            outcomes,
-            eligibleTargetFiles.length - targetFiles.length,
-            maxFiles,
-            allTargetFiles.length - eligibleTargetFiles.length,
-            fileGlob,
-          )
+    const investigation = aggregateInvestigations(outcomes)
     const candidates = outcomes
       .filter((outcome) => outcome.scannerId === 'security')
       .flatMap((outcome) => {
@@ -450,7 +421,6 @@ export default defineWorkflowTool({
       total,
       scannerCompleted: outcomes.length,
       scannerTotal: scanners.length,
-      targetFileCount: targetFiles.length,
     }
     yield validating
     const validations = await validateCandidates({
@@ -467,7 +437,6 @@ export default defineWorkflowTool({
       total,
       scannerCompleted: outcomes.length,
       scannerTotal: scanners.length,
-      targetFileCount: targetFiles.length,
     }
     yield persisting
     const result: ScanResult = {
@@ -478,14 +447,12 @@ export default defineWorkflowTool({
       knowledge,
       securityProfile: {
         profile: securityProfile,
-        generated: request.target.kind === 'repository' && !sampled,
+        generated: request.target.kind === 'repository',
       },
       dependencyAudit,
       scanners: outcomes,
-      coverage,
+      investigation,
       validations,
-      targetFiles,
-      targetFileCount: eligibleTargetFiles.length,
       finishedAt: await nowIso(),
     }
     await writeScanResult(result)
@@ -499,7 +466,6 @@ export default defineWorkflowTool({
       total,
       scannerCompleted: outcomes.length,
       scannerTotal: scanners.length,
-      targetFileCount: targetFiles.length,
       completedScanners: outcomes.filter(
         (outcome) => outcome.status === 'completed',
       ).length,
@@ -579,7 +545,7 @@ interface RawScannerResult {
   readonly summary?: string
   readonly findings?: readonly Record<string, unknown>[]
   readonly hypothesisVerdicts?: readonly Record<string, unknown>[]
-  readonly coverage?: ScanCoverage
+  readonly investigation?: InvestigationReport
 }
 
 /**
@@ -608,98 +574,26 @@ function asScannerResult(value: unknown): RawScannerResult | null {
     : null
 }
 
-function aggregateCoverage(
+function aggregateInvestigations(
   outcomes: readonly ScannerOutcome[],
-  deferredFileCount = 0,
-  maxFiles?: number,
-  excludedFileCount = 0,
-  fileGlob?: string,
-): ScanCoverage {
-  const coverage = mergeCoverages(
-    outcomes
-      .map((outcome) => asScannerResult(outcome.result)?.coverage)
-      .filter((coverage): coverage is ScanCoverage => coverage !== undefined),
-  )
-  if (deferredFileCount <= 0 && excludedFileCount <= 0) return coverage
+): InvestigationReport {
+  const reports = outcomes
+    .map((outcome) => asScannerResult(outcome.result)?.investigation)
+    .filter((report): report is InvestigationReport => report !== undefined)
   return {
-    ...coverage,
-    completeness:
-      deferredFileCount > 0 && coverage.completeness !== 'unknown'
-        ? ('partial' as const)
-        : coverage.completeness,
-    deferred:
-      deferredFileCount > 0
-        ? [
-            ...coverage.deferred,
-            {
-              path: `${deferredFileCount} matching target files outside the review sample`,
-              reason: `The review budget was capped at ${maxFiles ?? 'the configured number of'} files.`,
-            },
-          ]
-        : coverage.deferred,
-    excluded:
-      excludedFileCount > 0
-        ? [
-            ...coverage.excluded,
-            {
-              path: `${excludedFileCount} target files excluded by the review file glob`,
-              reason: `Did not match ${fileGlob ?? 'the configured file glob'}.`,
-            },
-          ]
-        : coverage.excluded,
-  }
-}
-
-function dependencyOnlyCoverage(targetFileCount: number): ScanCoverage {
-  return {
-    completeness: 'complete',
-    reviewed: [],
-    deferred: [],
-    excluded:
-      targetFileCount > 0
-        ? [
-            {
-              path: `${targetFileCount} source files`,
-              reason:
-                'No enabled agent scanner required source-file review; only deterministic scanning ran.',
-            },
-          ]
-        : [],
-    openQuestions: [],
-  }
-}
-
-function mergeCoverages(coverages: readonly ScanCoverage[]): ScanCoverage {
-  if (coverages.length === 0) {
-    return {
-      completeness: 'unknown',
-      reviewed: [],
-      deferred: [],
-      excluded: [],
-      openQuestions: ['No scanner returned structured coverage.'],
-    }
-  }
-  const key = (entry: { path: string; reason: string }) =>
-    `${entry.path}\u0000${entry.reason}`
-  const deferred = new Map<string, { path: string; reason: string }>()
-  const excluded = new Map<string, { path: string; reason: string }>()
-  for (const coverage of coverages) {
-    for (const entry of coverage.deferred) deferred.set(key(entry), entry)
-    for (const entry of coverage.excluded) excluded.set(key(entry), entry)
-  }
-  return {
-    completeness: coverages.some(
-      (coverage) => coverage.completeness === 'unknown',
-    )
-      ? 'unknown'
-      : coverages.some((coverage) => coverage.completeness === 'partial')
-        ? 'partial'
-        : 'complete',
-    reviewed: [...new Set(coverages.flatMap((coverage) => coverage.reviewed))],
-    deferred: [...deferred.values()],
-    excluded: [...excluded.values()],
-    openQuestions: [
-      ...new Set(coverages.flatMap((coverage) => coverage.openQuestions)),
-    ],
+    strategy:
+      reports.length > 0
+        ? `Combined ${reports.length} independent, scanner-directed investigations.`
+        : 'Only deterministic checks completed; no model-backed investigation report was produced.',
+    focusAreas: reports.flatMap((report) => report.focusAreas),
+    evidence: reports.flatMap((report) => report.evidence),
+    blindSpots: [...new Set(reports.flatMap((report) => report.blindSpots))],
+    confidence: reports.some((report) => report.confidence === 'low')
+      ? 'low'
+      : reports.some((report) => report.confidence === 'medium')
+        ? 'medium'
+        : reports.length > 0
+          ? 'high'
+          : 'low',
   }
 }

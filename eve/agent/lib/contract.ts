@@ -9,6 +9,7 @@ export interface ScanRequestScanner {
   readonly name: string
   readonly prompt: string
   readonly hypotheses: readonly ScanHypothesis[]
+  readonly attentionHistory: readonly InvestigationReport[]
 }
 
 export interface ScanHypothesis {
@@ -28,6 +29,8 @@ export interface ScanHypothesis {
   } | null
   readonly disposition?: 'false_positive' | 'accepted_risk' | null
   readonly dispositionNote?: string | null
+  readonly subject?: InvestigationSubject | null
+  readonly evidence?: readonly InvestigationEvidence[]
   readonly locations: readonly {
     path: string
     startLine?: number
@@ -70,10 +73,8 @@ export interface ScanRequest {
     | { readonly kind: 'paths'; readonly paths: readonly string[] }
     | { readonly kind: 'diff'; readonly base: string; readonly head: string }
   readonly maxCostUsd: number | null
-  /** Maximum source files the model-backed steps may inspect. */
-  readonly maxFiles?: number
-  /** Glob applied to target paths before the model-backed file budget. */
-  readonly fileGlob?: string
+  /** Cumulative input-token budget for the bounded investigation. */
+  readonly maxInputTokens: number
   readonly securityProfile: SecurityProfile | null
   readonly validation: {
     readonly enabled: boolean
@@ -163,10 +164,8 @@ export interface ScanResult {
   }
   readonly dependencyAudit: DependencyAuditResult
   readonly scanners: readonly ScannerOutcome[]
-  readonly coverage: ScanCoverage
+  readonly investigation: InvestigationReport
   readonly validations: readonly CandidateValidation[]
-  readonly targetFiles: readonly string[]
-  readonly targetFileCount: number
   readonly finishedAt: string
 }
 
@@ -182,17 +181,56 @@ export interface ScanCheckpoint {
   readonly securityProfile: ScanResult['securityProfile']
   readonly dependencyAudit: DependencyAuditResult
   readonly scanners: readonly ScannerOutcome[]
-  readonly targetFiles: readonly string[]
-  readonly targetFileCount: number
   readonly updatedAt: string
 }
 
-export interface ScanCoverage {
-  readonly completeness: 'complete' | 'partial' | 'unknown'
-  readonly reviewed: readonly string[]
-  readonly deferred: readonly { path: string; reason: string }[]
-  readonly excluded: readonly { path: string; reason: string }[]
-  readonly openQuestions: readonly string[]
+export type InvestigationSubject =
+  | { readonly kind: 'repository'; readonly aspect: string }
+  | {
+      readonly kind: 'module'
+      readonly name: string
+      readonly paths: readonly string[]
+    }
+  | { readonly kind: 'dependency'; readonly from: string; readonly to: string }
+  | { readonly kind: 'file'; readonly path: string }
+  | { readonly kind: 'symbol'; readonly path: string; readonly symbol: string }
+
+export type InvestigationEvidence =
+  | {
+      readonly kind: 'file'
+      readonly path: string
+      readonly startLine?: number
+      readonly endLine?: number
+      readonly summary: string
+    }
+  | {
+      readonly kind: 'repository-structure'
+      readonly paths: readonly string[]
+      readonly summary: string
+    }
+  | {
+      readonly kind: 'dependency-edge'
+      readonly from: string
+      readonly to: string
+      readonly summary: string
+    }
+  | {
+      readonly kind: 'tool-result'
+      readonly tool: string
+      readonly summary: string
+    }
+  | {
+      readonly kind: 'command'
+      readonly command: string
+      readonly summary: string
+    }
+
+export interface InvestigationReport {
+  readonly strategy: string
+  readonly focusAreas: readonly InvestigationSubject[]
+  readonly evidence: readonly InvestigationEvidence[]
+  readonly blindSpots: readonly string[]
+  readonly confidence: 'low' | 'medium' | 'high'
 }
 
 export interface CandidateValidation {

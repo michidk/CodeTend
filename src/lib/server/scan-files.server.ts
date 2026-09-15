@@ -13,7 +13,12 @@ import { join, resolve } from 'node:path'
 import { z } from 'zod'
 import { getServerEnv } from '@/lib/env.server'
 import { scannerResultSchema } from '@/lib/findings'
-import type { ScanTarget, SecurityProfile } from '@/lib/security-scans'
+import {
+  type InvestigationReport,
+  investigationReportSchema,
+  type ScanTarget,
+  type SecurityProfile,
+} from '@/lib/security-scans'
 
 /**
  * The app and the Eve runtime exchange scan requests and results through
@@ -91,8 +96,7 @@ export interface ScanRequestFile {
   } | null
   readonly previousCommitSha: string | null
   readonly target: ScanTarget
-  readonly maxFiles: number
-  readonly fileGlob: string
+  readonly maxInputTokens: number
   readonly maxCostUsd: number | null
   readonly securityProfile: SecurityProfile | null
   readonly validation: {
@@ -106,6 +110,7 @@ export interface ScanRequestFile {
     readonly name: string
     readonly prompt: string
     readonly hypotheses: readonly unknown[]
+    readonly attentionHistory: readonly InvestigationReport[]
   }[]
   readonly outputSchema: unknown
 }
@@ -229,25 +234,7 @@ const scanResultFileSchema = z.object({
       finishedAt: z.string(),
     }),
   ),
-  coverage: z
-    .object({
-      completeness: z.enum(['complete', 'partial', 'unknown']),
-      reviewed: z.array(z.string()).default([]),
-      deferred: z
-        .array(z.object({ path: z.string(), reason: z.string() }))
-        .default([]),
-      excluded: z
-        .array(z.object({ path: z.string(), reason: z.string() }))
-        .default([]),
-      openQuestions: z.array(z.string()).default([]),
-    })
-    .default({
-      completeness: 'unknown',
-      reviewed: [],
-      deferred: [],
-      excluded: [],
-      openQuestions: [],
-    }),
+  investigation: investigationReportSchema,
   validations: z
     .array(
       z.object({
@@ -281,8 +268,6 @@ const scanResultFileSchema = z.object({
       }),
     )
     .default([]),
-  targetFiles: z.array(z.string()).default([]),
-  targetFileCount: z.number().int().nonnegative().default(0),
   finishedAt: z.string(),
 })
 
@@ -298,8 +283,6 @@ const scanCheckpointFileSchema = scanResultFileSchema
     securityProfile: true,
     dependencyAudit: true,
     scanners: true,
-    targetFiles: true,
-    targetFileCount: true,
   })
   .extend({
     version: z.literal(1),

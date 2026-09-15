@@ -71,15 +71,14 @@ function sarifLevel(severity: string): 'error' | 'warning' | 'note' {
 export function toMarkdownScanReport(input: {
   readonly repository: string
   readonly revision: string
-  readonly maxFiles: number
-  readonly fileGlob: string
-  readonly reviewedFileCount: number | null
-  readonly targetFileCount: number | null
+  readonly maxInputTokens: number
   readonly target: unknown
-  readonly coverage: {
-    readonly completeness: string
-    readonly deferred: readonly unknown[]
-    readonly openQuestions: readonly string[]
+  readonly investigation: {
+    readonly strategy: string
+    readonly confidence: string
+    readonly focusAreas: readonly unknown[]
+    readonly evidence: readonly unknown[]
+    readonly blindSpots: readonly string[]
   }
   readonly findings: readonly {
     readonly title: string
@@ -92,19 +91,20 @@ export function toMarkdownScanReport(input: {
     `# Security scan: ${input.repository}`,
     '',
     `- Revision: \`${input.revision}\``,
-    `- Review budget: up to ${input.maxFiles} files`,
-    `- Review file glob: \`${input.fileGlob}\``,
-    `- Review sample: ${input.reviewedFileCount ?? 'unknown'} of ${input.targetFileCount ?? 'unknown'} target files`,
+    `- Investigation budget: ${input.maxInputTokens.toLocaleString()} cumulative input tokens`,
     `- Target: \`${JSON.stringify(input.target)}\``,
-    `- Coverage: ${input.coverage.completeness}`,
+    `- Investigation confidence: ${input.investigation.confidence}`,
+    `- Focus areas: ${input.investigation.focusAreas.length}`,
+    `- Evidence records: ${input.investigation.evidence.length}`,
     `- Findings: ${input.findings.length}`,
     '',
   ]
-  if (input.coverage.deferred.length > 0) {
+  lines.push('## Investigation strategy', '', input.investigation.strategy, '')
+  if (input.investigation.blindSpots.length > 0) {
     lines.push(
-      '## Deferred coverage',
+      '## Known blind spots',
       '',
-      'See `coverage.json` for the complete reasons.',
+      ...input.investigation.blindSpots.map((blindSpot) => `- ${blindSpot}`),
       '',
     )
   }
@@ -119,14 +119,6 @@ export function toMarkdownScanReport(input: {
       '### Remediation',
       '',
       finding.remediation,
-      '',
-    )
-  }
-  if (input.coverage.openQuestions.length > 0) {
-    lines.push(
-      '## Open questions',
-      '',
-      ...input.coverage.openQuestions.map((question) => `- ${question}`),
       '',
     )
   }
