@@ -27,6 +27,7 @@ import {
   scannerResultJsonSchema,
 } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
+import { createKeyedLock } from '@/lib/keyed-lock'
 import type { ScanProgress } from '@/lib/scan-progress'
 import { getScanner, type ScannerDefinition } from '@/lib/scanners'
 import {
@@ -74,6 +75,9 @@ import { enrichSourceSecurityFinding } from '@/lib/vulnerabilities'
 
 const ACTIVE_SCAN_STATUSES = ['queued', 'running'] as const
 const SCAN_TIMEOUT_MS = 3 * 60 * 60_000
+// Live events, polling, and recovery can observe the same checkpoint at once.
+// Serialize their reconciliation with the final result for each scan.
+const withScanPersistenceLock = createKeyedLock<number>()
 
 /**
  * Creates a scan row for a repository and starts the pipeline in the
@@ -527,6 +531,16 @@ async function persistScanCheckpoint(
   repository: Repository,
   checkpoint: NonNullable<Awaited<ReturnType<typeof readScanCheckpoint>>>,
 ) {
+  return withScanPersistenceLock(scanId, () =>
+    persistScanCheckpointUnlocked(scanId, repository, checkpoint),
+  )
+}
+
+async function persistScanCheckpointUnlocked(
+  scanId: number,
+  repository: Repository,
+  checkpoint: NonNullable<Awaited<ReturnType<typeof readScanCheckpoint>>>,
+) {
   if (checkpoint.scanId !== scanId) return
   const scan = await db.query.scans.findFirst({
     where: eq(scans.id, scanId),
@@ -624,6 +638,16 @@ async function persistScanCheckpoint(
 }
 
 async function persistScanResult(
+  scanId: number,
+  repository: Repository,
+  result: Awaited<ReturnType<typeof readScanResult>> & object,
+) {
+  return withScanPersistenceLock(scanId, () =>
+    persistScanResultUnlocked(scanId, repository, result),
+  )
+}
+
+async function persistScanResultUnlocked(
   scanId: number,
   repository: Repository,
   result: Awaited<ReturnType<typeof readScanResult>> & object,
