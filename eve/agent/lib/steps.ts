@@ -183,6 +183,39 @@ export async function cloneRepository(
   )
   assertOk(clone, `git clone of ${request.repositoryUrl}#${request.branch}`)
 
+  // Finding revalidation compares the current source with the commit from the
+  // previous completed scan. Keep the checkout shallow, but make that exact
+  // commit available when the remote still has it.
+  if (request.previousCommitSha) {
+    const previousPresent = await run(
+      'git',
+      ['cat-file', '-e', `${request.previousCommitSha}^{commit}`],
+      { cwd: hostPath },
+    )
+    if (previousPresent.exitCode !== 0) {
+      await run(
+        'git',
+        [
+          ...auth.gitConfig.flatMap((setting) => ['-c', setting]),
+          'fetch',
+          '--no-tags',
+          '--depth',
+          '1',
+          'origin',
+          request.previousCommitSha,
+        ],
+        {
+          cwd: hostPath,
+          env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
+          timeoutMs: 10 * 60_000,
+        },
+      )
+      // Revalidation remains valid without history because current source is
+      // authoritative. A pruned or unreachable prior commit is therefore a
+      // useful degraded state, not a reason to fail the entire scan.
+    }
+  }
+
   if (request.target.kind === 'diff') {
     for (const revision of [request.target.base, request.target.head]) {
       const present = await run(
