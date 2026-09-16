@@ -153,10 +153,12 @@ Security Hygiene follows a staged review: durable repository security context,
 refined by the knowledge agent and operator → scanner-directed investigation →
 safe isolated validation → attack-path and impact analysis → contextual ranking
 → explicit-verdict lifecycle. Operators set a cumulative input-token budget per
-repository. Each scanner orients from the repository tree, manifests, prior
-attention, findings, and graph intelligence, then selects representative
-evidence for its own dimension. Scan success never implies whole-repository
-coverage.
+scan. That budget is divided evenly across the enabled model-backed scanners and
+controls investigation effort only; orchestration, knowledge refresh, validation,
+and post-processing may continue beyond it without making the scan partial. Each
+scanner orients from the repository tree, manifests, prior attention, findings,
+and graph intelligence, then selects representative evidence for its own
+dimension. Scan success never implies whole-repository coverage.
 
 Executable validation is fail closed. Commands run sequentially in a disposable
 Docker container with no network, all capabilities dropped,

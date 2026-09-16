@@ -134,8 +134,10 @@ export function ScanDialog({
               onChange={(event) => setMaxInputTokens(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              This budget is divided across the enabled model-backed scanners.
-              File count is not used as a proxy for investigation depth.
+              This per-scan budget is divided across the enabled model-backed
+              scanners. It controls investigation effort only; post-processing
+              is not included. File count is not used as a proxy for
+              investigation depth.
             </p>
           </div>
 

@@ -680,9 +680,7 @@ async function persistScanResultUnlocked(
   const scanConfiguration = await db.query.scans.findFirst({
     where: eq(scans.id, scanId),
     columns: {
-      mode: true,
       target: true,
-      maxInputTokens: true,
       maxCostUsd: true,
     },
   })
@@ -872,16 +870,15 @@ async function persistScanResultUnlocked(
     usage?.total.estimatedCostUsd !== null &&
     usage?.total.estimatedCostUsd !== undefined &&
     usage.total.estimatedCostUsd > scanConfiguration.maxCostUsd
-  const tokenBudgetExceeded =
-    usage?.total.inputTokens !== undefined &&
-    usage.total.inputTokens > scanConfiguration.maxInputTokens
-
+  // Total usage also includes orchestration, knowledge, and post-processing.
+  // The input-token budget controls scanner effort; exceeding the final total
+  // therefore does not make an otherwise successful scan partial.
   await db
     .update(scans)
     .set({
       status: allFailed
         ? 'failed'
-        : failedScanners > 0 || costExceeded || tokenBudgetExceeded
+        : failedScanners > 0 || costExceeded
           ? 'partial'
           : 'completed',
       phase: 'done',
@@ -907,9 +904,7 @@ async function persistScanResultUnlocked(
         ? 'Every scanner failed.'
         : costExceeded
           ? `The completed scan exceeded its $${scanConfiguration.maxCostUsd?.toFixed(2)} estimated cost limit.`
-          : tokenBudgetExceeded
-            ? `The investigation exceeded its ${scanConfiguration.maxInputTokens.toLocaleString()} input-token budget.`
-            : null,
+          : null,
       finishedAt,
     })
     .where(eq(scans.id, scanId))
