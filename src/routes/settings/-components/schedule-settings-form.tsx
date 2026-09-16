@@ -278,8 +278,8 @@ export function ScheduleSettingsForm({
               placeholder="No default"
             />
             <p className="text-xs text-muted-foreground">
-              Applies when a scan does not provide its own estimated cost
-              limit. Leave blank for no default limit.
+              Applies when a scan does not provide its own estimated cost limit.
+              Leave blank for no default limit.
             </p>
           </div>
         </CardContent>
