@@ -61,6 +61,9 @@ function fakeLoaders(): McpLoaders {
     }),
     triggerScan: async () => ({ scanId: 42 }),
     cancelScan: async () => ({ scanId: 42 }),
+    markFindingFixed: async (findingId) => ({
+      finding: { id: findingId, state: 'resolved', disposition: null },
+    }),
     markFindingFalsePositive: async (findingId) => ({
       finding: {
         id: findingId,
@@ -109,13 +112,21 @@ describe('CodeTend MCP tools', () => {
     const listed = await call(handler, 'tools/list', {})
     expect(
       listed.result.tools.map((tool: { name: string }) => tool.name),
-    ).toContain('trigger_scan')
+    ).toEqual(expect.arrayContaining(['trigger_scan', 'mark_finding_fixed']))
 
     const triggered = await call(handler, 'tools/call', {
       name: 'trigger_scan',
       arguments: { repositoryId: 7 },
     })
     expect(triggered.result.structuredContent).toEqual({ scanId: 42 })
+
+    const fixed = await call(handler, 'tools/call', {
+      name: 'mark_finding_fixed',
+      arguments: { findingId: 8, note: 'Updated the affected call site.' },
+    })
+    expect(fixed.result.structuredContent).toEqual({
+      finding: { id: 8, state: 'resolved', disposition: null },
+    })
 
     const triaged = await call(handler, 'tools/call', {
       name: 'mark_finding_false_positive',
@@ -128,6 +139,22 @@ describe('CodeTend MCP tools', () => {
         disposition: 'false_positive',
       },
     })
+  })
+
+  test('marking a finding fixed requires meaningful context', async () => {
+    const message = await call(
+      handlers(fakeLoaders(), {
+        scopes: ['codetend:read', 'codetend:write'],
+      }),
+      'tools/call',
+      {
+        name: 'mark_finding_fixed',
+        arguments: { findingId: 8, note: 'ok' },
+      },
+    )
+
+    expect(message.result.isError).toBe(true)
+    expect(message.result.content[0]?.text).toContain('note')
   })
 
   test('generates a bounded fix prompt through a read token', async () => {

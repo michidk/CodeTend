@@ -17,7 +17,7 @@ export const MCP_SCOPE_DETAILS: Record<
   'codetend:write': {
     label: 'Manage findings and scans',
     description:
-      'Triage findings as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
+      'Mark findings as fixed, triage them as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
   },
 }
 
@@ -80,6 +80,14 @@ export const MCP_TOOL_CATALOG = [
     title: 'Cancel scan',
     description: 'Request cancellation of a queued or running scan.',
     group: 'Control scans',
+    scope: 'codetend:write',
+  },
+  {
+    name: 'mark_finding_fixed',
+    title: 'Mark finding fixed',
+    description:
+      'Resolve a finding as operator-reported fixed with required context.',
+    group: 'Manage findings',
     scope: 'codetend:write',
   },
   {

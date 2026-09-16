@@ -21,7 +21,10 @@ import {
   type McpScope,
   type McpToolName,
 } from '@/lib/mcp/catalog'
-import { updateFindingDisposition } from '@/lib/server/finding-triage'
+import {
+  updateFindingAsFixed,
+  updateFindingDisposition,
+} from '@/lib/server/finding-triage'
 import {
   requestScanCancellation,
   startScan,
@@ -94,6 +97,7 @@ export type McpLoaders = {
   generateFixPrompt(repositoryId: number, scannerId: string): Promise<unknown>
   triggerScan(repositoryId: number): Promise<unknown>
   cancelScan(scanId: number): Promise<unknown>
+  markFindingFixed(findingId: number, note: string): Promise<unknown>
   markFindingFalsePositive(findingId: number, note: string): Promise<unknown>
   acceptFindingRisk(findingId: number, note: string): Promise<unknown>
   reopenFinding(findingId: number): Promise<unknown>
@@ -310,6 +314,11 @@ const defaultLoaders: McpLoaders = {
       disposition: 'false_positive',
       note,
     })
+    return { finding }
+  },
+
+  async markFindingFixed(findingId, note) {
+    const finding = await updateFindingAsFixed({ findingId, note })
     return { finding }
   },
 
@@ -533,6 +542,26 @@ export function createCodeTendMcpServer(
       ({ findingId, note }) =>
         result(findingMutationOutput, () =>
           loaders.markFindingFalsePositive(findingId, note),
+        ),
+    )
+
+  if (allowed('mark_finding_fixed'))
+    server.registerTool(
+      'mark_finding_fixed',
+      {
+        title: 'Mark finding fixed',
+        description:
+          'Resolve a finding as fixed based on an operator-reported code or configuration change. A later scan can regress it if rediscovered.',
+        inputSchema: z.object({
+          findingId: z.int().positive(),
+          note: z.string().trim().min(5).max(2_000),
+        }),
+        outputSchema: findingMutationOutput,
+        annotations: writeAnnotations,
+      },
+      ({ findingId, note }) =>
+        result(findingMutationOutput, () =>
+          loaders.markFindingFixed(findingId, note),
         ),
     )
 
