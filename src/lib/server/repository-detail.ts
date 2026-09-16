@@ -154,12 +154,7 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       ) as Record<string, number | null>,
     }))
 
-    openFindings.sort(
-      (a, b) =>
-        priorityRank(a.priority) - priorityRank(b.priority) ||
-        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
-        a.title.localeCompare(b.title),
-    )
+    openFindings.sort(compareFindingsBySeverity)
 
     return {
       repository,
@@ -370,4 +365,23 @@ export const getScanDetail = createServerFn({ method: 'GET' })
 
 function priorityRank(priority: keyof typeof PRIORITY_ORDER | null): number {
   return priority ? PRIORITY_ORDER[priority] : 4
+}
+
+export function compareFindingsBySeverity(
+  a: {
+    severity: keyof typeof SEVERITY_ORDER
+    priority: keyof typeof PRIORITY_ORDER | null
+    title: string
+  },
+  b: {
+    severity: keyof typeof SEVERITY_ORDER
+    priority: keyof typeof PRIORITY_ORDER | null
+    title: string
+  },
+): number {
+  return (
+    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+    priorityRank(a.priority) - priorityRank(b.priority) ||
+    a.title.localeCompare(b.title)
+  )
 }
