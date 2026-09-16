@@ -134,6 +134,13 @@
       "when": 1789549031012,
       "tag": "0018_colorful_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789569279022,
+      "tag": "0019_chunky_lester",
+      "breakpoints": true
     }
   ]
 }

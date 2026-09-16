@@ -7,6 +7,7 @@ import {
   applyGeneratedPatch,
   clonePatchRepository,
   nowIso,
+  publishPatchPullRequest,
   readPatchRequest,
   validateCandidates,
   writePatchResult,
@@ -49,17 +50,16 @@ const fixerOutputSchema = {
 } satisfies JsonObject
 
 export default defineWorkflowTool({
-  description: 'Generate and validate one reviewable security patch.',
+  description: 'Generate and validate one fix, then open a pull request.',
   inputSchema: z.object({ patchId: z.number().int().positive() }),
   async *execute({ patchId }, ctx) {
     'use workflow'
-    yield { phase: 'reading finding' }
-    const request = await readPatchRequest(patchId)
-    yield { phase: 'cloning revision' }
-    const workspace = await clonePatchRepository(request)
-    const repoPath = sandboxRepoPath(workspace.name)
-
     try {
+      yield { phase: 'reading finding' }
+      const request = await readPatchRequest(patchId)
+      yield { phase: 'cloning revision' }
+      const workspace = await clonePatchRepository(request)
+      const repoPath = sandboxRepoPath(workspace.name)
       yield { phase: 'generating patch' }
       const output = await ctx.agent('fixer', {
         outputSchema: fixerOutputSchema,
@@ -84,6 +84,7 @@ export default defineWorkflowTool({
           changedFiles: [],
           testRecommendations: candidate.testRecommendations,
           verification: null,
+          pullRequest: null,
           error:
             candidate.outcome === 'not_reproduced'
               ? 'The fixer could not reproduce the finding in the current revision.'
@@ -118,18 +119,60 @@ export default defineWorkflowTool({
       }
       const verified = verification?.status === 'not_reproduced'
       const stillReproduces = verification?.status === 'confirmed'
+      if (stillReproduces) {
+        await writePatchResult({
+          patchId,
+          status: 'failed',
+          summary: candidate.summary,
+          diff: applied.diff,
+          changedFiles: applied.changedFiles,
+          testRecommendations: candidate.testRecommendations,
+          verification,
+          pullRequest: null,
+          error:
+            'The finding still reproduced after applying the generated patch.',
+          finishedAt: await nowIso(),
+        })
+        return `Patch ${patchId} failed remediation verification.`
+      }
+      yield { phase: 'opening pull request' }
+      let pullRequest: Awaited<ReturnType<typeof publishPatchPullRequest>>
+      try {
+        pullRequest = await publishPatchPullRequest({
+          request,
+          workspace,
+          changedFiles: applied.changedFiles,
+          summary: candidate.summary,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await writePatchResult({
+          patchId,
+          status: 'failed',
+          summary: candidate.summary,
+          diff: applied.diff,
+          changedFiles: applied.changedFiles,
+          testRecommendations: candidate.testRecommendations,
+          verification,
+          pullRequest: null,
+          error: `Could not publish the pull request: ${message}`,
+          finishedAt: await nowIso(),
+        })
+        return `Patch ${patchId} was generated but the pull request could not be published: ${message}`
+      }
       const result: PatchResult = {
         patchId,
-        status: stillReproduces ? 'failed' : verified ? 'verified' : 'proposed',
+        status: 'published',
         summary: candidate.summary,
         diff: applied.diff,
         changedFiles: applied.changedFiles,
         testRecommendations: candidate.testRecommendations,
         verification,
+        pullRequest,
         finishedAt: await nowIso(),
       }
       await writePatchResult(result)
-      return `Patch ${patchId} generated for review (${applied.changedFiles.length} files).`
+      return `Patch ${patchId} opened pull request #${pullRequest.number} (${applied.changedFiles.length} files${verified ? ', verified' : ''}).`
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await writePatchResult({
@@ -140,6 +183,7 @@ export default defineWorkflowTool({
         changedFiles: [],
         testRecommendations: [],
         verification: null,
+        pullRequest: null,
         error: message,
         finishedAt: await nowIso(),
       })

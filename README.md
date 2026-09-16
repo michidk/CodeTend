@@ -73,7 +73,9 @@ agent.
   only in a networkless, capability-dropped container, never on the host.
 - 🩹 **Review-gated patches.** Generate a unified diff for one finding in a
   disposable clone, re-run its reproducer, then approve or reject. CodeTend
-  never pushes a branch or opens a pull request.
+  pushes a dedicated branch and opens a pull request for review when the
+  configured GitHub credential has repository contents and pull-request write
+  access.
 - 📊 **Cost you can see.** Provider-reported tokens per scanner, per scan and
   per repository, with list-price estimates, a UTC-day budget cap, and
   concurrency limits.

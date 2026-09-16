@@ -7,7 +7,11 @@ import {
   findingPatches,
   findings,
   findingValidations,
+  repositories,
+  scans,
 } from '@/db/schema'
+import { buildFixPrompt } from '@/lib/fix-prompt'
+import { listGlobalScanners } from '@/lib/server/scanner-settings'
 
 const positiveId = z.number().int().positive()
 
@@ -84,7 +88,53 @@ export const getFindingDetail = createServerFn({ method: 'GET' })
         },
       },
     })
-    return finding ?? null
+    if (!finding) return null
+
+    const [repository, sourceScan, configuredScanners] = await Promise.all([
+      db.query.repositories.findFirst({
+        where: eq(repositories.id, finding.repositoryId),
+      }),
+      finding.lastSeenScanId
+        ? db.query.scans.findFirst({
+            where: eq(scans.id, finding.lastSeenScanId),
+            columns: { commitSha: true },
+          })
+        : null,
+      listGlobalScanners(),
+    ])
+    const scanner = configuredScanners.find(
+      (candidate) => candidate.id === finding.scannerId,
+    )
+
+    const agentPrompt = buildFixPrompt({
+      scanner: scanner ?? {
+        name: finding.scannerId,
+        fixPromptTitle: `Fix: ${finding.title}`,
+      },
+      repositoryName: repository?.name ?? 'this repository',
+      repositoryUrl: repository?.url ?? 'local checkout',
+      branch: repository?.branch ?? 'the current branch',
+      commitSha: sourceScan?.commitSha ?? null,
+      findings: [
+        {
+          title: finding.title,
+          severity: finding.severity,
+          confidence: finding.confidence,
+          description: finding.description,
+          whyItMatters: finding.whyItMatters,
+          recommendation: finding.recommendation,
+          effort: finding.effort,
+          locations: finding.locations,
+          classification: finding.classification ?? undefined,
+          vulnerability: finding.vulnerability ?? undefined,
+          priority: finding.priority ?? undefined,
+          priorityScore: finding.priorityScore ?? undefined,
+          priorityReasons: finding.priorityReasons,
+        },
+      ],
+    })
+
+    return { ...finding, agentPrompt }
   })
 
 export type FindingDetail = NonNullable<

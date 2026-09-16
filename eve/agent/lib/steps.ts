@@ -19,6 +19,10 @@ import {
 } from './dependency-graph'
 import { resolveGitAuth } from './git-auth'
 import {
+  createGitHubPullRequest,
+  type PullRequestReference,
+} from './github-pull-request'
+import {
   gitnexusHome,
   patchWorkspaceName,
   requestsDir,
@@ -410,6 +414,74 @@ export async function applyGeneratedPatch(input: {
   } finally {
     await rm(patchFile, { force: true })
   }
+}
+
+/** Commits an applied patch, pushes a dedicated branch, and opens its PR. */
+export async function publishPatchPullRequest(input: {
+  readonly request: PatchRequest
+  readonly workspace: WorkspaceManifest
+  readonly changedFiles: readonly string[]
+  readonly summary: string
+}): Promise<PullRequestReference> {
+  'use step'
+  const branch = `codetend/finding-${input.request.finding.id}-patch-${input.request.patchId}`
+  const findingTitle = input.request.finding.title.replace(/\s+/g, ' ').trim()
+  const title = `fix: ${findingTitle}`.slice(0, 240)
+  const auth = await resolveGitAuth(input.request.repositoryUrl)
+  const git = (args: readonly string[], what: string) =>
+    run('git', args, {
+      cwd: input.workspace.hostPath,
+      env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
+      timeoutMs: 10 * 60_000,
+    }).then((result) => {
+      assertOk(result, what)
+      return result
+    })
+
+  await git(['checkout', '-b', branch], 'git branch creation')
+  await git(['add', '--', ...input.changedFiles], 'git add')
+  await git(
+    [
+      '-c',
+      'user.name=CodeTend',
+      '-c',
+      'user.email=codetend@users.noreply.github.com',
+      'commit',
+      '-m',
+      title,
+    ],
+    'git commit',
+  )
+  await git(
+    [
+      ...auth.gitConfig.flatMap((setting) => ['-c', setting]),
+      'push',
+      '--set-upstream',
+      'origin',
+      `HEAD:refs/heads/${branch}`,
+    ],
+    'git push',
+  )
+
+  return createGitHubPullRequest({
+    repositoryUrl: input.request.repositoryUrl,
+    base: input.request.branch,
+    head: branch,
+    title,
+    body: [
+      '## CodeTend finding',
+      '',
+      `**${input.request.finding.title}** (${input.request.finding.severity})`,
+      '',
+      input.request.finding.description,
+      '',
+      '## Generated fix',
+      '',
+      input.summary,
+      '',
+      `Finding ID: ${input.request.finding.id} · Patch ID: ${input.request.patchId}`,
+    ].join('\n'),
+  })
 }
 
 export function assertSafeUnifiedDiff(diff: string): void {

@@ -340,6 +340,7 @@ function FindingDetailPanel({
       <FindingPatchControls
         findingId={finding.id}
         patches={finding.patches}
+        agentPrompt={finding.agentPrompt}
         disabled={finding.disposition !== null || finding.state === 'resolved'}
       />
     </>

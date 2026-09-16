@@ -38,7 +38,12 @@ export async function generateFindingPatchImpl(findingId: number) {
   const existing = await db.query.findingPatches.findFirst({
     where: and(
       eq(findingPatches.findingId, findingId),
-      inArray(findingPatches.status, ['generating', 'proposed', 'verified']),
+      inArray(findingPatches.status, [
+        'generating',
+        'proposed',
+        'verified',
+        'published',
+      ]),
     ),
     orderBy: [desc(findingPatches.createdAt)],
   })
@@ -230,7 +235,14 @@ async function runPatchPipeline(patchId: number, repositoryId: number) {
       session.settle(async () => undefined),
       waitForPatchResult(patchId, PATCH_TIMEOUT_MS).then(() => null),
     ])
-    const result = await readPatchResult(patchId)
+    let result = await readPatchResult(patchId)
+    // Eve can emit turn.completed just before the workflow result step becomes
+    // visible on the shared volume. Give that durable write a short grace
+    // period instead of turning a successful job into a false failure.
+    if (!result && outcome?.status === 'completed') {
+      await waitForPatchResult(patchId, 30_000, 500)
+      result = await readPatchResult(patchId)
+    }
     if (!result) {
       throw new Error(
         outcome?.failure ??
@@ -301,6 +313,7 @@ async function persistPatchResult(
         .filter(Boolean)
         .join('\n\n'),
       verification,
+      pullRequest: result.pullRequest,
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),
       updatedAt: new Date(result.finishedAt),

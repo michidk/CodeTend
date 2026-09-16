@@ -302,7 +302,7 @@ export type ScanCheckpointFile = z.infer<typeof scanCheckpointFileSchema>
 
 const patchResultFileSchema = z.object({
   patchId: z.number().int().positive(),
-  status: z.enum(['proposed', 'verified', 'failed']),
+  status: z.enum(['published', 'failed']),
   summary: z.string(),
   diff: z.string(),
   changedFiles: z.array(z.string()),
@@ -336,6 +336,13 @@ const patchResultFileSchema = z.object({
       proofGaps: z.array(z.string()),
       runner: z.string(),
       validatedAt: z.string(),
+    })
+    .nullable(),
+  pullRequest: z
+    .object({
+      url: z.string().url(),
+      number: z.number().int().positive(),
+      branch: z.string().min(1),
     })
     .nullable(),
   error: z.string().optional(),

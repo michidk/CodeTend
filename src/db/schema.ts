@@ -549,6 +549,7 @@ export const findingPatches = pgTable(
         | 'accepted'
         | 'rejected'
         | 'verified'
+        | 'published'
         | 'failed'
       >()
       .notNull()
@@ -559,6 +560,11 @@ export const findingPatches = pgTable(
       status: ValidationStatus
       commands: ValidationCommandResult[]
       proofGaps: string[]
+    }>(),
+    pullRequest: jsonb('pull_request').$type<{
+      url: string
+      number: number
+      branch: string
     }>(),
     /** Eve root session used to generate this patch, for usage attribution. */
     eveSessionId: text('eve_session_id'),
@@ -576,7 +582,9 @@ export const findingPatches = pgTable(
     index('finding_patches_finding_idx').on(table.findingId),
     uniqueIndex('finding_patches_active_idx')
       .on(table.findingId)
-      .where(sql`${table.status} in ('generating', 'proposed', 'verified')`),
+      .where(
+        sql`${table.status} in ('generating', 'proposed', 'verified', 'published')`,
+      ),
   ],
 )
 

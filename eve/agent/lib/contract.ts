@@ -327,12 +327,17 @@ export interface PatchRequest {
 
 export interface PatchResult {
   readonly patchId: number
-  readonly status: 'proposed' | 'verified' | 'failed'
+  readonly status: 'published' | 'failed'
   readonly summary: string
   readonly diff: string
   readonly changedFiles: readonly string[]
   readonly testRecommendations: readonly string[]
   readonly verification: CandidateValidation | null
+  readonly pullRequest: {
+    readonly url: string
+    readonly number: number
+    readonly branch: string
+  } | null
   readonly error?: string
   readonly finishedAt: string
 }

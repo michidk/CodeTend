@@ -1,7 +1,8 @@
 import { useRouter } from '@tanstack/react-router'
-import { Check, Download, Hammer, X } from 'lucide-react'
+import { Check, Download, ExternalLink, GitPullRequest, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { FindingAgentPromptDialog } from '@/components/health/finding-agent-prompt-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { FindingPatch } from '@/db/schema'
@@ -15,10 +16,12 @@ import {
 export function FindingPatchControls({
   findingId,
   patches,
+  agentPrompt,
   disabled,
 }: {
   readonly findingId: number
   readonly patches: readonly FindingPatch[]
+  readonly agentPrompt: string
   readonly disabled: boolean
 }) {
   const router = useRouter()
@@ -31,10 +34,12 @@ export function FindingPatchControls({
     setBusy(true)
     try {
       await generateFindingPatch({ data: findingId })
-      toast.success('Patch generation started')
+      toast.success('Pull request creation started')
       await router.invalidate()
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Could not generate the patch'))
+      toast.error(
+        getErrorMessage(error, 'Could not start pull request creation'),
+      )
     } finally {
       setBusy(false)
     }
@@ -67,11 +72,11 @@ export function FindingPatchControls({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Reviewed patch
+            Automated fix
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Generated in a disposable clone. Approval never pushes or modifies
-            the source repository.
+            Generates a focused fix in a disposable clone, pushes a dedicated
+            branch and opens a pull request for review.
           </p>
         </div>
         {latest ? (
@@ -122,6 +127,15 @@ export function FindingPatchControls({
       ) : null}
 
       <div className="flex flex-wrap gap-2">
+        <FindingAgentPromptDialog prompt={agentPrompt} />
+        {latest?.pullRequest ? (
+          <Button size="sm" asChild>
+            <a href={latest.pullRequest.url} target="_blank" rel="noreferrer">
+              <ExternalLink className="size-3.5" aria-hidden="true" />
+              Open pull request #{latest.pullRequest.number}
+            </a>
+          </Button>
+        ) : null}
         {canGenerate ? (
           <Button
             size="sm"
@@ -129,18 +143,18 @@ export function FindingPatchControls({
             onClick={() => void generate()}
             disabled={busy}
           >
-            <Hammer className="size-3.5" aria-hidden="true" />
+            <GitPullRequest className="size-3.5" aria-hidden="true" />
             {busy
               ? 'Starting…'
               : latest
-                ? 'Generate another'
-                : 'Generate patch'}
+                ? 'Try pull request again'
+                : 'Create pull request'}
           </Button>
         ) : null}
         {generating ? (
           <Button size="sm" variant="outline" disabled>
-            <Hammer className="size-3.5" aria-hidden="true" />
-            Generating…
+            <GitPullRequest className="size-3.5" aria-hidden="true" />
+            Creating pull request…
           </Button>
         ) : null}
         {latest?.diff ? (
