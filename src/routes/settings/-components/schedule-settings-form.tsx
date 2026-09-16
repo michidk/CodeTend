@@ -37,6 +37,14 @@ export function ScheduleSettingsForm({
   const [maxInputTokens, setMaxInputTokens] = useState(
     String(settings.maxInputTokens),
   )
+  const [maxDailyCostUsd, setMaxDailyCostUsd] = useState(
+    settings.maxDailyCostUsd === null ? '' : String(settings.maxDailyCostUsd),
+  )
+  const [defaultScanCostUsd, setDefaultScanCostUsd] = useState(
+    settings.defaultScanCostUsd === null
+      ? ''
+      : String(settings.defaultScanCostUsd),
+  )
   const [submitting, setSubmitting] = useState(false)
 
   const cronValid = isValidCronExpression(cronExpression)
@@ -48,13 +56,32 @@ export function ScheduleSettingsForm({
     Number.isInteger(tokenBudget) &&
     tokenBudget >= 10_000 &&
     tokenBudget <= MAX_SCAN_INPUT_TOKEN_BUDGET
+  const dailyCostBudget = maxDailyCostUsd.trim()
+    ? Number(maxDailyCostUsd)
+    : null
+  const dailyCostBudgetValid =
+    dailyCostBudget === null ||
+    (Number.isFinite(dailyCostBudget) && dailyCostBudget > 0)
+  const defaultScanCost = defaultScanCostUsd.trim()
+    ? Number(defaultScanCostUsd)
+    : null
+  const defaultScanCostValid =
+    defaultScanCost === null ||
+    (Number.isFinite(defaultScanCost) && defaultScanCost > 0)
   const nextRun = cronValid
     ? computeNextScanAt(cronExpression, new Date())
     : null
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!cronValid || !cooldownValid || !tokenBudgetValid) return
+    if (
+      !cronValid ||
+      !cooldownValid ||
+      !tokenBudgetValid ||
+      !dailyCostBudgetValid ||
+      !defaultScanCostValid
+    )
+      return
     setSubmitting(true)
     try {
       await updateScheduleSettings({
@@ -63,9 +90,11 @@ export function ScheduleSettingsForm({
           enabled,
           cooldownMinutes: cooldown,
           maxInputTokens: tokenBudget,
+          maxDailyCostUsd: dailyCostBudget,
+          defaultScanCostUsd: defaultScanCost,
         },
       })
-      toast.success('Schedule settings saved')
+      toast.success('Settings saved')
       await router.invalidate()
     } catch (error) {
       toast.error(getErrorMessage(error, 'Could not save schedule settings'))
@@ -208,11 +237,64 @@ export function ScheduleSettingsForm({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>AI cost controls</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="max-daily-cost">
+              Daily cost limit (USD, optional)
+            </Label>
+            <Input
+              id="max-daily-cost"
+              type="number"
+              min="0.01"
+              step="0.01"
+              aria-invalid={!dailyCostBudgetValid}
+              value={maxDailyCostUsd}
+              onChange={(event) => setMaxDailyCostUsd(event.target.value)}
+              placeholder="Unlimited"
+            />
+            <p className="text-xs text-muted-foreground">
+              Stops new scans and patch generation after combined estimated
+              spend reaches this amount during a UTC day. Leave blank for no
+              limit.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="default-scan-cost">
+              Default scan cost limit (USD, optional)
+            </Label>
+            <Input
+              id="default-scan-cost"
+              type="number"
+              min="0.01"
+              step="0.01"
+              aria-invalid={!defaultScanCostValid}
+              value={defaultScanCostUsd}
+              onChange={(event) => setDefaultScanCostUsd(event.target.value)}
+              placeholder="No default"
+            />
+            <p className="text-xs text-muted-foreground">
+              Applies when a scan does not provide its own estimated cost
+              limit. Leave blank for no default limit.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button
           type="submit"
           disabled={
-            !cronValid || !cooldownValid || !tokenBudgetValid || submitting
+            !cronValid ||
+            !cooldownValid ||
+            !tokenBudgetValid ||
+            !dailyCostBudgetValid ||
+            !defaultScanCostValid ||
+            submitting
           }
         >
           {submitting ? 'Saving…' : 'Save settings'}

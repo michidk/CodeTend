@@ -97,6 +97,8 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   maxInputTokens: integer('max_input_tokens')
     .notNull()
     .default(DEFAULT_SCAN_INPUT_TOKEN_BUDGET),
+  maxDailyCostUsd: real('max_daily_cost_usd'),
+  defaultScanCostUsd: real('default_scan_cost_usd'),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
   createdAt,

@@ -61,11 +61,12 @@ scan-cancellation tools; read access alone cannot spend model budget.
 | --- | --- | --- |
 | `TECDEBT_MAX_ACTIVE_SCANS` | `2` | Global concurrent scan limit |
 | `TECDEBT_MAX_ACTIVE_PATCHES` | `1` | Global concurrent fixer-job limit |
-| `TECDEBT_MAX_DAILY_COST_USD` | unlimited | UTC-day estimated AI spend across scans and patches; new work is refused once reached |
-| `TECDEBT_DEFAULT_SCAN_COST_USD` | – | Optional per-scan budget suggestion; flags scans whose final estimate exceeds it |
 | `TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS` | `60` | Per-repository cooldown between manual scans |
 | `TECDEBT_SCANNER_CONCURRENCY` | `4` | How many scanner subagents run at once inside one scan |
 | `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION` | unlimited | Cumulative input-token ceiling per knowledge, scanner or fixer session. A session that reaches it parks the scan until an operator approves more budget; prefer the USD caps. |
+
+The UTC-day AI cost limit and default per-scan cost limit are persisted and
+managed from the application Settings page. They default to unlimited.
 
 ## Isolated validation
 

@@ -15,7 +15,6 @@ import { db } from '@/db'
 import {
   type FindingCounts,
   findingOccurrences,
-  findingPatches,
   findings,
   findingValidations,
   type Repository,
@@ -50,6 +49,7 @@ import {
   DEFAULT_SCAN_TARGET,
   type ScanTarget,
 } from '@/lib/security-scans'
+import { isDailyAiCostBudgetReached } from '@/lib/server/ai-cost-budget.server'
 import {
   cancelEveScanSession,
   startEveScanSession,
@@ -163,40 +163,19 @@ export async function startScan(
     return null
   }
 
-  if (env.TECDEBT_MAX_DAILY_COST_USD !== undefined) {
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    const [[scanUsage], [patchUsage]] = await Promise.all([
-      db
-        .select({
-          cost: sql<number>`coalesce(sum(${scans.estimatedCostUsd}), 0)::float8`,
-        })
-        .from(scans)
-        .where(gte(scans.createdAt, today)),
-      db
-        .select({
-          cost: sql<number>`coalesce(sum(${findingPatches.estimatedCostUsd}), 0)::float8`,
-        })
-        .from(findingPatches)
-        .where(gte(findingPatches.createdAt, today)),
-    ])
-    if (
-      (scanUsage?.cost ?? 0) + (patchUsage?.cost ?? 0) >=
-      env.TECDEBT_MAX_DAILY_COST_USD
-    ) {
-      if (trigger === 'manual') {
-        throw new DomainError(
-          'conflict',
-          'The daily AI-cost budget has been reached.',
-        )
-      }
-      return null
+  if (await isDailyAiCostBudgetReached()) {
+    if (trigger === 'manual') {
+      throw new DomainError(
+        'conflict',
+        'The daily AI-cost budget has been reached.',
+      )
     }
+    return null
   }
 
   const globalSettings = await db.query.scanScheduleSettings.findFirst({
     where: eq(scanScheduleSettings.id, 1),
-    columns: { maxInputTokens: true },
+    columns: { maxInputTokens: true, defaultScanCostUsd: true },
   })
   let scan: { id: number } | undefined
   try {
@@ -212,7 +191,7 @@ export async function startScan(
           globalSettings?.maxInputTokens ??
           DEFAULT_SCAN_INPUT_TOKEN_BUDGET,
         maxCostUsd:
-          options.maxCostUsd ?? env.TECDEBT_DEFAULT_SCAN_COST_USD ?? null,
+          options.maxCostUsd ?? globalSettings?.defaultScanCostUsd ?? null,
         status: 'queued',
         phase: 'queued',
         progress: { phase: 'queued', completed: 0, total: 1 },

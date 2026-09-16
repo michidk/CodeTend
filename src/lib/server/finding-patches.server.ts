@@ -1,9 +1,10 @@
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { findingPatches, findings, scans } from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
+import { isDailyAiCostBudgetReached } from '@/lib/server/ai-cost-budget.server'
 import {
   cancelEveScanSession,
   startEvePatchSession,
@@ -64,32 +65,11 @@ export async function generateFindingPatchImpl(findingId: number) {
       'Patch capacity is full. Try again after a running patch finishes.',
     )
   }
-  if (env.TECDEBT_MAX_DAILY_COST_USD !== undefined) {
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    const [[scanUsage], [patchUsage]] = await Promise.all([
-      db
-        .select({
-          cost: sql<number>`coalesce(sum(${scans.estimatedCostUsd}), 0)::float8`,
-        })
-        .from(scans)
-        .where(gte(scans.createdAt, today)),
-      db
-        .select({
-          cost: sql<number>`coalesce(sum(${findingPatches.estimatedCostUsd}), 0)::float8`,
-        })
-        .from(findingPatches)
-        .where(gte(findingPatches.createdAt, today)),
-    ])
-    if (
-      (scanUsage?.cost ?? 0) + (patchUsage?.cost ?? 0) >=
-      env.TECDEBT_MAX_DAILY_COST_USD
-    ) {
-      throw new DomainError(
-        'conflict',
-        'The daily AI-cost budget has been reached.',
-      )
-    }
+  if (await isDailyAiCostBudgetReached()) {
+    throw new DomainError(
+      'conflict',
+      'The daily AI-cost budget has been reached.',
+    )
   }
   const sourceScan = finding.lastSeenScanId
     ? await db.query.scans.findFirst({

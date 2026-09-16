@@ -26,7 +26,7 @@ function SettingsPage() {
     <Page width="form">
       <PageHeader
         title="Settings"
-        description="Control the shared repository scan queue, its investigation budget, and how quickly it dispatches work."
+        description="Control the shared repository scan queue, investigation budget, AI cost limits, and dispatch rate."
         size="compact"
       />
       <ScheduleSettingsForm settings={schedule} />

@@ -192,11 +192,11 @@ export function ScanDialog({
               step="0.01"
               value={maxCost}
               onChange={(event) => setMaxCost(event.target.value)}
-              placeholder="Use deployment default"
+              placeholder="Use app default"
             />
             <p className="text-xs text-muted-foreground">
               The scan is marked partial if final recorded usage exceeds this
-              limit. The deployment-wide daily cap still applies.
+              limit. The app-wide daily cap still applies.
             </p>
           </div>
         </DialogBody>

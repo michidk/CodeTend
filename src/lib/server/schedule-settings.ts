@@ -19,6 +19,8 @@ const scheduleSettingsInputSchema = z.object({
   enabled: z.boolean(),
   cooldownMinutes: z.number().int().min(0).max(10_080),
   maxInputTokens: z.number().int().min(10_000).max(MAX_SCAN_INPUT_TOKEN_BUDGET),
+  maxDailyCostUsd: z.number().positive().nullable(),
+  defaultScanCostUsd: z.number().positive().nullable(),
 })
 
 export async function ensureScheduleSettingsRow() {

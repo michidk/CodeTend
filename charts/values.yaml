@@ -143,9 +143,6 @@ scanning:
   allowedGitHosts: github.com
   maxActiveScans: 2
   maxActivePatches: 1
-  # UTC-day ceiling for scan plus fixer spend; empty disables the cap.
-  maxDailyCostUsd: ""
-  defaultScanCostUsd: ""
   manualScanCooldownSeconds: 60
   schedulerIntervalSeconds: 30
   scannerConcurrency: 4
