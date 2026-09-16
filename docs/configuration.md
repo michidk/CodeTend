@@ -32,7 +32,7 @@ boundary in front of it.
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing repositories, cloning private HTTPS repositories, and publishing automated fix pull requests. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN`. Automated fixes require repository contents and pull-request write permissions. |
 | `GITHUB_TOKEN` | – | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured |
-| `HODOR_SECRET` | – | Enables the first-party OAuth-protected MCP endpoint using the same 32+ character secret configured as Hodor `SECRET`; the app derives a separate OAuth signing key |
+| `HODOR_SECRET` | – | Enables the first-party OAuth-protected MCP endpoint using the same secret configured as Hodor `SECRET`; the app derives a separate OAuth signing key without imposing an additional length requirement |
 | `MCP_ALLOWED_ORIGINS` | – | Comma-separated allowlist for browser MCP clients; native clients omit `Origin` |
 
 ### OAuth-protected MCP

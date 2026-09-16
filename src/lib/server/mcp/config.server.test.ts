@@ -18,6 +18,15 @@ describe('MCP configuration', () => {
     })
   })
 
+  test('accepts the existing Hodor signing secret without imposing a new length requirement', () => {
+    expect(
+      resolveMcpConfig(
+        { HODOR_SECRET: 'existing-hodor-secret' },
+        'https://codetend.example.com/settings/mcp',
+      ).signingSecret,
+    ).toBe('existing-hodor-secret')
+  })
+
   test('requires owner-session verification and a secure application URL', () => {
     expect(() =>
       resolveMcpConfig({}, 'https://codetend.example.com/settings/mcp'),

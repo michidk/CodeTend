@@ -40,8 +40,8 @@ export function resolveMcpConfig(
   environment: McpEnvironment,
   applicationUrl: ApplicationUrl,
 ): McpConfig {
-  if (!environment.HODOR_SECRET || environment.HODOR_SECRET.length < 32) {
-    throw new Error('HODOR_SECRET must be at least 32 characters for MCP')
+  if (!environment.HODOR_SECRET) {
+    throw new Error('HODOR_SECRET is required for MCP token signing')
   }
 
   const applicationOrigin = resolveApplicationUrl(applicationUrl).origin
