@@ -16,12 +16,17 @@ import {
 import { Label } from '@/components/ui/label'
 import { getErrorMessage } from '@/lib/error-message'
 import type { FindingDisposition } from '@/lib/findings'
-import { setFindingDisposition } from '@/lib/server/finding-triage'
+import {
+  markFindingFixed,
+  setFindingDisposition,
+} from '@/lib/server/finding-triage'
 
 const DISPOSITION_LABELS: Record<FindingDisposition, string> = {
   false_positive: 'Marked false positive',
   accepted_risk: 'Risk accepted',
 }
+
+type TriageAction = FindingDisposition | 'fixed'
 
 export function FindingTriageControls({
   findingId,
@@ -33,10 +38,25 @@ export function FindingTriageControls({
   readonly dispositionNote: string | null
 }) {
   const router = useRouter()
-  const [action, setAction] = useState<FindingDisposition | null>(null)
+  const [action, setAction] = useState<TriageAction | null>(null)
   const [note, setNote] = useState(dispositionNote ?? '')
   const [pending, setPending] = useState(false)
-  const editing = action !== null && action === disposition
+  const editing =
+    action !== null && action !== 'fixed' && action === disposition
+
+  const saveFixed = async () => {
+    setPending(true)
+    try {
+      await markFindingFixed({ data: { findingId, note } })
+      toast.success('Finding marked as fixed')
+      setAction(null)
+      await router.invalidate()
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not mark the finding as fixed'))
+    } finally {
+      setPending(false)
+    }
+  }
 
   const save = async (next: FindingDisposition | null) => {
     setPending(true)
@@ -70,22 +90,25 @@ export function FindingTriageControls({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {editing
-              ? 'Edit context'
-              : action === 'accepted_risk'
-                ? 'Accept this risk?'
-                : 'Mark as false positive?'}
+            {action === 'fixed'
+              ? 'Mark this finding as fixed?'
+              : editing
+                ? 'Edit context'
+                : action === 'accepted_risk'
+                  ? 'Accept this risk?'
+                  : 'Mark as false positive?'}
           </DialogTitle>
           <DialogDescription>
-            This is an operator decision, not a code fix. Future scans keep the
-            finding suppressed and only reopen it when the scanner can show that
-            this context no longer matches the code, so record the controls,
-            assumptions or constraints that justify it.
+            {action === 'fixed'
+              ? 'This records an operator-reported fix. The next scan verifies the current code and will regress the finding if it is detected again.'
+              : 'This is an operator decision, not a code fix. Future scans keep the finding suppressed and only reopen it when the scanner can show that this context no longer matches the code, so record the controls, assumptions or constraints that justify it.'}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Label htmlFor={`triage-note-${findingId}`}>
-            Context{action === 'accepted_risk' ? ' (required)' : ' (optional)'}
+            {action === 'fixed' ? 'What changed (required)' : 'Context'}
+            {action === 'accepted_risk' ? ' (required)' : null}
+            {action === 'false_positive' ? ' (optional)' : null}
           </Label>
           <textarea
             id={`triage-note-${findingId}`}
@@ -94,7 +117,11 @@ export function FindingTriageControls({
             maxLength={2_000}
             rows={4}
             className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="Why this is acceptable here, e.g. the endpoint is internal-only behind the VPN and rate limited at the gateway."
+            placeholder={
+              action === 'fixed'
+                ? 'Describe the code or configuration change that fixed this finding.'
+                : 'Why this is acceptable here, e.g. the endpoint is internal-only behind the VPN and rate limited at the gateway.'
+            }
           />
         </DialogBody>
         <DialogFooter>
@@ -109,9 +136,14 @@ export function FindingTriageControls({
           <Button
             type="button"
             disabled={
-              pending || (action === 'accepted_risk' && note.trim().length < 5)
+              pending ||
+              ((action === 'accepted_risk' || action === 'fixed') &&
+                note.trim().length < 5)
             }
-            onClick={() => action && void save(action)}
+            onClick={() => {
+              if (action === 'fixed') void saveFixed()
+              else if (action) void save(action)
+            }}
           >
             {pending ? 'Saving…' : editing ? 'Save' : 'Confirm'}
           </Button>
@@ -162,6 +194,16 @@ export function FindingTriageControls({
   return (
     <>
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            setNote('')
+            setAction('fixed')
+          }}
+        >
+          Mark as fixed
+        </Button>
         <Button
           type="button"
           variant="outline"
