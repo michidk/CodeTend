@@ -333,6 +333,7 @@ function FindingDetailPanel({
       ) : null}
       <FindingTriageControls
         findingId={finding.id}
+        state={finding.state}
         disposition={finding.disposition}
         dispositionNote={finding.dispositionNote}
       />

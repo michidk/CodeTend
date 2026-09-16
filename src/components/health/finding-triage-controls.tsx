@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getErrorMessage } from '@/lib/error-message'
-import type { FindingDisposition } from '@/lib/findings'
+import type { FindingDisposition, FindingState } from '@/lib/findings'
 import {
   markFindingFixed,
   setFindingDisposition,
@@ -30,10 +30,12 @@ type TriageAction = FindingDisposition | 'fixed'
 
 export function FindingTriageControls({
   findingId,
+  state,
   disposition,
   dispositionNote,
 }: {
   readonly findingId: number
+  readonly state: FindingState
   readonly disposition: FindingDisposition | null
   readonly dispositionNote: string | null
 }) {
@@ -79,6 +81,8 @@ export function FindingTriageControls({
       setPending(false)
     }
   }
+
+  if (state === 'resolved' && disposition === null) return null
 
   const dialog = (
     <Dialog
