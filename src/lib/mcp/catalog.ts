@@ -15,8 +15,9 @@ export const MCP_SCOPE_DETAILS: Record<
       'Inspect repositories, scans, findings, and repository knowledge.',
   },
   'codetend:write': {
-    label: 'Control scans',
-    description: 'Start and cancel repository scans.',
+    label: 'Manage findings and scans',
+    description:
+      'Triage findings as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
   },
 }
 

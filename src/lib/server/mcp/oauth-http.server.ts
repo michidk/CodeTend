@@ -166,7 +166,7 @@ function consentPage(
       const details = MCP_SCOPE_DETAILS[scope]
       const readOnly = scope === MCP_READ_SCOPE
       return `<label><input type="checkbox" name="${scopeInputName(scope)}"${
-        readOnly ? ' checked disabled' : ''
+        readOnly ? ' checked disabled' : ' checked'
       }> <span><strong>${escapeHtml(details.label)}</strong><small>${escapeHtml(
         details.description,
       )}</small></span></label>${
@@ -177,7 +177,7 @@ function consentPage(
     })
     .join('')
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize MCP access</title><style>body{font:16px system-ui;max-width:42rem;margin:8vh auto;padding:1.5rem;color:#102c31;background:#f4f8f8}main{border:1px solid #d3e1e2;border-radius:16px;padding:2rem;background:#fff}h1{margin-top:0}p{line-height:1.55;color:#425f64}label{display:flex;gap:.75rem;padding:1rem 0;border-top:1px solid #d3e1e2}label input{width:1.15rem;height:1.15rem;margin-top:.2rem}label span{display:grid;gap:.25rem}small{color:#597176;line-height:1.45}button{font:inherit;font-weight:600;padding:.7rem 1rem;margin:.75rem .5rem 0 0;border-radius:12px;border:1px solid #667;background:#fff;cursor:pointer}.approve{background:#087f8c;color:#fff;border-color:#087f8c}</style></head><body><main><h1>Authorize CodeTend access?</h1><p><strong>${escapeHtml(clientName)}</strong> wants to connect to this CodeTend instance. Select the requested permissions you want to grant.</p><form method="post" action="${escapeHtml(action.pathname + action.search)}">${scopeRows}<p>Write and delete permissions are never selected automatically. You can revoke this client later in Settings → MCP.</p><button class="approve" name="decision" value="approve">Authorize</button><button name="decision" value="deny">Deny</button></form></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize MCP access</title><style>body{font:16px system-ui;max-width:42rem;margin:8vh auto;padding:1.5rem;color:#102c31;background:#f4f8f8}main{border:1px solid #d3e1e2;border-radius:16px;padding:2rem;background:#fff}h1{margin-top:0}p{line-height:1.55;color:#425f64}label{display:flex;gap:.75rem;padding:1rem 0;border-top:1px solid #d3e1e2}label input{width:1.15rem;height:1.15rem;margin-top:.2rem}label span{display:grid;gap:.25rem}small{color:#597176;line-height:1.45}button{font:inherit;font-weight:600;padding:.7rem 1rem;margin:.75rem .5rem 0 0;border-radius:12px;border:1px solid #667;background:#fff;cursor:pointer}.approve{background:#087f8c;color:#fff;border-color:#087f8c}</style></head><body><main><h1>Authorize CodeTend access?</h1><p><strong>${escapeHtml(clientName)}</strong> wants to connect to this CodeTend instance. Review the requested permissions before authorizing.</p><form method="post" action="${escapeHtml(action.pathname + action.search)}">${scopeRows}<p>Clear any optional permission you do not want to grant. You can revoke this client later in Settings → MCP.</p><button class="approve" name="decision" value="approve">Authorize</button><button name="decision" value="deny">Deny</button></form></main></body></html>`,
     {
       status: 200,
       headers: {

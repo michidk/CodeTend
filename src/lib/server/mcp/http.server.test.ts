@@ -212,8 +212,8 @@ describe('remote MCP OAuth HTTP flow', () => {
     expect(consent?.status).toBe(200)
     const consentBody = await consent?.text()
     expect(consentBody).toContain('Codex')
-    expect(consentBody).toContain('Control scans')
-    expect(consentBody).toContain('Control scans')
+    expect(consentBody).toContain('Manage findings and scans')
+    expect(consentBody).toContain('name="scope_codetend_write" checked')
 
     const approved = await handle(
       new Request(authorize, {
