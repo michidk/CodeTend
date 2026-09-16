@@ -306,6 +306,7 @@ export function enrichSourceSecurityFinding(
     severity: finding.severity,
     confidence: finding.confidence,
     context: finding.securityContext,
+    exploitability: finding.exploitability,
   })
   return {
     ...finding,
@@ -387,7 +388,17 @@ export function deriveSourcePriority(input: {
   readonly severity: Severity
   readonly confidence: Confidence
   readonly context?: SecurityContext
+  readonly exploitability?: ScannerFinding['exploitability']
 }): { priority: FindingPriority; score: number; reasons: string[] } {
+  if (input.exploitability?.verdict !== 'confirmed') {
+    return priorityResult(20, [
+      'Exploitability review did not confirm a practical attack path',
+      ...(input.exploitability?.rationale
+        ? [input.exploitability.rationale]
+        : []),
+    ])
+  }
+
   const reasons = [`Repository severity ${input.severity}`]
   let score = { critical: 82, high: 65, medium: 40, low: 20 }[input.severity]
   const context = input.context

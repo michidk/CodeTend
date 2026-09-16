@@ -122,6 +122,20 @@ export const securityContextSchema = z.object({
 })
 export type SecurityContext = z.infer<typeof securityContextSchema>
 
+export const exploitabilityAssessmentSchema = z.object({
+  verdict: z
+    .enum(['confirmed', 'not-confirmed'])
+    .describe(
+      'Confirmed only when an independent post-finding review establishes a practical attack path in this repository.',
+    ),
+  rationale: z
+    .string()
+    .min(5)
+    .max(2_000)
+    .describe(
+      'The source-grounded reason the attack path was confirmed or could not be confirmed.',
+    ),
+})
 export const codeEvidenceSchema = findingLocationSchema.extend({
   role: z
     .enum(['source', 'control', 'sink', 'supporting', 'test'])
@@ -319,6 +333,11 @@ export const scannerFindingSchema = z.object({
     .optional()
     .describe(
       'Repository-specific exploit context for source-code security findings. Omit outside the Security Hygiene dimension.',
+    ),
+  exploitability: exploitabilityAssessmentSchema
+    .optional()
+    .describe(
+      'Independent post-finding exploitability verdict for Security Hygiene findings. Added by the review pipeline, not by the discovery agent.',
     ),
   rootCause: z
     .string()

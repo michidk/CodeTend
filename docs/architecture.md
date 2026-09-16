@@ -137,11 +137,15 @@ in the scanner summary but never discards an OSV result.
 
 Raw severity and contextual priority are deliberately separate. Dependency
 priority combines CVSS, EPSS, KEV and fix availability; a KEV entry always
-becomes critical priority. The Security Hygiene agent classifies source-code
-findings with CWE/OWASP and records evidenced reachability, exposure and data
-sensitivity, which drive their separate contextual priority. It never assigns
-CVEs or CVSS to source findings. The dashboard retains exact match evidence and
-snapshots all enrichment on each finding occurrence.
+becomes critical priority. The Security Hygiene discovery agent classifies
+source-code findings with CWE/OWASP and records evidenced reachability,
+exposure and data sensitivity. After isolated validation, a second agent
+independently checks each proposed attack path against the source and validation
+result. Source findings remain low priority unless that review confirms a
+practical attack path; confirmed findings use severity, reachability, exposure
+and data sensitivity to derive contextual priority. Source findings never
+receive CVEs or CVSS. The dashboard retains exact match evidence and snapshots
+all enrichment on each finding occurrence.
 
 ## Security review pipeline
 

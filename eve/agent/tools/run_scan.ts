@@ -20,6 +20,13 @@ import {
 import { sandboxRepoPath } from '../lib/paths'
 import { scannerAgentMessage } from '../lib/scanner-message'
 import {
+  applyExploitabilityReview,
+  type ExploitabilityReview,
+  exploitabilityReviewJsonSchema,
+  exploitabilityReviewMessage,
+  exploitabilityReviewSchema,
+} from '../lib/security-review'
+import {
   auditDependencies,
   cloneRepository,
   extractSubsystemDependencyGraph,
@@ -87,7 +94,8 @@ export default defineWorkflowTool({
       5 +
       request.scanners.length +
       (request.dependencyAudit === false ? 0 : 1) +
-      (request.gitnexus ? 1 : 0)
+      (request.gitnexus ? 1 : 0) +
+      (request.scanners.some((scanner) => scanner.id === 'security') ? 1 : 0)
     let completed = 0
 
     const cloning: Progress = {
@@ -431,6 +439,51 @@ export default defineWorkflowTool({
       candidates,
     })
     completed += 1
+
+    const securityOutcomeIndex = outcomes.findIndex(
+      (outcome) => outcome.scannerId === 'security',
+    )
+    const securityResult =
+      securityOutcomeIndex >= 0
+        ? asScannerResult(outcomes[securityOutcomeIndex]?.result)
+        : null
+    if (securityOutcomeIndex >= 0 && securityResult?.findings?.length) {
+      const reviewing: Progress = {
+        phase: 'reviewing security exploitability',
+        detail: `${securityResult.findings.length} security findings to review`,
+        completed,
+        total,
+        scannerCompleted: outcomes.length,
+        scannerTotal: scanners.length,
+      }
+      yield reviewing
+      let review: ExploitabilityReview = { assessments: [] }
+      try {
+        const rawReview = await ctx.agent('scanner', {
+          message: exploitabilityReviewMessage({
+            repoPath,
+            repositoryName: request.repositoryName,
+            findings: securityResult.findings,
+            validations,
+            securityProfile,
+            gitnexusRepo,
+          }),
+          outputSchema: exploitabilityReviewJsonSchema,
+        })
+        const parsed = exploitabilityReviewSchema.safeParse(rawReview)
+        if (parsed.success) review = parsed.data
+      } catch {
+        // A failed review must not promote unverified findings. The fallback
+        // assessment below leaves every finding at low contextual priority.
+      }
+      outcomes[securityOutcomeIndex] = {
+        ...outcomes[securityOutcomeIndex],
+        result: applyExploitabilityReview(securityResult, review),
+      } as ScannerOutcome
+      completed += 1
+    } else if (request.scanners.some((scanner) => scanner.id === 'security')) {
+      completed += 1
+    }
 
     const persisting: Progress = {
       phase: 'persisting',

@@ -142,6 +142,10 @@ describe('CVSS and contextual priority', () => {
     const priority = deriveSourcePriority({
       severity: 'high',
       confidence: 'high',
+      exploitability: {
+        verdict: 'confirmed',
+        rationale: 'An unauthenticated HTTP request reaches the sink.',
+      },
       context: {
         reachability: 'confirmed',
         exposure: 'internet',
@@ -150,5 +154,22 @@ describe('CVSS and contextual priority', () => {
     })
     expect(priority).toMatchObject({ priority: 'critical', score: 88 })
     expect(priority.reasons).toContain('Internet exposed')
+  })
+
+  test('defaults source findings to low priority without confirmed exploitability', () => {
+    const priority = deriveSourcePriority({
+      severity: 'critical',
+      confidence: 'high',
+      context: {
+        reachability: 'confirmed',
+        exposure: 'internet',
+        dataSensitivity: 'high',
+      },
+    })
+
+    expect(priority).toMatchObject({ priority: 'low', score: 20 })
+    expect(priority.reasons).toContain(
+      'Exploitability review did not confirm a practical attack path',
+    )
   })
 })

@@ -33,4 +33,13 @@ describe('scanner registry', () => {
     expect(slop?.prompt).toContain('never its provenance')
     expect(slop?.fixGuidance).toContain('Prefer deletion over addition')
   })
+
+  test('security discovery frames findings as independently reviewed hypotheses', () => {
+    const security = getScanner('security')
+    expect(security?.prompt).toContain('independent agent')
+    expect(security?.prompt).toContain('practical exploitability')
+    expect(security?.prompt).toContain(
+      'distinguish observed code from assumptions',
+    )
+  })
 })
