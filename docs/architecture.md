@@ -106,6 +106,7 @@ then derives states from *our persisted results* (never Git history):
 | open finding returned with higher severity, or a resolved finding reappears | `regressed` |
 | scanner explicitly re-verifies the finding and returns `resolved` | `resolved` |
 | open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
+| operator marks a finding fixed and records what changed | `resolved` without a disposition; a future match becomes `regressed` |
 | operator marks a finding false positive or accepted risk | `resolved` with a durable manual disposition; future matches stay suppressed |
 | scanner cites a concrete change that contradicts the recorded disposition context | `regressed`; the disposition is cleared |
 | operator reopens a manually triaged finding | `active`; the next scan resumes normal reconciliation |
@@ -124,6 +125,11 @@ are durable: scanners receive the recorded context, default to keeping the
 finding suppressed, and may reopen it as a regression only when they can cite a
 concrete code change that contradicts that context. Disagreeing with the
 operator's judgement is not enough.
+
+An operator-reported fix is intentionally not a disposition. Its history event
+records the claimed change, while the next applicable scan independently
+verifies the current code. If the same fingerprint is found again, normal
+reconciliation marks it regressed instead of suppressing it.
 
 ## Vulnerability enrichment and priority
 

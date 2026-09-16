@@ -137,9 +137,11 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
    token and cost usage, and change-over-time charts.
 5. Each scanner page shows its trend, findings with evidence and
    recommendations, and the aggregated **fix prompt** with a copy button.
-6. Mark a finding **false positive** or **accepted risk** with a context note.
-   The disposition is durable; a scanner can only reopen it by citing a
-   concrete code change that contradicts the note.
+6. Mark a finding **fixed** with a note describing the change, or mark it
+   **false positive** or **accepted risk** with context. A reported fix is
+   verified by the next scan and regresses if rediscovered. Dispositions are
+   durable; a scanner can only reopen one by citing a concrete code change
+   that contradicts its note.
 7. Download the manifest, findings, investigation report, Markdown report or SARIF for
    any scan.
 
@@ -156,9 +158,10 @@ codex mcp login codetend
 
 The read scope can inspect repositories, scans and findings and generate a
 current coding-agent fix prompt for a repository scanner. The separately
-granted write scope can start or cancel scans, mark findings as false positives
-or accepted risks, and reopen manually triaged findings. Use **Settings → AI
-access (MCP)** to pause access, enable individual tools, or revoke a client. See
+granted write scope can start or cancel scans, mark findings as fixed, mark
+them as false positives or accepted risks, and reopen manually triaged
+findings. Use **Settings → AI access (MCP)** to pause access, enable individual
+tools, or revoke a client. See
 [configuration](docs/configuration.md#oauth-protected-mcp) for the proxy and
 security boundary.
 
