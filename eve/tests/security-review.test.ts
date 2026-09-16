@@ -49,6 +49,8 @@ describe('security exploitability review', () => {
       '# Scanner: Security exploitability review (id: security)',
     )
     expect(prompt).toContain('Do not trust the original severity')
+    expect(prompt).toContain('You must inspect the repository files')
+    expect(prompt).toContain('repository-relative code evidence')
     expect(prompt).toContain('default to `not-confirmed`')
     expect(prompt).toContain('unsafe-shell-boundary')
     expect(prompt).toContain('Internet-facing API')
@@ -57,15 +59,33 @@ describe('security exploitability review', () => {
 
   test('attaches confirmed and unconfirmed verdicts to their findings', () => {
     const result = { summary: 'Security scan', findings: [finding] }
-    const reviewed = applyExploitabilityReview(result, {
-      assessments: [
-        {
-          fingerprint: 'unsafe-shell-boundary',
-          verdict: 'confirmed',
-          rationale: 'The public route passes attacker input to exec().',
-        },
-      ],
-    })
+    const reviewed = applyExploitabilityReview(
+      result,
+      {
+        assessments: [
+          {
+            fingerprint: 'unsafe-shell-boundary',
+            verdict: 'confirmed',
+            rationale: 'The public route passes attacker input to exec().',
+            inspectedEvidence: [
+              {
+                path: 'src/run.ts',
+                startLine: 12,
+                role: 'source',
+                summary: 'Reads the attacker-controlled request parameter.',
+              },
+              {
+                path: 'src/run.ts',
+                startLine: 18,
+                role: 'sink',
+                summary: 'Passes the value to exec without escaping.',
+              },
+            ],
+          },
+        ],
+      },
+      ['src/run.ts'],
+    )
 
     expect(reviewed.findings[0]?.exploitability).toEqual({
       verdict: 'confirmed',
@@ -77,6 +97,56 @@ describe('security exploitability review', () => {
     const reviewed = applyExploitabilityReview(
       { summary: 'Security scan', findings: [finding] },
       { assessments: [] },
+      ['src/run.ts'],
+    )
+
+    expect(reviewed.findings[0]?.exploitability.verdict).toBe('not-confirmed')
+  })
+
+  test('rejects a confirmed verdict without inspected source and sink evidence', () => {
+    const reviewed = applyExploitabilityReview(
+      { summary: 'Security scan', findings: [finding] },
+      {
+        assessments: [
+          {
+            fingerprint: 'unsafe-shell-boundary',
+            verdict: 'confirmed',
+            rationale: 'The candidate description claims an attack path.',
+            inspectedEvidence: [],
+          },
+        ],
+      },
+      ['src/run.ts'],
+    )
+
+    expect(reviewed.findings[0]?.exploitability.verdict).toBe('not-confirmed')
+  })
+
+  test('rejects evidence paths that are not present in the checkout', () => {
+    const reviewed = applyExploitabilityReview(
+      { summary: 'Security scan', findings: [finding] },
+      {
+        assessments: [
+          {
+            fingerprint: 'unsafe-shell-boundary',
+            verdict: 'confirmed',
+            rationale: 'A source and sink were claimed in an invented file.',
+            inspectedEvidence: [
+              {
+                path: 'src/invented.ts',
+                role: 'source',
+                summary: 'Claimed request source.',
+              },
+              {
+                path: 'src/invented.ts',
+                role: 'sink',
+                summary: 'Claimed execution sink.',
+              },
+            ],
+          },
+        ],
+      },
+      ['src/run.ts'],
     )
 
     expect(reviewed.findings[0]?.exploitability.verdict).toBe('not-confirmed')

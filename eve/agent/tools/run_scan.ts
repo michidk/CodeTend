@@ -478,7 +478,11 @@ export default defineWorkflowTool({
       }
       outcomes[securityOutcomeIndex] = {
         ...outcomes[securityOutcomeIndex],
-        result: applyExploitabilityReview(securityResult, review),
+        result: applyExploitabilityReview(
+          securityResult,
+          review,
+          workspace.files.map((file) => file.path),
+        ),
       } as ScannerOutcome
       completed += 1
     } else if (request.scanners.some((scanner) => scanner.id === 'security')) {
