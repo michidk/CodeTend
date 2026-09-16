@@ -4,6 +4,7 @@ import type {
   InvestigationReport,
   KnowledgeResult,
   ScanCheckpoint,
+  ScanCoverage,
   ScannerOutcome,
   ScanRequest,
   ScanResult,
@@ -386,6 +387,7 @@ export default defineWorkflowTool({
     }
 
     const investigation = aggregateInvestigations(outcomes)
+    const coverage = aggregateCoverage(outcomes, investigation)
     const candidates = outcomes
       .filter((outcome) => outcome.scannerId === 'security')
       .flatMap((outcome) => {
@@ -452,6 +454,7 @@ export default defineWorkflowTool({
       dependencyAudit,
       scanners: outcomes,
       investigation,
+      coverage,
       validations,
       finishedAt: await nowIso(),
     }
@@ -546,6 +549,7 @@ interface RawScannerResult {
   readonly findings?: readonly Record<string, unknown>[]
   readonly hypothesisVerdicts?: readonly Record<string, unknown>[]
   readonly investigation?: InvestigationReport
+  readonly coverage?: ScanCoverage
 }
 
 /**
@@ -596,4 +600,71 @@ function aggregateInvestigations(
           ? 'high'
           : 'low',
   }
+}
+
+function aggregateCoverage(
+  outcomes: readonly ScannerOutcome[],
+  investigation: InvestigationReport,
+): ScanCoverage {
+  const reports = outcomes
+    .map((outcome) => asScannerResult(outcome.result)?.coverage)
+    .filter((coverage): coverage is ScanCoverage => coverage !== undefined)
+  const reviewed = dedupeByPath(
+    reports.flatMap((coverage) => coverage.reviewed),
+  )
+  const fallbackReviewed = investigation.evidence.flatMap((evidence) => {
+    if (evidence.kind === 'file') {
+      return [
+        {
+          path: evidence.path,
+          startLine: evidence.startLine,
+          endLine: evidence.endLine,
+          summary: evidence.summary,
+        },
+      ]
+    }
+    if (evidence.kind === 'repository-structure') {
+      return evidence.paths.map((path) => ({ path, summary: evidence.summary }))
+    }
+    return []
+  })
+  return {
+    completeness:
+      reports.length === 0
+        ? 'unknown'
+        : reports.every((coverage) => coverage.completeness === 'complete')
+          ? 'complete'
+          : reports.some((coverage) => coverage.completeness === 'partial')
+            ? 'partial'
+            : 'unknown',
+    reviewed: reviewed.length > 0 ? reviewed : dedupeByPath(fallbackReviewed),
+    deferred: dedupePathReasons(
+      reports.flatMap((coverage) => coverage.deferred),
+    ),
+    excluded: dedupePathReasons(
+      reports.flatMap((coverage) => coverage.excluded),
+    ),
+    openQuestions: [
+      ...new Set([
+        ...reports.flatMap((coverage) => coverage.openQuestions),
+        ...investigation.blindSpots,
+      ]),
+    ],
+  }
+}
+
+function dedupeByPath<T extends { readonly path: string }>(
+  entries: readonly T[],
+): T[] {
+  return [...new Map(entries.map((entry) => [entry.path, entry])).values()]
+}
+
+function dedupePathReasons<
+  T extends { readonly path: string; readonly reason: string },
+>(entries: readonly T[]): T[] {
+  return [
+    ...new Map(
+      entries.map((entry) => [`${entry.path}\u0000${entry.reason}`, entry]),
+    ).values(),
+  ]
 }

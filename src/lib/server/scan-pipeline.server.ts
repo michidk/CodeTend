@@ -901,6 +901,7 @@ async function persistScanResultUnlocked(
       counts,
       model: usage?.model ?? null,
       investigation: result.investigation,
+      coverage: result.coverage,
       ...usageColumns(usage?.total),
       error: allFailed
         ? 'Every scanner failed.'
@@ -1063,6 +1064,13 @@ async function persistDependencyAudit(input: {
         evidence: [],
         blindSpots: failed ? [error ?? 'Dependency audit failed.'] : [],
         confidence: failed ? 'low' : 'high',
+      },
+      coverage: {
+        completeness: failed ? 'unknown' : 'complete',
+        reviewed: [],
+        deferred: [],
+        excluded: [],
+        openQuestions: failed ? [error ?? 'Dependency audit failed.'] : [],
       },
     },
     authoritative: !failed,

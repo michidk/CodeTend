@@ -38,8 +38,7 @@ export const Route = createFileRoute('/api/scans/$scanId/artifacts/$kind/')({
             { status: 404 },
           )
         }
-        const extension =
-          kind === 'report' ? 'md' : kind === 'sarif' ? 'sarif' : 'json'
+        const extension = kind === 'sarif' ? 'sarif' : 'json'
         return new Response(artifact.contents, {
           headers: {
             'Content-Type': artifact.contentType,

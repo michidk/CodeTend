@@ -3,6 +3,7 @@ import {
   investigationEvidenceSchema,
   investigationReportSchema,
   investigationSubjectSchema,
+  scanCoverageSchema,
 } from '@/lib/security-scans'
 
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
@@ -422,6 +423,17 @@ export const scannerResultSchema = z.object({
   investigation: investigationReportSchema.describe(
     'How this bounded investigation chose its focus, what evidence it inspected, and its remaining blind spots.',
   ),
+  coverage: scanCoverageSchema
+    .default({
+      completeness: 'unknown',
+      reviewed: [],
+      deferred: [],
+      excluded: [],
+      openQuestions: [],
+    })
+    .describe(
+      'The exact repository files reviewed, deferred, or excluded. Use repository-relative paths and never combine a count or prose label into the path field.',
+    ),
 })
 export type ScannerResult = z.infer<typeof scannerResultSchema>
 

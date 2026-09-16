@@ -42,6 +42,7 @@ import {
   type ScanCoverage,
   type ScanManifest,
   type ScanMode,
+  type ScanReport,
   type ScanTarget,
   type SecurityProfile,
 } from '@/lib/security-scans'
@@ -274,6 +275,7 @@ export const scans = pgTable(
     modelCalls: integer('model_calls'),
     coverage: jsonb('coverage').$type<ScanCoverage>(),
     investigation: jsonb('investigation').$type<InvestigationReport>(),
+    report: jsonb('report').$type<ScanReport>(),
     manifest: jsonb('manifest').$type<ScanManifest>(),
     error: text('error'),
     startedAt: timestamp('started_at', { withTimezone: true }),

@@ -8,12 +8,12 @@ import {
   scanArtifacts,
   scans,
 } from '@/db/schema'
-import {
-  artifactSha256,
-  toMarkdownScanReport,
-  toSarifDocument,
-} from '@/lib/scan-artifacts'
-import type { ScanManifest } from '@/lib/security-scans'
+import { artifactSha256, toSarifDocument } from '@/lib/scan-artifacts'
+import type {
+  ScanCoverage,
+  ScanManifest,
+  ScanReport,
+} from '@/lib/security-scans'
 
 type ArtifactKind =
   | 'manifest'
@@ -91,28 +91,63 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
     blindSpots: ['Investigation history is unavailable for this scan.'],
     confidence: 'low' as const,
   }
+  const coverage: ScanCoverage = scan.coverage ?? {
+    completeness: 'unknown',
+    reviewed: [],
+    deferred: [],
+    excluded: [],
+    openQuestions: ['This scan did not produce structured coverage.'],
+  }
   const sarif = toSarifDocument(
     scan.repository.url,
     scan.commitSha,
     findingDocument.findings,
   )
-  const report = toMarkdownScanReport({
-    repository: scan.repository.name,
-    revision: scan.commitSha,
-    maxInputTokens: scan.maxInputTokens,
-    target: scan.target,
+  const report: ScanReport = {
+    documentType: 'codetend.scan-report',
+    schemaVersion: '1',
+    generatedAt: new Date().toISOString(),
+    scan: {
+      id: scan.id,
+      repositoryId: scan.repositoryId,
+      repositoryName: scan.repository.name,
+      repositoryUrl: scan.repository.url,
+      revision: scan.commitSha,
+      target: scan.target,
+      mode: scan.mode,
+      maxInputTokens: scan.maxInputTokens,
+      model: scan.model,
+      status: scan.status,
+    },
+    summary: {
+      overallScore: scan.overallScore,
+      grade: scan.grade,
+      findingCount: findingDocument.findings.length,
+      findingCounts: scan.counts,
+    },
+    coverage,
     investigation,
-    findings: findingDocument.findings,
-  })
+    findings: findingDocument.findings.map((finding) => ({
+      findingId: finding.findingId,
+      occurrenceId: finding.occurrenceId,
+      ruleId: finding.ruleId,
+      fingerprint: finding.fingerprint,
+      state: finding.state,
+      title: finding.title,
+      summary: finding.summary,
+      severity: finding.severity,
+      confidence: finding.confidence,
+      priority: finding.priority,
+      locations: finding.locations,
+      remediation: finding.remediation,
+    })),
+  }
   const baseArtifacts: Artifact[] = [
     jsonArtifact('findings', findingDocument),
+    jsonArtifact('coverage', coverage),
     jsonArtifact('investigation', investigation),
     jsonArtifact('sarif', sarif, 'application/sarif+json'),
-    {
-      kind: 'report',
-      contentType: 'text/markdown; charset=utf-8',
-      contents: report,
-    },
+    jsonArtifact('report', report),
   ]
   const artifactHashes = Object.fromEntries(
     baseArtifacts.map((artifact) => [
@@ -155,7 +190,7 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
           },
         })
     }
-    await tx.update(scans).set({ manifest }).where(eq(scans.id, scanId))
+    await tx.update(scans).set({ manifest, report }).where(eq(scans.id, scanId))
   })
 }
 
@@ -167,7 +202,7 @@ export async function getScanArtifact(scanId: number, kind: ArtifactKind) {
 }
 
 function jsonArtifact(
-  kind: Exclude<ArtifactKind, 'report'>,
+  kind: ArtifactKind,
   value: unknown,
   contentType = 'application/json; charset=utf-8',
 ): Artifact {

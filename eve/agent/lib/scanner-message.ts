@@ -172,6 +172,7 @@ export function scannerAgentMessage(input: {
         ? 'Conduct a bounded, self-directed investigation of the repository for this dimension and return the structured result.'
         : 'Conduct a bounded, self-directed investigation of the configured target and return the structured result.',
     'In `investigation`, explain your selection strategy, record repository/module/file/tool evidence actually inspected, disclose material blind spots, and give confidence in this investigation. Do not claim complete repository coverage.',
+    'In `coverage`, list each reviewed, deferred, and excluded file separately using its repository-relative path. Add line ranges for reviewed files when known, keep explanations in `summary` or `reason`, and never put counts or prose in a path. Use partial or unknown completeness whenever the bounded work leaves material gaps.',
   )
   return parts.join('\n')
 }

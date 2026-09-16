@@ -165,6 +165,7 @@ export interface ScanResult {
   readonly dependencyAudit: DependencyAuditResult
   readonly scanners: readonly ScannerOutcome[]
   readonly investigation: InvestigationReport
+  readonly coverage: ScanCoverage
   readonly validations: readonly CandidateValidation[]
   readonly finishedAt: string
 }
@@ -231,6 +232,25 @@ export interface InvestigationReport {
   readonly evidence: readonly InvestigationEvidence[]
   readonly blindSpots: readonly string[]
   readonly confidence: 'low' | 'medium' | 'high'
+}
+
+export interface ScanCoverage {
+  readonly completeness: 'complete' | 'partial' | 'unknown'
+  readonly reviewed: readonly {
+    readonly path: string
+    readonly startLine?: number
+    readonly endLine?: number
+    readonly summary: string
+  }[]
+  readonly deferred: readonly {
+    readonly path: string
+    readonly reason: string
+  }[]
+  readonly excluded: readonly {
+    readonly path: string
+    readonly reason: string
+  }[]
+  readonly openQuestions: readonly string[]
 }
 
 export interface CandidateValidation {

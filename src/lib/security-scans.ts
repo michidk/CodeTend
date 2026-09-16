@@ -125,14 +125,82 @@ export const investigationReportSchema = z.object({
 })
 export type InvestigationReport = z.infer<typeof investigationReportSchema>
 
+export const scanCoverageEntrySchema = z.object({
+  path: repositoryPathSchema,
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+  summary: z.string().min(1).max(1_000),
+})
+export type ScanCoverageEntry = z.infer<typeof scanCoverageEntrySchema>
+
 export const scanCoverageSchema = z.object({
   completeness: z.enum(['complete', 'partial', 'unknown']),
-  reviewed: z.array(z.string()),
-  deferred: z.array(z.object({ path: z.string(), reason: z.string() })),
-  excluded: z.array(z.object({ path: z.string(), reason: z.string() })),
-  openQuestions: z.array(z.string()),
+  reviewed: z.array(scanCoverageEntrySchema).max(500).default([]),
+  deferred: z
+    .array(z.object({ path: repositoryPathSchema, reason: z.string() }))
+    .max(200)
+    .default([]),
+  excluded: z
+    .array(z.object({ path: repositoryPathSchema, reason: z.string() }))
+    .max(200)
+    .default([]),
+  openQuestions: z.array(z.string()).max(100).default([]),
 })
 export type ScanCoverage = z.infer<typeof scanCoverageSchema>
+
+export interface ScanReportFinding {
+  readonly findingId: number
+  readonly occurrenceId: number
+  readonly ruleId: string
+  readonly fingerprint: string
+  readonly state: string
+  readonly title: string
+  readonly summary: string
+  readonly severity: string
+  readonly confidence: string
+  readonly priority: string | null
+  readonly locations: readonly {
+    readonly path: string
+    readonly startLine?: number
+    readonly endLine?: number
+    readonly symbol?: string
+  }[]
+  readonly remediation: string
+}
+
+/** Persisted, portable scan report. The UI and JSON artifact use this shape. */
+export interface ScanReport {
+  readonly documentType: 'codetend.scan-report'
+  readonly schemaVersion: '1'
+  readonly generatedAt: string
+  readonly scan: {
+    readonly id: number
+    readonly repositoryId: number
+    readonly repositoryName: string
+    readonly repositoryUrl: string
+    readonly revision: string
+    readonly target: ScanTarget
+    readonly mode: ScanMode
+    readonly maxInputTokens: number
+    readonly model: string | null
+    readonly status: string
+  }
+  readonly summary: {
+    readonly overallScore: number | null
+    readonly grade: string | null
+    readonly findingCount: number
+    readonly findingCounts: {
+      readonly new: number
+      readonly active: number
+      readonly improved: number
+      readonly resolved: number
+      readonly regressed: number
+    } | null
+  }
+  readonly coverage: ScanCoverage
+  readonly investigation: InvestigationReport
+  readonly findings: readonly ScanReportFinding[]
+}
 
 export interface ScanManifest {
   readonly schemaVersion: '2'

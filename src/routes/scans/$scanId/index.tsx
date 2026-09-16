@@ -1,5 +1,11 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, Download, Square } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronDown,
+  Download,
+  FileCode2,
+  Square,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { EntityNotFound } from '@/components/entity-not-found'
 import {
@@ -23,6 +29,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Table,
   TableBody,
   TableCell,
@@ -40,7 +51,13 @@ import {
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
 import { getScanner } from '@/lib/scanners'
-import type { ScanTarget } from '@/lib/security-scans'
+import type {
+  InvestigationEvidence,
+  InvestigationSubject,
+  ScanCoverage,
+  ScanCoverageEntry,
+  ScanTarget,
+} from '@/lib/security-scans'
 import { cancelScan } from '@/lib/server/repositories'
 import { getScanDetail } from '@/lib/server/repository-detail'
 import { FindingGroups } from './-components/finding-groups'
@@ -156,6 +173,29 @@ function ScanPage() {
         </Card>
       ) : null}
 
+      {scan.report ? (
+        <section aria-labelledby="report-heading" className="space-y-3">
+          <SectionHeading id="report-heading" color="bg-candy-sun">
+            Structured report
+          </SectionHeading>
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="outline">
+                JSON · schema v{scan.report.schemaVersion}
+              </Badge>
+              <span className="text-muted-foreground">
+                {scan.report.summary.findingCount} findings · grade{' '}
+                {scan.report.summary.grade ?? '–'} · score{' '}
+                {formatScore(scan.report.summary.overallScore)} ·{' '}
+                {scan.report.investigation.evidence.length} evidence records
+              </span>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
+      <CoverageSection coverage={scan.coverage ?? scan.report?.coverage} />
+
       <section aria-labelledby="investigation-heading" className="space-y-3">
         <SectionHeading id="investigation-heading" color="bg-candy-mint">
           Investigation
@@ -192,6 +232,20 @@ function ScanPage() {
               <StringList
                 title="Known blind spots"
                 values={scan.investigation.blindSpots}
+              />
+            ) : null}
+            {scan.investigation?.focusAreas.length ? (
+              <DetailList
+                title="Focus areas"
+                count={scan.investigation.focusAreas.length}
+                values={scan.investigation.focusAreas.map(formatSubject)}
+              />
+            ) : null}
+            {scan.investigation?.evidence.length ? (
+              <DetailList
+                title="Evidence"
+                count={scan.investigation.evidence.length}
+                values={scan.investigation.evidence.map(formatEvidence)}
               />
             ) : null}
             {scan.artifacts.length > 0 ? (
@@ -390,6 +444,187 @@ function describeTarget(target: ScanTarget): string {
   if (target.kind === 'repository') return 'entire repository'
   if (target.kind === 'paths') return `${target.paths.length} selected path(s)`
   return `diff ${shortSha(target.base)}…${shortSha(target.head)}`
+}
+
+function CoverageSection({
+  coverage,
+}: {
+  readonly coverage?: ScanCoverage | null
+}) {
+  const reviewed = normalizeReviewed(coverage?.reviewed)
+  const deferred = coverage?.deferred ?? []
+  const excluded = coverage?.excluded ?? []
+  const hasDetails =
+    reviewed.length > 0 ||
+    deferred.length > 0 ||
+    excluded.length > 0 ||
+    Boolean(coverage?.openQuestions.length)
+
+  return (
+    <section aria-labelledby="coverage-heading" className="space-y-3">
+      <SectionHeading id="coverage-heading" color="bg-candy-mint">
+        Security review coverage
+      </SectionHeading>
+      <Card>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="capitalize">
+              {coverage?.completeness ?? 'unknown'} coverage
+            </Badge>
+            <span className="text-muted-foreground">
+              {reviewed.length} reviewed files · {deferred.length} deferred ·{' '}
+              {excluded.length} excluded
+            </span>
+          </div>
+          {reviewed.length > 0 ? (
+            <CoverageFileList title="Reviewed" entries={reviewed} />
+          ) : null}
+          {deferred.length > 0 ? (
+            <CoverageFileList
+              title="Deferred"
+              entries={deferred.map((entry) => ({
+                path: entry.path,
+                summary: entry.reason,
+              }))}
+            />
+          ) : null}
+          {excluded.length > 0 ? (
+            <CoverageFileList
+              title="Excluded"
+              entries={excluded.map((entry) => ({
+                path: entry.path,
+                summary: entry.reason,
+              }))}
+            />
+          ) : null}
+          {coverage?.openQuestions.length ? (
+            <DetailList
+              title="Open questions"
+              count={coverage.openQuestions.length}
+              values={coverage.openQuestions}
+            />
+          ) : null}
+          {!hasDetails ? (
+            <p className="text-xs text-muted-foreground">
+              Structured coverage will appear when this scan finishes.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function CoverageFileList({
+  title,
+  entries,
+}: {
+  readonly title: string
+  readonly entries: readonly ScanCoverageEntry[]
+}) {
+  return (
+    <Collapsible className="group overflow-hidden rounded-lg border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title} <span className="tabular-nums">({entries.length})</span>
+        </span>
+        <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t">
+        <ul className="divide-y">
+          {entries.map((entry) => (
+            <li
+              key={JSON.stringify(entry)}
+              className="flex items-start gap-2 px-3 py-2.5"
+            >
+              <FileCode2
+                aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+              />
+              <div className="min-w-0">
+                <code className="break-all text-xs font-semibold text-foreground">
+                  {formatFileReference(entry)}
+                </code>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {entry.summary}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function DetailList({
+  title,
+  count,
+  values,
+}: {
+  readonly title: string
+  readonly count: number
+  readonly values: readonly string[]
+}) {
+  const uniqueValues = [...new Set(values)]
+  return (
+    <Collapsible className="group overflow-hidden rounded-lg border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title} <span className="tabular-nums">({count})</span>
+        </span>
+        <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t">
+        <ul className="list-disc space-y-1 px-8 py-2.5 text-muted-foreground">
+          {uniqueValues.map((value) => (
+            <li key={value}>{value}</li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function normalizeReviewed(
+  reviewed: ScanCoverage['reviewed'] | undefined,
+): ScanCoverageEntry[] {
+  return (reviewed ?? []).map((entry) =>
+    typeof entry === 'string'
+      ? { path: entry, summary: 'Reviewed during this scan.' }
+      : entry,
+  )
+}
+
+function formatFileReference(entry: ScanCoverageEntry): string {
+  if (!entry.startLine) return entry.path
+  return `${entry.path}:${entry.startLine}${entry.endLine && entry.endLine !== entry.startLine ? `-${entry.endLine}` : ''}`
+}
+
+function formatSubject(subject: InvestigationSubject): string {
+  if (subject.kind === 'repository') return subject.aspect
+  if (subject.kind === 'module') {
+    return `${subject.name}${subject.paths.length ? ` — ${subject.paths.join(', ')}` : ''}`
+  }
+  if (subject.kind === 'dependency') return `${subject.from} → ${subject.to}`
+  if (subject.kind === 'symbol') return `${subject.path} — ${subject.symbol}`
+  return subject.path
+}
+
+function formatEvidence(evidence: InvestigationEvidence): string {
+  if (evidence.kind === 'file') {
+    return `${formatFileReference({ ...evidence })} — ${evidence.summary}`
+  }
+  if (evidence.kind === 'repository-structure') {
+    return `${evidence.paths.join(', ')} — ${evidence.summary}`
+  }
+  if (evidence.kind === 'dependency-edge') {
+    return `${evidence.from} → ${evidence.to} — ${evidence.summary}`
+  }
+  if (evidence.kind === 'command') {
+    return `${evidence.command} — ${evidence.summary}`
+  }
+  return `${evidence.tool} — ${evidence.summary}`
 }
 
 function StringList({

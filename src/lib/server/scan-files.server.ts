@@ -18,6 +18,7 @@ import {
   investigationReportSchema,
   type ScanTarget,
   type SecurityProfile,
+  scanCoverageSchema,
 } from '@/lib/security-scans'
 
 /**
@@ -235,6 +236,13 @@ const scanResultFileSchema = z.object({
     }),
   ),
   investigation: investigationReportSchema,
+  coverage: scanCoverageSchema.default({
+    completeness: 'unknown',
+    reviewed: [],
+    deferred: [],
+    excluded: [],
+    openQuestions: [],
+  }),
   validations: z
     .array(
       z.object({

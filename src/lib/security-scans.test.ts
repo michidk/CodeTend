@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { scannerResultSchema } from './findings'
 import {
   investigationAllowsResolution,
+  scanCoverageSchema,
   scanTargetSchema,
   securityProfileSchema,
   targetIncludesPath,
@@ -135,4 +136,38 @@ test('scanner results support repository findings without file locations', () =>
   })
   expect(result.findings[0]?.locations).toEqual([])
   expect(result.findings[0]?.subject.kind).toBe('repository')
+})
+
+test('coverage stores file references separately from their explanations', () => {
+  const coverage = scanCoverageSchema.parse({
+    completeness: 'partial',
+    reviewed: [
+      {
+        path: 'src/auth/session.ts',
+        startLine: 12,
+        endLine: 38,
+        summary: 'Session validation and cookie issuance.',
+      },
+    ],
+    deferred: [
+      {
+        path: 'src/auth/oauth.ts',
+        reason: 'Provider fixture was unavailable.',
+      },
+    ],
+  })
+
+  expect(coverage.reviewed[0]).toEqual({
+    path: 'src/auth/session.ts',
+    startLine: 12,
+    endLine: 38,
+    summary: 'Session validation and cookie issuance.',
+  })
+  expect(coverage.excluded).toEqual([])
+  expect(
+    scanCoverageSchema.safeParse({
+      completeness: 'partial',
+      reviewed: ['src/auth/session.ts: session handling'],
+    }).success,
+  ).toBe(false)
 })
