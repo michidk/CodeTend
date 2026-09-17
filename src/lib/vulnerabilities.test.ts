@@ -103,6 +103,30 @@ describe('OSV dependency findings', () => {
         kevByCve: new Map([[kev.cve, kev]]),
       },
       '2026-09-10T00:00:00Z',
+      [
+        {
+          package: {
+            ecosystem: 'npm',
+            name: 'demo-package',
+            version: '1.2.3',
+          },
+          advisoryIds: ['CVE-2025-12345'],
+          verdict: 'confirmed',
+          rationale: 'A public request reaches the affected package behavior.',
+          inspectedEvidence: [
+            {
+              path: 'src/handler.ts',
+              role: 'source',
+              summary: 'Accepts the attacker-controlled request.',
+            },
+            {
+              path: 'src/package-call.ts',
+              role: 'sink',
+              summary: 'Invokes the affected package behavior.',
+            },
+          ],
+        },
+      ],
     )
 
     expect(findings).toHaveLength(1)
@@ -115,6 +139,10 @@ describe('OSV dependency findings', () => {
     expect(findings[0]?.vulnerability?.cvss[0]?.score).toBe(5.3)
     expect(findings[0]?.priority).toBe('critical')
     expect(findings[0]?.priorityScore).toBeGreaterThanOrEqual(95)
+    expect(findings[0]?.exploitability?.verdict).toBe('confirmed')
+    expect(findings[0]?.evidence).toContainEqual(
+      expect.objectContaining({ path: 'src/package-call.ts' }),
+    )
   })
 })
 
@@ -133,9 +161,39 @@ describe('CVSS and contextual priority', () => {
       epss: [],
       kev: [],
       fixedVersions: [],
+      exploitability: {
+        verdict: 'confirmed',
+        rationale: 'A public request reaches the affected package behavior.',
+      },
     })
     expect(priority.priority).toBe('high')
     expect(priority.score).toBe(74)
+  })
+
+  test('keeps unconfirmed dependency impact at low contextual priority', () => {
+    const priority = deriveDependencyPriority({
+      cvssScore: 9.8,
+      severity: 'critical',
+      epss: [
+        {
+          cve: 'CVE-2025-12345',
+          probability: 0.8,
+          percentile: 0.99,
+          date: '2026-09-17',
+        },
+      ],
+      kev: [],
+      fixedVersions: ['2.0.0'],
+      exploitability: {
+        verdict: 'not-confirmed',
+        rationale: 'The package is used only by trusted build tooling.',
+      },
+    })
+
+    expect(priority).toMatchObject({ priority: 'low', score: 20 })
+    expect(priority.reasons).toContain(
+      'The package is used only by trusted build tooling.',
+    )
   })
 
   test('raises source priority from grounded exposure context', () => {

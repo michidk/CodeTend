@@ -548,6 +548,7 @@ async function persistDependencyAudit(input: {
       const enriched = await enrichDependencyAudit({
         report: input.audit.report,
         workspaceRoot: `${workspacesDir()}/repo-${input.repository.id}-scan-${input.scanId}`,
+        exploitabilityAssessments: input.audit.exploitabilityAssessments,
       })
       freshFindings = enriched.findings
       summary = enriched.summary

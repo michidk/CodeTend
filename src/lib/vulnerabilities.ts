@@ -102,6 +102,25 @@ export interface VulnerabilityIntelligence {
   readonly kevByCve: ReadonlyMap<string, KevEntry>
 }
 
+export interface DependencyImpactAssessment {
+  readonly package: {
+    readonly ecosystem: string
+    readonly name: string
+    readonly version: string
+  }
+  readonly advisoryIds: readonly string[]
+  readonly verdict: 'confirmed' | 'not-confirmed'
+  readonly rationale: string
+  readonly inspectedEvidence: readonly {
+    readonly path: string
+    readonly startLine?: number
+    readonly endLine?: number
+    readonly symbol?: string
+    readonly role: 'source' | 'control' | 'sink' | 'supporting' | 'test'
+    readonly summary: string
+  }[]
+}
+
 export function parseOsvDependencyReport(
   report: unknown,
   workspaceRoot: string,
@@ -178,6 +197,7 @@ export function dependencyFindingsFromMatches(
   matches: readonly OsvDependencyMatch[],
   intelligence: VulnerabilityIntelligence,
   enrichedAt = new Date().toISOString(),
+  assessments: readonly DependencyImpactAssessment[] = [],
 ): EnrichedScannerFinding[] {
   const findings: EnrichedScannerFinding[] = matches.map((match) => {
     const cves = match.ids.filter((id) => /^CVE-/i.test(id))
@@ -213,12 +233,24 @@ export function dependencyFindingsFromMatches(
           affected.package.ecosystem === match.ecosystem &&
           affected.package.name === match.packageName,
       )?.package.purl
+    const assessment = dependencyImpactAssessmentForMatch(match, assessments)
+    const exploitability = assessment
+      ? {
+          verdict: assessment.verdict,
+          rationale: assessment.rationale,
+        }
+      : {
+          verdict: 'not-confirmed' as const,
+          rationale:
+            'The independent dependency impact review did not return a confirmed assessment for this candidate.',
+        }
     const priority = deriveDependencyPriority({
       cvssScore: highestCvss > 0 ? highestCvss : null,
       severity,
       epss,
       kev,
       fixedVersions,
+      exploitability,
     })
     const primary = preferredAdvisoryId(match.ids, match.key)
     const summary =
@@ -274,7 +306,12 @@ export function dependencyFindingsFromMatches(
       severity,
       confidence: 'high',
       description: `${summary} The installed version was matched from ${match.manifestPath} using exact ${purl ? 'purl' : 'ecosystem, package and version'} evidence.`,
-      whyItMatters: dependencyImpactText({ epss, kev, cvss }),
+      whyItMatters: dependencyImpactText({
+        epss,
+        kev,
+        cvss,
+        exploitability,
+      }),
       recommendation:
         fixedVersions.length > 0
           ? `Upgrade ${match.packageName} to ${fixedVersions[0]} or a later compatible release, regenerate ${match.manifestPath} with the repository package manager, and verify the affected behavior.`
@@ -287,9 +324,25 @@ export function dependencyFindingsFromMatches(
           path: match.manifestPath,
           summary: `Lockfile resolves ${match.packageName}@${match.version}; OSV matched the exact package version.`,
         },
+        ...(assessment?.inspectedEvidence.map((entry) => ({
+          kind: 'file' as const,
+          path: entry.path,
+          startLine: entry.startLine,
+          endLine: entry.endLine,
+          summary: `${entry.role}: ${entry.summary}`,
+        })) ?? []),
       ],
-      locations: [{ path: match.manifestPath }],
+      locations: [
+        { path: match.manifestPath },
+        ...(assessment?.inspectedEvidence.map((entry) => ({
+          path: entry.path,
+          startLine: entry.startLine,
+          endLine: entry.endLine,
+          symbol: entry.symbol,
+        })) ?? []),
+      ],
       classification: { cwes, owasp: [] },
+      exploitability,
       vulnerability,
       priority: priority.priority,
       priorityScore: priority.score,
@@ -351,7 +404,17 @@ export function deriveDependencyPriority(input: {
   readonly epss: readonly EpssMetric[]
   readonly kev: readonly KevEntry[]
   readonly fixedVersions: readonly string[]
+  readonly exploitability?: ScannerFinding['exploitability']
 }): { priority: FindingPriority; score: number; reasons: string[] } {
+  if (input.exploitability?.verdict !== 'confirmed') {
+    return priorityResult(20, [
+      'Dependency impact review did not confirm a practical attack path',
+      ...(input.exploitability?.rationale
+        ? [input.exploitability.rationale]
+        : []),
+    ])
+  }
+
   const reasons: string[] = []
   let score =
     input.cvssScore === null
@@ -562,7 +625,11 @@ function dependencyImpactText(input: {
   readonly epss: readonly EpssMetric[]
   readonly kev: readonly KevEntry[]
   readonly cvss: readonly CvssMetric[]
+  readonly exploitability: NonNullable<ScannerFinding['exploitability']>
 }): string {
+  if (input.exploitability.verdict !== 'confirmed') {
+    return `The installed version matches a published vulnerability, but the repository-specific impact review did not establish a practical attack path. ${input.exploitability.rationale}`
+  }
   if (input.kev.length > 0) {
     return 'CISA records this vulnerability as exploited in the wild, so the affected package should be treated as an active remediation priority.'
   }
@@ -574,6 +641,20 @@ function dependencyImpactText(input: {
     return 'The installed version matches a published vulnerability. No EPSS or CISA KEV signal was available, and repository reachability is not yet known.'
   }
   return 'The installed version matches a published OSV advisory. No standardized CVSS, EPSS, or CISA KEV signal was available, so applicability should be reviewed directly.'
+}
+
+function dependencyImpactAssessmentForMatch(
+  match: OsvDependencyMatch,
+  assessments: readonly DependencyImpactAssessment[],
+): DependencyImpactAssessment | undefined {
+  const advisoryIds = new Set(match.ids.map((id) => id.toUpperCase()))
+  return assessments.find(
+    (assessment) =>
+      assessment.package.ecosystem === match.ecosystem &&
+      assessment.package.name === match.packageName &&
+      assessment.package.version === match.version &&
+      assessment.advisoryIds.some((id) => advisoryIds.has(id.toUpperCase())),
+  )
 }
 
 function priorityResult(
