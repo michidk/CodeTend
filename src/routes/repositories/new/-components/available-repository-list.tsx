@@ -39,6 +39,7 @@ export function AvailableRepositoryList({
           name: repository.name,
           url: repository.url,
           branch: repository.branch,
+          scheduleEnabled: true,
           scheduleCronExpression: null,
         },
       })

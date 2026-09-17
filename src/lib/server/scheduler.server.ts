@@ -97,7 +97,12 @@ async function tick(state: SchedulerState) {
       const repositoryIds = await db
         .select({ repositoryId: repositories.id })
         .from(repositories)
-        .where(isNull(repositories.scheduleCronExpression))
+        .where(
+          and(
+            eq(repositories.scheduleEnabled, true),
+            isNull(repositories.scheduleCronExpression),
+          ),
+        )
         .orderBy(asc(repositories.createdAt), asc(repositories.id))
       if (repositoryIds.length > 0) {
         await db
@@ -123,6 +128,7 @@ async function tick(state: SchedulerState) {
 
     const dueOverrides = await db.query.repositories.findMany({
       where: and(
+        eq(repositories.scheduleEnabled, true),
         isNotNull(repositories.scheduleCronExpression),
         isNotNull(repositories.nextScheduledScanAt),
         lte(repositories.nextScheduledScanAt, now),

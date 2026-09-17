@@ -161,11 +161,12 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
     return {
       repository,
       schedule: {
-        enabled: scheduleSettings.enabled,
+        enabled: scheduleSettings.enabled && repository.scheduleEnabled,
         cronExpression:
           repository.scheduleCronExpression ?? scheduleSettings.cronExpression,
-        nextRunAt:
-          repository.scheduleCronExpression === null
+        nextRunAt: !repository.scheduleEnabled
+          ? null
+          : repository.scheduleCronExpression === null
             ? scheduleSettings.nextRunAt
             : repository.nextScheduledScanAt,
         overridden: repository.scheduleCronExpression !== null,

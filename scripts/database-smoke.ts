@@ -22,6 +22,7 @@ try {
   }
 
   const requiredRepositoryScheduleColumns = [
+    'schedule_enabled',
     'schedule_cron_expression',
     'next_scheduled_scan_at',
   ]

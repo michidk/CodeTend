@@ -38,6 +38,7 @@ function EditRepositoryPage() {
           name: repository.name,
           url: repository.url,
           branch: repository.branch,
+          scheduleEnabled: repository.scheduleEnabled,
           scheduleCronExpression: repository.scheduleCronExpression,
         }}
         globalSchedule={detail.globalSchedule}

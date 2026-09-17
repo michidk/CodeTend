@@ -34,26 +34,35 @@ import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
 
-const repositoryInputSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  url: z
-    .string()
-    .trim()
-    .min(1)
-    .max(500)
-    .refine(
-      (value) => /^(https?:\/\/|git@|ssh:\/\/|file:\/\/|\/)/.test(value),
-      'Enter a Git URL (https://, ssh://, git@ or an absolute local path)',
-    ),
-  branch: z.string().trim().min(1).max(200),
-  scheduleCronExpression: z
-    .string()
-    .trim()
-    .min(9)
-    .max(100)
-    .refine(isValidCronExpression, 'Enter a valid 5-field cron expression')
-    .nullable(),
-})
+const repositoryInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    url: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .refine(
+        (value) => /^(https?:\/\/|git@|ssh:\/\/|file:\/\/|\/)/.test(value),
+        'Enter a Git URL (https://, ssh://, git@ or an absolute local path)',
+      ),
+    branch: z.string().trim().min(1).max(200),
+    scheduleEnabled: z.boolean(),
+    scheduleCronExpression: z
+      .string()
+      .trim()
+      .min(9)
+      .max(100)
+      .refine(isValidCronExpression, 'Enter a valid 5-field cron expression')
+      .nullable(),
+  })
+  .refine(
+    (input) => input.scheduleEnabled || input.scheduleCronExpression === null,
+    {
+      message: 'A disabled repository cannot have a schedule override',
+      path: ['scheduleCronExpression'],
+    },
+  )
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>
 
@@ -152,12 +161,13 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
         activeFindings: openByRepository.get(repository.id) ?? 0,
         runningScan: runningByRepository.get(repository.id) ?? null,
         schedule: {
-          enabled: scheduleSettings.enabled,
+          enabled: scheduleSettings.enabled && repository.scheduleEnabled,
           cronExpression:
             repository.scheduleCronExpression ??
             scheduleSettings.cronExpression,
-          nextRunAt:
-            repository.scheduleCronExpression === null
+          nextRunAt: !repository.scheduleEnabled
+            ? null
+            : repository.scheduleCronExpression === null
               ? scheduleSettings.nextRunAt
               : repository.nextScheduledScanAt,
           overridden: repository.scheduleCronExpression !== null,
@@ -217,16 +227,17 @@ export const createRepository = createServerFn({ method: 'POST' })
       .insert(repositories)
       .values({
         ...data,
-        nextScheduledScanAt: data.scheduleCronExpression
-          ? computeNextScanAt(data.scheduleCronExpression, new Date())
-          : null,
+        nextScheduledScanAt:
+          data.scheduleEnabled && data.scheduleCronExpression
+            ? computeNextScanAt(data.scheduleCronExpression, new Date())
+            : null,
       })
       .returning()
     return expectReturnedRow(row, 'Repository')
   })
 
 export const updateRepository = createServerFn({ method: 'POST' })
-  .validator(repositoryInputSchema.extend({ id: positiveId }))
+  .validator(repositoryInputSchema.safeExtend({ id: positiveId }))
   .handler(async ({ data }) => {
     assertRepositoryAccess(data.url)
     const { id, ...values } = data
@@ -235,6 +246,7 @@ export const updateRepository = createServerFn({ method: 'POST' })
     })
     if (!current) throw new DomainError('not_found', 'Repository not found')
     const scheduleChanged =
+      current.scheduleEnabled !== values.scheduleEnabled ||
       current.scheduleCronExpression !== values.scheduleCronExpression
     const [row] = await db.transaction(async (transaction) => {
       const updated = await transaction
@@ -242,7 +254,7 @@ export const updateRepository = createServerFn({ method: 'POST' })
         .set({
           ...values,
           nextScheduledScanAt: scheduleChanged
-            ? values.scheduleCronExpression
+            ? values.scheduleEnabled && values.scheduleCronExpression
               ? computeNextScanAt(values.scheduleCronExpression, new Date())
               : null
             : current.nextScheduledScanAt,

@@ -1,0 +1,1 @@
+ALTER TABLE "repositories" ADD COLUMN "schedule_enabled" boolean DEFAULT true NOT NULL;
