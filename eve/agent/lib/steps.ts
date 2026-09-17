@@ -327,9 +327,15 @@ export async function clonePatchRepository(
   assertOk(fetch, `git fetch of revision ${request.revision}`)
   const checkout = await run(
     'git',
-    ['checkout', '--detach', request.revision],
+    [
+      ...auth.gitConfig.flatMap((setting) => ['-c', setting]),
+      'checkout',
+      '--detach',
+      request.revision,
+    ],
     {
       cwd: hostPath,
+      env: { GIT_TERMINAL_PROMPT: '0', ...auth.env },
     },
   )
   assertOk(checkout, `git checkout of ${request.revision}`)
