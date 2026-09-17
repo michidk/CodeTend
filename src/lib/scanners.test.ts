@@ -42,4 +42,18 @@ describe('scanner registry', () => {
       'distinguish observed code from assumptions',
     )
   })
+
+  test('CI security scanner traces workflow trust boundaries without overlapping neighbours', () => {
+    const scanner = getScanner('ci-security')
+    expect(scanner?.enabled).toBe(true)
+    expect(scanner?.kind).toBeUndefined()
+    expect(scanner?.prompt).toContain('pull_request_target')
+    expect(scanner?.prompt).toContain('full commit-SHA pins')
+    expect(scanner?.prompt).toContain('external actor or lower-trust producer')
+    expect(scanner?.prompt).toContain('(Dependencies & Build Health)')
+    expect(scanner?.prompt).toContain('(Tests & Testability)')
+    expect(scanner?.prompt).toContain('(Security Hygiene)')
+    expect(scanner?.fixGuidance).toContain('full 40-character commit SHA')
+    expect(scanner?.fixGuidance).toContain('read-only')
+  })
 })

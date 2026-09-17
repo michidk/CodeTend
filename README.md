@@ -42,7 +42,7 @@
 
 CodeTend is **not** an autonomous pull-request bot. It registers repositories
 and, on a schedule or on demand, makes a fresh checkout of the configured
-branch and runs fourteen specialized scanner agents
+branch and runs fifteen specialized scanner agents
 over it: one per dimension of technical debt, from architecture and
 duplication to reliability, type safety, AI slop, dependency health and
 security. Their structured findings become deterministic scores and grades,
@@ -50,12 +50,13 @@ every finding is tracked across scans, and each dimension produces one
 aggregated fix prompt you paste into Claude Code, Codex or another coding
 agent.
 
-- 🧭 **Fourteen dimensions, one registry.** Architecture & Modularity,
+- 🧭 **Fifteen dimensions, one registry.** Architecture & Modularity,
   Duplication & Abstraction, Dead & Obsolete Code, Complexity &
   Maintainability, Tests & Testability, Reliability & Error Handling,
   Documentation, Domain & API Design, Type Safety & Data Contracts,
   Consistency / Vibe Debt, AI Slop & Noise, Dependencies & Build Health,
-  Vulnerable Dependencies and Security Hygiene. Each scanner's prompt says
+  Vulnerable Dependencies, CI & GitHub Actions Security and Security Hygiene.
+  Each scanner's prompt says
   what it owns and what its neighbours own, so nothing is reported twice.
 - 📐 **Numbers the model never touches.** Every scanner starts at 100 and
   loses a fixed penalty per open finding scaled by confidence. Grades A–F
