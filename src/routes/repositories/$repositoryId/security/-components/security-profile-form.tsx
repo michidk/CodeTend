@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { getErrorMessage } from '@/lib/error-message'
 import type { SecurityProfile } from '@/lib/security-scans'
 import { updateRepositorySecurityProfile } from '@/lib/server/security-profile'
@@ -109,7 +110,7 @@ export function SecurityProfileForm({
           <Label htmlFor="security-project-overview">
             Architecture and security context
           </Label>
-          <textarea
+          <Textarea
             id="security-project-overview"
             value={profile.projectOverview}
             onChange={(event) =>
@@ -119,7 +120,6 @@ export function SecurityProfileForm({
               }))
             }
             rows={10}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </CardContent>
       </Card>
@@ -187,7 +187,7 @@ export function SecurityProfileForm({
                           >
                             {label} item {index + 1}
                           </Label>
-                          <textarea
+                          <Textarea
                             id={`security-${field}-${index}`}
                             value={value}
                             onChange={(event) =>
@@ -201,8 +201,8 @@ export function SecurityProfileForm({
                                 ),
                               }))
                             }
-                            rows={2}
-                            className="min-h-16 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm whitespace-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            rows={1}
+                            className="max-h-48 min-h-20 resize-none overflow-y-auto [field-sizing:content]"
                           />
                         </TableCell>
                         <TableCell className="align-top">
