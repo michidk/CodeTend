@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from '@/lib/agent-execution'
+
 /**
  * Registry of specialized scanners. Adding a scanner means appending an entry
  * here: the scan pipeline, scoring, UI and fix prompts all iterate this list.
@@ -16,6 +18,10 @@ export interface ScannerDefinition {
   /** Relative weight when combining scanner scores into the overall score. */
   readonly weight: number
   readonly enabled: boolean
+  /** Optional model override; null inherits the global scan profile. */
+  readonly model?: string | null
+  /** Optional reasoning override; null inherits the global scan profile. */
+  readonly effort?: ReasoningEffort | null
   /** Custom scanners are operator-defined and can be removed. */
   readonly custom?: boolean
   /** Dimension-specific review instructions handed to the scanner agent. */

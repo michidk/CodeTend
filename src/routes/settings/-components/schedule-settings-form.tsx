@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { REASONING_EFFORTS } from '@/lib/agent-execution'
 import { getErrorMessage } from '@/lib/error-message'
 import { formatDateTime } from '@/lib/format'
 import {
@@ -60,6 +61,16 @@ export function ScheduleSettingsForm({
       ? ''
       : String(settings.defaultScanCostUsd),
   )
+  const [scanConcurrency, setScanConcurrency] = useState(
+    String(settings.scanConcurrency),
+  )
+  const [fixConcurrency, setFixConcurrency] = useState(
+    String(settings.fixConcurrency),
+  )
+  const [scanModel, setScanModel] = useState(settings.scanModel)
+  const [scanEffort, setScanEffort] = useState(settings.scanEffort)
+  const [fixModel, setFixModel] = useState(settings.fixModel)
+  const [fixEffort, setFixEffort] = useState(settings.fixEffort)
   const [submitting, setSubmitting] = useState(false)
 
   const cronValid =
@@ -89,6 +100,16 @@ export function ScheduleSettingsForm({
   const defaultScanCostValid =
     defaultScanCost === null ||
     (Number.isFinite(defaultScanCost) && defaultScanCost > 0)
+  const scanConcurrencyValue = Number(scanConcurrency)
+  const fixConcurrencyValue = Number(fixConcurrency)
+  const concurrencyValid =
+    Number.isInteger(scanConcurrencyValue) &&
+    scanConcurrencyValue >= 1 &&
+    scanConcurrencyValue <= 32 &&
+    Number.isInteger(fixConcurrencyValue) &&
+    fixConcurrencyValue >= 1 &&
+    fixConcurrencyValue <= 32
+  const profilesValid = Boolean(scanModel.trim() && fixModel.trim())
   const nextRun =
     cronValid && scansPerDayValid
       ? mode === 'distributed'
@@ -104,7 +125,9 @@ export function ScheduleSettingsForm({
       !cooldownValid ||
       !tokenBudgetValid ||
       !dailyCostBudgetValid ||
-      !defaultScanCostValid
+      !defaultScanCostValid ||
+      !concurrencyValid ||
+      !profilesValid
     )
       return
     setSubmitting(true)
@@ -119,6 +142,12 @@ export function ScheduleSettingsForm({
           maxInputTokens: tokenBudget,
           maxDailyCostUsd: dailyCostBudget,
           defaultScanCostUsd: defaultScanCost,
+          scanConcurrency: scanConcurrencyValue,
+          fixConcurrency: fixConcurrencyValue,
+          scanModel: scanModel.trim(),
+          scanEffort,
+          fixModel: fixModel.trim(),
+          fixEffort,
         },
       })
       toast.success('Settings saved')
@@ -132,6 +161,47 @@ export function ScheduleSettingsForm({
 
   return (
     <form onSubmit={(event) => void submit(event)} className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent execution</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Scans and fix agents use independent FIFO queues. Raising a limit
+            immediately dispatches queued work up to the new capacity.
+          </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <ExecutionProfileFields
+              kind="scan"
+              title="Scan agents"
+              model={scanModel}
+              effort={scanEffort}
+              concurrency={scanConcurrency}
+              queued={settings.queuedScans}
+              onModelChange={setScanModel}
+              onEffortChange={setScanEffort}
+              onConcurrencyChange={setScanConcurrency}
+            />
+            <ExecutionProfileFields
+              kind="fix"
+              title="Fix agents"
+              model={fixModel}
+              effort={fixEffort}
+              concurrency={fixConcurrency}
+              queued={settings.queuedFixes}
+              onModelChange={setFixModel}
+              onEffortChange={setFixEffort}
+              onConcurrencyChange={setFixConcurrency}
+            />
+          </div>
+          {!concurrencyValid || !profilesValid ? (
+            <p className="text-xs text-destructive-text">
+              Models are required; concurrency must be between 1 and 32.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Repository scan schedule</CardTitle>
@@ -390,6 +460,8 @@ export function ScheduleSettingsForm({
             !tokenBudgetValid ||
             !dailyCostBudgetValid ||
             !defaultScanCostValid ||
+            !concurrencyValid ||
+            !profilesValid ||
             submitting
           }
         >
@@ -397,5 +469,75 @@ export function ScheduleSettingsForm({
         </Button>
       </div>
     </form>
+  )
+}
+
+function ExecutionProfileFields({
+  kind,
+  title,
+  model,
+  effort,
+  concurrency,
+  queued,
+  onModelChange,
+  onEffortChange,
+  onConcurrencyChange,
+}: {
+  readonly kind: 'scan' | 'fix'
+  readonly title: string
+  readonly model: string
+  readonly effort: (typeof REASONING_EFFORTS)[number]
+  readonly concurrency: string
+  readonly queued: number
+  readonly onModelChange: (value: string) => void
+  readonly onEffortChange: (value: (typeof REASONING_EFFORTS)[number]) => void
+  readonly onConcurrencyChange: (value: string) => void
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-xl border border-border p-4">
+      <legend className="px-1 font-display font-bold">{title}</legend>
+      <div className="space-y-2">
+        <Label htmlFor={`${kind}-model`}>Default model</Label>
+        <Input
+          id={`${kind}-model`}
+          required
+          value={model}
+          onChange={(event) => onModelChange(event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${kind}-effort`}>Reasoning effort</Label>
+        <select
+          id={`${kind}-effort`}
+          className="h-10 w-full rounded-xl border border-input bg-card px-3 text-sm"
+          value={effort}
+          onChange={(event) =>
+            onEffortChange(
+              event.target.value as (typeof REASONING_EFFORTS)[number],
+            )
+          }
+        >
+          {REASONING_EFFORTS.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${kind}-concurrency`}>Maximum concurrency</Label>
+        <Input
+          id={`${kind}-concurrency`}
+          required
+          type="number"
+          min={1}
+          max={32}
+          step={1}
+          value={concurrency}
+          onChange={(event) => onConcurrencyChange(event.target.value)}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">{queued} currently queued</p>
+    </fieldset>
   )
 }

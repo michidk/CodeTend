@@ -47,10 +47,15 @@ export const getActivityStatus = createServerFn({ method: 'GET' })
         .from(scans)
         .where(and(inArray(scans.status, ['queued', 'running']), scanScope)),
       db
-        .select({ id: findingPatches.id })
+        .select({ id: findingPatches.id, status: findingPatches.status })
         .from(findingPatches)
         .innerJoin(findings, eq(findingPatches.findingId, findings.id))
-        .where(and(eq(findingPatches.status, 'generating'), patchScope)),
+        .where(
+          and(
+            inArray(findingPatches.status, ['queued', 'generating']),
+            patchScope,
+          ),
+        ),
     ])
 
     const busy = activeScans.length > 0 || generatingPatches.length > 0
@@ -59,7 +64,7 @@ export const getActivityStatus = createServerFn({ method: 'GET' })
         (scan) =>
           `s${scan.id}:${scan.status}:${scan.phase ?? ''}:${JSON.stringify(scan.progress)}:${scan.cancelling ? 'c' : ''}`,
       ),
-      ...generatingPatches.map((patch) => `p${patch.id}`),
+      ...generatingPatches.map((patch) => `p${patch.id}:${patch.status}`),
     ].join('|')
 
     return { busy, signature }

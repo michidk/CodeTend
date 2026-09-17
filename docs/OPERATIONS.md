@@ -4,8 +4,9 @@
 
 Run one app replica, one Eve runtime and PostgreSQL with a shared `scan_data`
 volume. The database enforces one active scan per repository and one active
-proposal per finding; configured scan/patch capacity and the shared daily AI
-cost limit provide additional admission control.
+proposal per finding; the persisted scan/fix queues, their Settings-managed
+concurrency limits and the shared daily AI cost limit provide additional
+admission control.
 Terminate TLS at a trusted reverse proxy and keep the app bound to loopback or
 a private network. The app has no login of its own — put a login-gating
 proxy (for example Hodor) in front of it; do not expose it directly.
@@ -44,9 +45,9 @@ repository; download the `.diff` and apply it through the organization's normal
 review and CI process.
 
 Fixer usage is recorded on the patch and included in the same UTC-day budget as
-scan usage. `TECDEBT_MAX_ACTIVE_PATCHES` bounds concurrent fixer jobs (default
-one); the per-session input-token ceiling also applies to both the root and
-fixer sessions.
+scan usage. The Settings page bounds concurrent fixer jobs (default one); the
+per-session input-token ceiling also applies to both the root and fixer
+sessions.
 
 ## Health and rollout
 

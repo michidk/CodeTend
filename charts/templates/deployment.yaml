@@ -69,10 +69,6 @@ spec:
                   key: {{ .Values.secrets.evePasswordKey }}
             - name: TECDEBT_ALLOWED_GIT_HOSTS
               value: {{ .Values.scanning.allowedGitHosts | quote }}
-            - name: TECDEBT_MAX_ACTIVE_SCANS
-              value: {{ .Values.scanning.maxActiveScans | quote }}
-            - name: TECDEBT_MAX_ACTIVE_PATCHES
-              value: {{ .Values.scanning.maxActivePatches | quote }}
             - name: TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS
               value: {{ .Values.scanning.manualScanCooldownSeconds | quote }}
             - name: SCHEDULER_INTERVAL_SECONDS

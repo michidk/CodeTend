@@ -299,7 +299,7 @@ export const deleteRepository = createServerFn({ method: 'POST' })
       .where(
         and(
           eq(findings.repositoryId, id),
-          eq(findingPatches.status, 'generating'),
+          inArray(findingPatches.status, ['queued', 'generating']),
         ),
       )
       .limit(1)

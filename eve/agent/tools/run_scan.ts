@@ -1,5 +1,6 @@
 import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
+import { executionProfileMarker } from '@/lib/agent-execution'
 import { scannerResultSchema } from '@/lib/findings'
 import type {
   DependencyAuditResult,
@@ -174,7 +175,7 @@ export default defineWorkflowTool({
       gitnexusRepo,
       runAgent: (message) =>
         ctx.agent('knowledge', {
-          message,
+          message: `${executionProfileMarker(request.executionProfile)}\n${message}`,
           outputSchema: knowledgeOutputSchema,
         }),
     })
@@ -249,7 +250,7 @@ export default defineWorkflowTool({
             securityProfile,
             runAgent: (message) =>
               ctx.agent('scanner', {
-                message,
+                message: `${executionProfileMarker(scanner.executionProfile)}\n${message}`,
                 outputSchema: request.outputSchema as JsonObject,
               }),
           }),
@@ -328,14 +329,16 @@ export default defineWorkflowTool({
       let review: ExploitabilityReview = { assessments: [] }
       try {
         const rawReview = await ctx.agent('scanner', {
-          message: exploitabilityReviewMessage({
-            repoPath,
-            repositoryName: request.repositoryName,
-            findings: securityResult.findings,
-            validations,
-            securityProfile,
-            gitnexusRepo,
-          }),
+          message: `${executionProfileMarker(request.executionProfile)}\n${exploitabilityReviewMessage(
+            {
+              repoPath,
+              repositoryName: request.repositoryName,
+              findings: securityResult.findings,
+              validations,
+              securityProfile,
+              gitnexusRepo,
+            },
+          )}`,
           outputSchema: exploitabilityReviewJsonSchema,
         })
         const parsed = exploitabilityReviewSchema.safeParse(rawReview)
@@ -384,13 +387,15 @@ export default defineWorkflowTool({
       for (const batch of dependencyImpactReviewBatches(candidates)) {
         try {
           const rawReview = await ctx.agent('scanner', {
-            message: dependencyImpactReviewMessage({
-              repoPath,
-              repositoryName: request.repositoryName,
-              candidates: batch,
-              securityProfile,
-              gitnexusRepo,
-            }),
+            message: `${executionProfileMarker(request.executionProfile)}\n${dependencyImpactReviewMessage(
+              {
+                repoPath,
+                repositoryName: request.repositoryName,
+                candidates: batch,
+                securityProfile,
+                gitnexusRepo,
+              },
+            )}`,
             outputSchema: dependencyImpactReviewJsonSchema,
           })
           const parsed = dependencyImpactReviewSchema.safeParse(rawReview)

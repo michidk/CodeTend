@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { REASONING_EFFORTS } from '@/lib/agent-execution'
 import { getErrorMessage } from '@/lib/error-message'
 import { customScannerSchema } from '@/lib/scanner-configuration'
 import type { ScannerDefinition } from '@/lib/scanners'
@@ -24,6 +25,7 @@ import {
   createCustomScanner,
   deleteCustomScanner,
   setGlobalScannerEnabled,
+  setGlobalScannerExecutionProfile,
 } from '@/lib/server/scanner-settings'
 
 const EMPTY_FORM = {
@@ -51,6 +53,14 @@ export function ScannerSettings({
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [profiles, setProfiles] = useState(() =>
+    Object.fromEntries(
+      scanners.map((scanner) => [
+        scanner.id,
+        { model: scanner.model ?? '', effort: scanner.effort ?? '' },
+      ]),
+    ),
+  )
 
   const toggle = async (scanner: ScannerDefinition, enabled: boolean) => {
     setChangingId(scanner.id)
@@ -113,6 +123,28 @@ export function ScannerSettings({
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  const saveProfile = async (scanner: ScannerDefinition) => {
+    const profile = profiles[scanner.id]
+    if (!profile) return
+    setChangingId(scanner.id)
+    try {
+      await setGlobalScannerExecutionProfile({
+        data: {
+          scannerId: scanner.id,
+          model: profile.model.trim() || null,
+          effort:
+            (profile.effort as (typeof REASONING_EFFORTS)[number]) || null,
+        },
+      })
+      toast.success(`${scanner.name} execution profile saved`)
+      await router.invalidate()
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not update scanner profile'))
+    } finally {
+      setChangingId(null)
+    }
+  }
+
   return (
     <>
       <div className="flex justify-end">
@@ -150,6 +182,71 @@ export function ScannerSettings({
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              {scanner.kind !== 'dependency-audit' ? (
+                <>
+                  <div className="grid gap-3 border-t border-border/70 pt-3 sm:grid-cols-2">
+                    <Field
+                      label="Model override"
+                      htmlFor={`${scanner.id}-model`}
+                    >
+                      <Input
+                        id={`${scanner.id}-model`}
+                        value={profiles[scanner.id]?.model ?? ''}
+                        placeholder="Inherit scan model"
+                        onChange={(event) =>
+                          setProfiles((current) => ({
+                            ...current,
+                            [scanner.id]: {
+                              ...current[scanner.id],
+                              model: event.target.value,
+                              effort: current[scanner.id]?.effort ?? '',
+                            },
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label="Effort override"
+                      htmlFor={`${scanner.id}-effort`}
+                    >
+                      <select
+                        id={`${scanner.id}-effort`}
+                        className="h-10 w-full rounded-xl border border-input bg-card px-3 text-sm"
+                        value={profiles[scanner.id]?.effort ?? ''}
+                        onChange={(event) =>
+                          setProfiles((current) => ({
+                            ...current,
+                            [scanner.id]: {
+                              ...current[scanner.id],
+                              model: current[scanner.id]?.model ?? '',
+                              effort: event.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">Inherit scan effort</option>
+                        {REASONING_EFFORTS.map((effort) => (
+                          <option key={effort} value={effort}>
+                            {effort}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={changingId === scanner.id}
+                    onClick={() => void saveProfile(scanner)}
+                  >
+                    Save execution profile
+                  </Button>
+                </>
+              ) : (
+                <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">
+                  Deterministic scanner; no model is used.
+                </p>
+              )}
               <details className="text-sm">
                 <summary className="cursor-pointer font-semibold text-link">
                   Prompt

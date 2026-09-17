@@ -181,7 +181,12 @@ function ScanHistoryPage() {
                       {formatScore(scan.overallScore)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {scan.model ?? '–'}
+                      {scan.model ?? scan.requestedModel}
+                      {scan.status === 'queued' ? (
+                        <span className="block capitalize">
+                          {scan.requestedEffort} effort
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-right">
                       <TokensCell usage={scan} />

@@ -141,8 +141,6 @@ model:
 
 scanning:
   allowedGitHosts: github.com
-  maxActiveScans: 2
-  maxActivePatches: 1
   manualScanCooldownSeconds: 60
   schedulerIntervalSeconds: 30
   scannerConcurrency: 4

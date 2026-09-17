@@ -49,7 +49,6 @@ import { listGlobalScanners } from '@/lib/server/scanner-settings'
  */
 export async function runScanPipeline(scanId: number, repository: Repository) {
   const env = getServerEnv()
-  const startedAt = new Date()
   try {
     await throwIfCancellationRequested(scanId)
     const scanConfiguration = await db.query.scans.findFirst({
@@ -58,6 +57,8 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
         target: true,
         maxInputTokens: true,
         maxCostUsd: true,
+        requestedModel: true,
+        requestedEffort: true,
       },
     })
     if (!scanConfiguration) throw new Error('Scan configuration disappeared')
@@ -65,23 +66,15 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
       await cancelScanRecord(scanId, repository.id)
       return
     }
-    const claimed = await db
-      .update(scans)
-      .set({
-        status: 'running',
-        phase: 'preparing',
-        progress: { phase: 'preparing', completed: 0, total: 1 },
-        startedAt,
-      })
-      .where(
-        and(
-          eq(scans.id, scanId),
-          eq(scans.status, 'queued'),
-          isNull(scans.cancellationRequestedAt),
-        ),
-      )
-      .returning({ id: scans.id })
-    if (claimed.length === 0) {
+    const claimed = await db.query.scans.findFirst({
+      where: and(
+        eq(scans.id, scanId),
+        eq(scans.status, 'running'),
+        isNull(scans.cancellationRequestedAt),
+      ),
+      columns: { id: true },
+    })
+    if (!claimed) {
       await cancelScanRecord(scanId, repository.id)
       return
     }
@@ -141,6 +134,8 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
         scannerId: scanner.id,
         scannerDefinition: scanner,
         status: 'pending' as const,
+        requestedModel: scanner.model ?? scanConfiguration.requestedModel,
+        requestedEffort: scanner.effort ?? scanConfiguration.requestedEffort,
       })),
     )
 
@@ -155,6 +150,10 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
 
     await writeScanRequest({
       contractVersion: 1,
+      executionProfile: {
+        model: scanConfiguration.requestedModel,
+        effort: scanConfiguration.requestedEffort,
+      },
       scanId,
       previousCommitSha: previousScan?.commitSha ?? null,
       target: scanConfiguration.target,
@@ -186,6 +185,10 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
         id: scanner.id,
         name: scanner.name,
         prompt: scanner.prompt,
+        executionProfile: {
+          model: scanner.model ?? scanConfiguration.requestedModel,
+          effort: scanner.effort ?? scanConfiguration.requestedEffort,
+        },
         attentionHistory: recentAttention
           .filter((entry) => entry.scannerId === scanner.id)
           .flatMap((entry) =>
@@ -229,7 +232,10 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
       .set({ status: 'running', startedAt: new Date() })
       .where(eq(scannerRuns.scanId, scanId))
 
-    const session = await startEveScanSession(scanId)
+    const session = await startEveScanSession(scanId, {
+      model: scanConfiguration.requestedModel,
+      effort: scanConfiguration.requestedEffort,
+    })
     const attached = await db
       .update(scans)
       .set({ eveSessionId: session.sessionId })

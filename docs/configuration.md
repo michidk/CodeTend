@@ -79,10 +79,13 @@ scan-cancellation tools; read access alone cannot spend model budget.
 
 ## Cost and concurrency guardrails
 
+The Settings page persists separate FIFO concurrency limits and default
+model/reasoning-effort profiles for scans and fix agents. Each scanner can
+override the scan profile from the Scanners page. Changes affect newly queued
+work; a queued job keeps the profile it was created with.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `TECDEBT_MAX_ACTIVE_SCANS` | `2` | Global concurrent scan limit |
-| `TECDEBT_MAX_ACTIVE_PATCHES` | `1` | Global concurrent fixer-job limit |
 | `TECDEBT_MANUAL_SCAN_COOLDOWN_SECONDS` | `60` | Per-repository cooldown between manual scans |
 | `TECDEBT_SCANNER_CONCURRENCY` | `4` | How many scanner subagents run at once inside one scan |
 | `TECDEBT_MAX_INPUT_TOKENS_PER_SESSION` | unlimited | Cumulative input-token ceiling per knowledge, scanner or fixer session. A session that reaches it parks the scan until an operator approves more budget; prefer the USD caps. |
@@ -107,8 +110,8 @@ managed from the application Settings page. They default to unlimited.
 | `SCHEDULER_INTERVAL_SECONDS` | `30` | How often the app checks the global schedule and its repository queue |
 | `OPENAI_API_KEY` | – | API key for the OpenAI-compatible endpoint (required by Eve) |
 | `OPENAI_BASE_URL` | OpenAI | Point at a gateway such as OpenRouter to run other vendors' models |
-| `TECDEBT_MODEL` | `gpt-5.6-sol` | Model id passed to the endpoint, for example `anthropic/claude-opus-5` through a gateway |
-| `TECDEBT_EFFORT` | `medium` for GPT, `high` for Claude | Reasoning effort: `low`, `medium`, `high`, `xhigh` or `max` |
+| `TECDEBT_MODEL` | `gpt-5.6-sol` | Eve fallback model for sessions started outside CodeTend; CodeTend jobs use their persisted Settings profile |
+| `TECDEBT_EFFORT` | `medium` for GPT, `high` for Claude | Eve fallback reasoning effort for sessions started outside CodeTend |
 | `TECDEBT_MODEL_CONTEXT_WINDOW_TOKENS` | `1050000` | Context window of the configured model |
 
 ## Optional tooling

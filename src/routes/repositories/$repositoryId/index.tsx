@@ -93,7 +93,9 @@ function RepositoryPage() {
   const running = detail?.runningScan ?? null
   const generating =
     detail?.openFindings.some(
-      (finding) => finding.patches[0]?.status === 'generating',
+      (finding) =>
+        finding.patches[0]?.status === 'queued' ||
+        finding.patches[0]?.status === 'generating',
     ) ?? false
   useActivityRefresh(
     { kind: 'repository', repositoryId: detail?.repository.id ?? 0 },

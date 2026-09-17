@@ -1,5 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai'
+import { defineDynamic } from 'eve'
+import {
+  type AgentExecutionProfile,
+  readExecutionProfileMarker,
+} from '../../../src/lib/agent-execution'
 
 /**
  * Drops reasoning parts from assistant history before each call. A durable
@@ -112,7 +117,7 @@ export function modelSettingsMiddleware(
  * OpenAI, a proxy or a gateway such as OpenRouter that serves other vendors'
  * models behind the same API.
  */
-export function scannerModel() {
+export function scannerModel(configured?: AgentExecutionProfile) {
   const baseURL = process.env.OPENAI_BASE_URL?.trim().replace(/\/$/, '')
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -122,10 +127,37 @@ export function scannerModel() {
         : `${baseURL}/v1`
       : undefined,
   })
-  const settings = resolveModelSettings()
+  const settings = configured
+    ? { modelId: configured.model, reasoningEffort: configured.effort }
+    : resolveModelSettings()
   return wrapLanguageModel({
     model: openai.responses(settings.modelId),
     middleware: [stripForeignReasoning, modelSettingsMiddleware(settings)],
+  })
+}
+
+/** Selects the persisted job profile from the current root/subagent prompt. */
+export function dynamicScannerModel() {
+  return defineDynamic({
+    events: {
+      'step.started': (_event, ctx) => {
+        const profile = ctx.messages
+          .map((message) =>
+            typeof message.content === 'string'
+              ? message.content
+              : JSON.stringify(message.content),
+          )
+          .map(readExecutionProfileMarker)
+          .find((candidate) => candidate !== null) ?? {
+          model: process.env.TECDEBT_MODEL?.trim() || DEFAULT_MODEL,
+          effort: 'medium',
+        }
+        return {
+          model: scannerModel(profile),
+          modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
+        }
+      },
+    },
   })
 }
 

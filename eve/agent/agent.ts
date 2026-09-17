@@ -1,5 +1,5 @@
 import { defineAgent } from 'eve'
-import { MODEL_CONTEXT_WINDOW_TOKENS, scannerModel } from './lib/model'
+import { dynamicScannerModel } from './lib/model'
 
 /**
  * Root orchestrator. It never analyzes code itself: the CodeTend app sends one
@@ -11,8 +11,7 @@ import { MODEL_CONTEXT_WINDOW_TOKENS, scannerModel } from './lib/model'
  * scanner and fixer agents; the app enforces the per-scan and daily cost caps.
  */
 export default defineAgent({
-  model: scannerModel(),
-  modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
+  model: dynamicScannerModel(),
   defaultTools: false,
   limits: {
     maxInputTokensPerSession: false,

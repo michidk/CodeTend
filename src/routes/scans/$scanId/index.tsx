@@ -78,7 +78,9 @@ function ScanPage() {
   const active = scan?.status === 'queued' || scan?.status === 'running'
   const generating =
     scan?.occurrences.some(
-      (occurrence) => occurrence.finding.patches[0]?.status === 'generating',
+      (occurrence) =>
+        occurrence.finding.patches[0]?.status === 'queued' ||
+        occurrence.finding.patches[0]?.status === 'generating',
     ) ?? false
   useActivityRefresh(
     { kind: 'scan', scanId: scan?.id ?? 0 },

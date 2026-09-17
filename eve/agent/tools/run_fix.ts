@@ -1,5 +1,6 @@
 import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
+import { executionProfileMarker } from '@/lib/agent-execution'
 import type { PatchResult, ScanRequest } from '../lib/contract'
 import type { JsonObject } from '../lib/json'
 import { sandboxRepoPath } from '../lib/paths'
@@ -62,7 +63,7 @@ export default defineWorkflowTool({
       yield { phase: 'generating patch' }
       const output = await ctx.agent('fixer', {
         outputSchema: fixerOutputSchema,
-        message: patchMessage(request, repoPath),
+        message: `${executionProfileMarker(request.executionProfile)}\n${patchMessage(request, repoPath)}`,
       })
       if (!output || typeof output !== 'object') {
         throw new Error('Fixer returned no structured patch.')
@@ -188,6 +189,7 @@ function patchValidationRequest(
 ): ScanRequest {
   return {
     contractVersion: 1,
+    executionProfile: request.executionProfile,
     scanId: -request.patchId,
     repositoryId: request.repositoryId,
     repositoryName: request.repositoryName,

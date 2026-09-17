@@ -33,7 +33,7 @@ const ORPHAN_GRACE_MS = 30 * 60_000
 
 export async function recoverInterruptedScans(): Promise<void> {
   const active = await db.query.scans.findMany({
-    where: inArray(scans.status, [...ACTIVE_SCAN_STATUSES]),
+    where: eq(scans.status, 'running'),
     with: { repository: true },
   })
   for (const scan of active) {

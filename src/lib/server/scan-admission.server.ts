@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { and, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   repositories,
@@ -17,14 +17,14 @@ import {
   type ScanTarget,
 } from '@/lib/security-scans'
 import { isDailyAiCostBudgetReached } from '@/lib/server/ai-cost-budget.server'
-import { runScanPipeline } from '@/lib/server/scan-execution.server'
+import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
 import { ACTIVE_SCAN_STATUSES } from '@/lib/server/scan-runtime.server'
 import { listGlobalScanners } from '@/lib/server/scanner-settings'
 
 /**
- * Creates a scan row for a repository and starts the pipeline in the
- * background. Returns null when a scan is already active for the repository,
- * which is how concurrent scans of the same repository are prevented.
+ * Creates a durable queued scan and requests dispatch. Returns null when a
+ * scan is already queued or running for the repository, which is how
+ * concurrent scans of the same repository are prevented.
  */
 export async function startScan(
   repositoryId: number,
@@ -82,20 +82,6 @@ export async function startScan(
     }
   }
 
-  const [capacity] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(scans)
-    .where(inArray(scans.status, [...ACTIVE_SCAN_STATUSES]))
-  if ((capacity?.count ?? 0) >= env.TECDEBT_MAX_ACTIVE_SCANS) {
-    if (trigger === 'manual') {
-      throw new DomainError(
-        'conflict',
-        'Scan capacity is full. Try again after a running scan finishes.',
-      )
-    }
-    return null
-  }
-
   if (await isDailyAiCostBudgetReached()) {
     if (trigger === 'manual') {
       throw new DomainError(
@@ -108,7 +94,12 @@ export async function startScan(
 
   const globalSettings = await db.query.scanScheduleSettings.findFirst({
     where: eq(scanScheduleSettings.id, 1),
-    columns: { maxInputTokens: true, defaultScanCostUsd: true },
+    columns: {
+      maxInputTokens: true,
+      defaultScanCostUsd: true,
+      scanModel: true,
+      scanEffort: true,
+    },
   })
   let scan: { id: number } | undefined
   try {
@@ -129,6 +120,8 @@ export async function startScan(
         phase: 'queued',
         progress: { phase: 'queued', completed: 0, total: 1 },
         branch: repository.branch,
+        requestedModel: globalSettings?.scanModel,
+        requestedEffort: globalSettings?.scanEffort,
       })
       .returning({ id: scans.id })
     scan = inserted[0]
@@ -146,9 +139,7 @@ export async function startScan(
       .where(eq(scheduledRepositoryQueue.repositoryId, repositoryId))
   }
 
-  void runScanPipeline(scan.id, repository).catch((error) => {
-    console.error(`[CodeTend] scan ${scan.id} crashed`, error)
-  })
+  dispatchExecutionQueues()
   return scan.id
 }
 

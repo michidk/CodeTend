@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
 import { globalScannerSettings } from '@/db/schema'
+import { REASONING_EFFORTS } from '@/lib/agent-execution'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import {
   customScannerSchema,
@@ -46,6 +47,45 @@ export const setGlobalScannerEnabled = createServerFn({ method: 'POST' })
       .onConflictDoUpdate({
         target: globalScannerSettings.scannerId,
         set: { enabled: data.enabled, updatedAt: new Date() },
+      })
+      .returning()
+    return expectReturnedRow(updated, 'Scanner setting')
+  })
+
+export const setGlobalScannerExecutionProfile = createServerFn({
+  method: 'POST',
+})
+  .validator(
+    z.object({
+      scannerId: z.string().min(1).max(60),
+      model: z.string().trim().max(200).nullable(),
+      effort: z.enum(REASONING_EFFORTS).nullable(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const existing = await db.query.globalScannerSettings.findFirst({
+      where: eq(globalScannerSettings.scannerId, data.scannerId),
+    })
+    if (!existing && !getScanner(data.scannerId)) {
+      throw new DomainError('not_found', 'Scanner not found')
+    }
+    const [updated] = await db
+      .insert(globalScannerSettings)
+      .values({
+        scannerId: data.scannerId,
+        enabled:
+          existing?.enabled ?? getScanner(data.scannerId)?.enabled ?? true,
+        definition: existing?.definition ?? null,
+        model: data.model || null,
+        effort: data.effort,
+      })
+      .onConflictDoUpdate({
+        target: globalScannerSettings.scannerId,
+        set: {
+          model: data.model || null,
+          effort: data.effort,
+          updatedAt: new Date(),
+        },
       })
       .returning()
     return expectReturnedRow(updated, 'Scanner setting')

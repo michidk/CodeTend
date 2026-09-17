@@ -15,6 +15,7 @@ import {
   isScheduleDispatchReady,
   selectNextDistributedRepositoryId,
 } from '@/lib/scheduled-queue'
+import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
 import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
 import {
   pruneTransientPatchArtifacts,
@@ -63,7 +64,7 @@ export function ensureScheduler(): void {
         columns: { id: true, eveSessionId: true },
       })
       const generatingPatches = await db.query.findingPatches.findMany({
-        where: eq(findingPatches.status, 'generating'),
+        where: inArray(findingPatches.status, ['queued', 'generating']),
         columns: { id: true, eveSessionId: true },
       })
       const [scanFiles, patchFiles, usageFiles] = await Promise.all([
@@ -85,6 +86,7 @@ export function ensureScheduler(): void {
         )
       }
       await tick(state)
+      dispatchExecutionQueues()
     })
     .catch((error) =>
       console.error('[CodeTend] scheduler initialization failed', error),

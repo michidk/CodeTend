@@ -1,6 +1,10 @@
 import '@tanstack/react-start/server-only'
 
 import { Client } from 'eve/client'
+import {
+  type AgentExecutionProfile,
+  executionProfileMarker,
+} from '@/lib/agent-execution'
 import { getServerEnv } from '@/lib/env.server'
 import type { ScanProgress } from '@/lib/scan-progress'
 
@@ -58,20 +62,22 @@ export interface EveScanSession {
  */
 export async function startEveScanSession(
   scanId: number,
+  profile: AgentExecutionProfile,
 ): Promise<EveScanSession> {
   const client = getEveClient()
   const { response } = await client.sessions.create({
-    message: `Run scan ${scanId}.`,
+    message: `${executionProfileMarker(profile)}\nRun scan ${scanId}.`,
   })
   return responseSession(response)
 }
 
 export async function startEvePatchSession(
   patchId: number,
+  profile: AgentExecutionProfile,
 ): Promise<EveScanSession> {
   const client = getEveClient()
   const { response } = await client.sessions.create({
-    message: `Generate patch ${patchId}.`,
+    message: `${executionProfileMarker(profile)}\nGenerate patch ${patchId}.`,
   })
   return responseSession(response)
 }

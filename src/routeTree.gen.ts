@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ScannersIndexRouteImport } from './routes/scanners/index'
 import { Route as ScansIndexRouteImport } from './routes/scans/index'
@@ -27,6 +28,11 @@ import { Route as ApiScansScanIdArtifactsKindIndexRouteImport } from './routes/a
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsIndexRoute = AgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -104,6 +110,7 @@ const ApiScansScanIdArtifactsKindIndexRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
+  '/agents/': typeof AgentsIndexRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
+  '/agents': typeof AgentsIndexRoute
   '/scanners': typeof ScannersIndexRoute
   '/scans': typeof ScansIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/health': typeof ApiHealthRoute
+  '/agents/': typeof AgentsIndexRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/api/health'
+    | '/agents/'
     | '/scanners/'
     | '/scans/'
     | '/settings/'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api/health'
+    | '/agents'
     | '/scanners'
     | '/scans'
     | '/settings'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/api/health'
+    | '/agents/'
     | '/scanners/'
     | '/scans/'
     | '/settings/'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiHealthRoute: typeof ApiHealthRoute
+  AgentsIndexRoute: typeof AgentsIndexRoute
   ScannersIndexRoute: typeof ScannersIndexRoute
   ScansIndexRoute: typeof ScansIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/': {
+      id: '/agents/'
+      path: '/agents'
+      fullPath: '/agents/'
+      preLoaderRoute: typeof AgentsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -324,6 +344,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiHealthRoute: ApiHealthRoute,
+  AgentsIndexRoute: AgentsIndexRoute,
   ScannersIndexRoute: ScannersIndexRoute,
   ScansIndexRoute: ScansIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,

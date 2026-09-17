@@ -9,6 +9,7 @@ import {
 
 const request: ScanRequest = {
   contractVersion: 1,
+  executionProfile: { model: 'gpt-5.6-sol', effort: 'medium' },
   scanId: 7,
   repositoryId: 3,
   repositoryName: 'example/repository',

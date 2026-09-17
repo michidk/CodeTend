@@ -2,7 +2,13 @@ import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
-import { scanScheduleSettings, scheduledRepositoryQueue } from '@/db/schema'
+import {
+  findingPatches,
+  scanScheduleSettings,
+  scans,
+  scheduledRepositoryQueue,
+} from '@/db/schema'
+import { REASONING_EFFORTS } from '@/lib/agent-execution'
 import { expectReturnedRow } from '@/lib/domain-errors'
 import {
   computeNextDistributedScanAt,
@@ -29,6 +35,12 @@ const scheduleSettingsInputSchema = z.object({
   maxInputTokens: z.number().int().min(10_000).max(MAX_SCAN_INPUT_TOKEN_BUDGET),
   maxDailyCostUsd: z.number().positive().nullable(),
   defaultScanCostUsd: z.number().positive().nullable(),
+  scanConcurrency: z.number().int().min(1).max(32),
+  fixConcurrency: z.number().int().min(1).max(32),
+  scanModel: z.string().trim().min(1).max(200),
+  scanEffort: z.enum(REASONING_EFFORTS),
+  fixModel: z.string().trim().min(1).max(200),
+  fixEffort: z.enum(REASONING_EFFORTS),
 })
 
 function computeNextGlobalRunAt(
@@ -70,8 +82,12 @@ export const getScheduleSettings = createServerFn({ method: 'GET' }).handler(
     const { ensureScheduler } = await import('@/lib/server/scheduler.server')
     ensureScheduler()
     const settings = await ensureScheduleSettingsRow()
-    const queued = await db.$count(scheduledRepositoryQueue)
-    return { ...settings, queuedRepositories: queued }
+    const [queuedRepositories, queuedScans, queuedFixes] = await Promise.all([
+      db.$count(scheduledRepositoryQueue),
+      db.$count(scans, eq(scans.status, 'queued')),
+      db.$count(findingPatches, eq(findingPatches.status, 'queued')),
+    ])
+    return { ...settings, queuedRepositories, queuedScans, queuedFixes }
   },
 )
 
@@ -105,5 +121,10 @@ export const updateScheduleSettings = createServerFn({ method: 'POST' })
       .returning()
 
     if (!data.enabled) await db.delete(scheduledRepositoryQueue)
-    return expectReturnedRow(updated, 'Scan schedule')
+    const result = expectReturnedRow(updated, 'Scan schedule')
+    const { dispatchExecutionQueues } = await import(
+      '@/lib/server/execution-queue.server'
+    )
+    dispatchExecutionQueues()
+    return result
   })

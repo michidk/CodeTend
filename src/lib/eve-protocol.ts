@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { agentExecutionProfileSchema } from '@/lib/agent-execution'
 import {
   codeEvidenceSchema,
   findingClassificationSchema,
@@ -148,6 +149,7 @@ const knowledgeResultSchema = z.object({
 
 export const scanRequestSchema = z.object({
   contractVersion: z.literal(1),
+  executionProfile: agentExecutionProfileSchema,
   scanId: z.number().int(),
   repositoryId: z.number().int().positive(),
   repositoryName: z.string().min(1),
@@ -174,6 +176,7 @@ export const scanRequestSchema = z.object({
       id: z.string().min(1),
       name: z.string().min(1),
       prompt: z.string(),
+      executionProfile: agentExecutionProfileSchema,
       hypotheses: z.array(
         z.object({
           findingId: z.number().int().positive(),
@@ -198,6 +201,7 @@ export const scanRequestSchema = z.object({
 
 export const patchRequestSchema = z.object({
   contractVersion: z.literal(1),
+  executionProfile: agentExecutionProfileSchema,
   patchId: z.number().int().positive(),
   repositoryId: z.number().int().positive(),
   repositoryName: z.string().min(1),

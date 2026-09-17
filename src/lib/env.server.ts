@@ -16,8 +16,6 @@ const serverSchema = {
   TECDEBT_ALLOWED_GIT_HOSTS: z.string().trim().min(1).default('github.com'),
   TECDEBT_ALLOW_LOCAL_REPOSITORIES: booleanString.default(false),
   TECDEBT_ALLOW_INSECURE_GIT: booleanString.default(false),
-  TECDEBT_MAX_ACTIVE_SCANS: z.coerce.number().int().min(1).max(32).default(2),
-  TECDEBT_MAX_ACTIVE_PATCHES: z.coerce.number().int().min(1).max(32).default(1),
   TECDEBT_VALIDATION_ENABLED: booleanString.default(false),
   TECDEBT_VALIDATION_RUNNER: z
     .enum(['auto', 'docker', 'disabled'])
@@ -42,7 +40,6 @@ const serverSchema = {
   SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
   GITNEXUS_ENABLED: booleanString.default(false),
   GITNEXUS_MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3907),
-  TECDEBT_MODEL: z.string().trim().min(1).default('gpt-5.6-sol'),
   HODOR_SECRET: optionalString,
   MCP_ALLOWED_ORIGINS: optionalString,
 }
@@ -85,8 +82,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       TECDEBT_ALLOW_LOCAL_REPOSITORIES:
         runtimeEnvironment.TECDEBT_ALLOW_LOCAL_REPOSITORIES,
       TECDEBT_ALLOW_INSECURE_GIT: runtimeEnvironment.TECDEBT_ALLOW_INSECURE_GIT,
-      TECDEBT_MAX_ACTIVE_SCANS: runtimeEnvironment.TECDEBT_MAX_ACTIVE_SCANS,
-      TECDEBT_MAX_ACTIVE_PATCHES: runtimeEnvironment.TECDEBT_MAX_ACTIVE_PATCHES,
       TECDEBT_VALIDATION_ENABLED: runtimeEnvironment.TECDEBT_VALIDATION_ENABLED,
       TECDEBT_VALIDATION_RUNNER: runtimeEnvironment.TECDEBT_VALIDATION_RUNNER,
       TECDEBT_VALIDATION_IMAGE: runtimeEnvironment.TECDEBT_VALIDATION_IMAGE,
@@ -101,7 +96,6 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       SCHEDULER_INTERVAL_SECONDS: runtimeEnvironment.SCHEDULER_INTERVAL_SECONDS,
       GITNEXUS_ENABLED: runtimeEnvironment.GITNEXUS_ENABLED,
       GITNEXUS_MCP_PORT: runtimeEnvironment.GITNEXUS_MCP_PORT,
-      TECDEBT_MODEL: runtimeEnvironment.TECDEBT_MODEL,
       HODOR_SECRET: runtimeEnvironment.HODOR_SECRET,
       MCP_ALLOWED_ORIGINS: runtimeEnvironment.MCP_ALLOWED_ORIGINS,
     },

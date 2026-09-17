@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import type { ReasoningEffort } from '@/lib/agent-execution'
 import type {
   AttackPath,
   CodeEvidence,
@@ -108,6 +109,18 @@ export const scanScheduleSettings = pgTable('scan_schedule_settings', {
     .default(DEFAULT_SCAN_INPUT_TOKEN_BUDGET),
   maxDailyCostUsd: real('max_daily_cost_usd'),
   defaultScanCostUsd: real('default_scan_cost_usd'),
+  scanConcurrency: integer('scan_concurrency').notNull().default(2),
+  fixConcurrency: integer('fix_concurrency').notNull().default(1),
+  scanModel: text('scan_model').notNull().default('gpt-5.6-sol'),
+  scanEffort: text('scan_effort')
+    .$type<ReasoningEffort>()
+    .notNull()
+    .default('medium'),
+  fixModel: text('fix_model').notNull().default('gpt-5.6-sol'),
+  fixEffort: text('fix_effort')
+    .$type<ReasoningEffort>()
+    .notNull()
+    .default('medium'),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   lastDispatchedAt: timestamp('last_dispatched_at', { withTimezone: true }),
   createdAt,
@@ -119,6 +132,8 @@ export const globalScannerSettings = pgTable('global_scanner_settings', {
   scannerId: text('scanner_id').primaryKey(),
   enabled: boolean('enabled').notNull().default(true),
   definition: jsonb('definition').$type<CustomScannerDefinition>(),
+  model: text('model'),
+  effort: text('effort').$type<ReasoningEffort>(),
   createdAt,
   updatedAt,
 })
@@ -276,6 +291,11 @@ export const scans = pgTable(
     counts: jsonb('counts').$type<FindingCounts>(),
     /** Model used by the Eve agents for this scan, for cost attribution. */
     model: text('model'),
+    requestedModel: text('requested_model').notNull().default('gpt-5.6-sol'),
+    requestedEffort: text('requested_effort')
+      .$type<ReasoningEffort>()
+      .notNull()
+      .default('medium'),
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     cacheReadTokens: integer('cache_read_tokens'),
@@ -322,6 +342,11 @@ export const scannerRuns = pgTable(
     scannerId: text('scanner_id').notNull(),
     /** Immutable scanner definition used for this run. */
     scannerDefinition: jsonb('scanner_definition').$type<ScannerDefinition>(),
+    requestedModel: text('requested_model').notNull().default('gpt-5.6-sol'),
+    requestedEffort: text('requested_effort')
+      .$type<ReasoningEffort>()
+      .notNull()
+      .default('medium'),
     status: text('status')
       .$type<ScannerRunStatus>()
       .notNull()
@@ -560,6 +585,7 @@ export const findingPatches = pgTable(
     }),
     status: text('status')
       .$type<
+        | 'queued'
         | 'generating'
         | 'proposed'
         | 'accepted'
@@ -585,12 +611,19 @@ export const findingPatches = pgTable(
     /** Eve root session used to generate this patch, for usage attribution. */
     eveSessionId: text('eve_session_id'),
     model: text('model'),
+    requestedModel: text('requested_model').notNull().default('gpt-5.6-sol'),
+    requestedEffort: text('requested_effort')
+      .$type<ReasoningEffort>()
+      .notNull()
+      .default('medium'),
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     cacheReadTokens: integer('cache_read_tokens'),
     cacheWriteTokens: integer('cache_write_tokens'),
     estimatedCostUsd: real('estimated_cost_usd'),
     modelCalls: integer('model_calls'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
     createdAt,
     updatedAt,
   },
@@ -599,7 +632,7 @@ export const findingPatches = pgTable(
     uniqueIndex('finding_patches_active_idx')
       .on(table.findingId)
       .where(
-        sql`${table.status} in ('generating', 'proposed', 'verified', 'published')`,
+        sql`${table.status} in ('queued', 'generating', 'proposed', 'verified', 'published')`,
       ),
   ],
 )

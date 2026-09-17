@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { title: 'Dashboard', url: '/', exact: true },
   { title: 'Scanners', url: '/scanners', exact: false },
   { title: 'Scans', url: '/scans', exact: false },
+  { title: 'Agents', url: '/agents', exact: false },
 ] as const
 
 function isActive(pathname: string, url: string, exact: boolean) {

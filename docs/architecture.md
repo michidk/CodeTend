@@ -36,9 +36,10 @@ repository per slot using a durable round-robin cursor. A repository can
 disable scheduled runs or define its own cron override; overrides run
 independently of either global mode and add only that repository to the same
 queue. Standard five-field cron day-of-week values provide weekday and weekly
-schedules. The scheduler dispatches queue entries in enqueue order, waiting for
-the configured cooldown between repositories and retaining entries when scan
-capacity is full.
+schedules. The scheduler admits due repositories in enqueue order, waiting for
+the configured cooldown between repositories. Every admitted scan then enters
+the durable execution queue, which dispatches FIFO up to the scan concurrency
+configured in Settings. Manual scans use the same execution queue.
 
 ## Scanners
 
@@ -183,7 +184,9 @@ Docker-capable execution boundary.
 
 ## Patch generation
 
-For an active finding, **Generate patch** starts a separate one-finding fixer.
+For an active finding, **Generate patch** queues a separate one-finding fixer.
+The durable fix queue dispatches FIFO up to its independent Settings-managed
+concurrency limit.
 It works against the exact source revision in a disposable clone, returns a
 text-only unified diff, and must pass path/symlink/binary restrictions plus
 `git apply --check`. When the finding has an executable reproducer, the patched

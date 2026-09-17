@@ -28,6 +28,8 @@ export const getScanHistory = createServerFn({ method: 'GET' }).handler(
           grade: scans.grade,
           counts: scans.counts,
           model: scans.model,
+          requestedModel: scans.requestedModel,
+          requestedEffort: scans.requestedEffort,
           inputTokens: scans.inputTokens,
           outputTokens: scans.outputTokens,
           cacheReadTokens: scans.cacheReadTokens,

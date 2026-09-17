@@ -1,6 +1,11 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
-import { findingPatches, findings, scans } from '@/db/schema'
+import {
+  findingPatches,
+  findings,
+  scanScheduleSettings,
+  scans,
+} from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
@@ -9,6 +14,7 @@ import {
   cancelEveScanSession,
   startEvePatchSession,
 } from '@/lib/server/eve-client.server'
+import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
 import {
   readPatchResult,
   removePatchArtifacts,
@@ -40,6 +46,7 @@ export async function generateFindingPatchImpl(findingId: number) {
     where: and(
       eq(findingPatches.findingId, findingId),
       inArray(findingPatches.status, [
+        'queued',
         'generating',
         'proposed',
         'verified',
@@ -55,16 +62,6 @@ export async function generateFindingPatchImpl(findingId: number) {
     )
   }
   const env = getServerEnv()
-  const [capacity] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(findingPatches)
-    .where(eq(findingPatches.status, 'generating'))
-  if ((capacity?.count ?? 0) >= env.TECDEBT_MAX_ACTIVE_PATCHES) {
-    throw new DomainError(
-      'conflict',
-      'Patch capacity is full. Try again after a running patch finishes.',
-    )
-  }
   if (await isDailyAiCostBudgetReached()) {
     throw new DomainError(
       'conflict',
@@ -87,15 +84,21 @@ export async function generateFindingPatchImpl(findingId: number) {
     )
   }
   let patch: typeof findingPatches.$inferSelect | undefined
+  const settings = await db.query.scanScheduleSettings.findFirst({
+    where: eq(scanScheduleSettings.id, 1),
+    columns: { fixModel: true, fixEffort: true },
+  })
   try {
     const inserted = await db
       .insert(findingPatches)
       .values({
         findingId,
         sourceScanId: sourceScan.id,
-        status: 'generating',
+        status: 'queued',
         diff: '',
-        summary: 'Generating a minimal patch in a disposable clone.',
+        summary: 'Queued for a fix agent.',
+        requestedModel: settings?.fixModel,
+        requestedEffort: settings?.fixEffort,
       })
       .returning()
     patch = inserted[0]
@@ -112,6 +115,10 @@ export async function generateFindingPatchImpl(findingId: number) {
   try {
     await writePatchRequest({
       contractVersion: 1,
+      executionProfile: {
+        model: created.requestedModel,
+        effort: created.requestedEffort,
+      },
       patchId: created.id,
       repositoryId: finding.repositoryId,
       repositoryName: finding.repository.name,
@@ -142,9 +149,7 @@ export async function generateFindingPatchImpl(findingId: number) {
     await failPatch(created.id, error)
     throw error
   }
-  void runPatchPipeline(created.id, finding.repositoryId).catch((error) =>
-    console.error(`[CodeTend] patch ${created.id} crashed`, error),
-  )
+  dispatchExecutionQueues()
   return { patchId: created.id }
 }
 
@@ -195,9 +200,17 @@ export async function getFindingPatch(patchId: number) {
   })
 }
 
-async function runPatchPipeline(patchId: number, repositoryId: number) {
+export async function runPatchPipeline(patchId: number, repositoryId: number) {
   try {
-    const session = await startEvePatchSession(patchId)
+    const patchConfiguration = await db.query.findingPatches.findFirst({
+      where: eq(findingPatches.id, patchId),
+      columns: { requestedModel: true, requestedEffort: true },
+    })
+    if (!patchConfiguration) throw new Error('Patch configuration disappeared')
+    const session = await startEvePatchSession(patchId, {
+      model: patchConfiguration.requestedModel,
+      effort: patchConfiguration.requestedEffort,
+    })
     const attached = await db
       .update(findingPatches)
       .set({ eveSessionId: session.sessionId, updatedAt: new Date() })
@@ -265,6 +278,7 @@ async function persistPatchResult(
         model: usage?.model ?? null,
         ...usageColumns(usage?.total),
         updatedAt: new Date(),
+        finishedAt: new Date(),
       })
       .where(eq(findingPatches.id, patchId))
     return
@@ -297,6 +311,7 @@ async function persistPatchResult(
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),
       updatedAt: new Date(result.finishedAt),
+      finishedAt: new Date(result.finishedAt),
     })
     .where(eq(findingPatches.id, patchId))
 }
@@ -317,6 +332,7 @@ async function failPatch(patchId: number, error: unknown) {
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),
       updatedAt: new Date(),
+      finishedAt: new Date(),
     })
     .where(eq(findingPatches.id, patchId))
 }

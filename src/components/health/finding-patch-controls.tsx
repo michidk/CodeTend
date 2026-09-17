@@ -28,13 +28,14 @@ export function FindingPatchControls({
   const [busy, setBusy] = useState(false)
   const latest = patches[0] ?? null
   // Progress is refreshed by the page-level activity poll, not per card.
-  const generating = latest?.status === 'generating'
+  const generating =
+    latest?.status === 'queued' || latest?.status === 'generating'
 
   const generate = async () => {
     setBusy(true)
     try {
       await generateFindingPatch({ data: findingId })
-      toast.success('Patch generation started')
+      toast.success('Fix agent queued')
       await router.invalidate()
     } catch (error) {
       toast.error(getErrorMessage(error, 'Could not start patch generation'))
@@ -79,7 +80,7 @@ export function FindingPatchControls({
         </div>
         {latest ? (
           <Badge variant="outline" className="capitalize">
-            {latest.status}
+            {latest.status === 'generating' ? 'working' : latest.status}
           </Badge>
         ) : null}
       </div>
@@ -140,7 +141,9 @@ export function FindingPatchControls({
         {generating ? (
           <Button size="sm" variant="outline" disabled>
             <GitPullRequest className="size-3.5" aria-hidden="true" />
-            Generating patch…
+            {latest?.status === 'queued'
+              ? 'Patch queued…'
+              : 'Generating patch…'}
           </Button>
         ) : null}
         {latest?.diff ? (

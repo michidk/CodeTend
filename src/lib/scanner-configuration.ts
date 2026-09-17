@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ReasoningEffort } from '@/lib/agent-execution'
 import { getScanner, SCANNERS, type ScannerDefinition } from '@/lib/scanners'
 
 const scannerIdSchema = z
@@ -28,6 +29,8 @@ export interface StoredScannerConfiguration {
   readonly scannerId: string
   readonly enabled: boolean
   readonly definition: CustomScannerDefinition | null
+  readonly model?: string | null
+  readonly effort?: ReasoningEffort | null
 }
 
 /** Merges code-owned built-ins with persisted enable overrides and customs. */
@@ -38,6 +41,8 @@ export function resolveScannerConfigurations(
   const builtIns = SCANNERS.map((scanner) => ({
     ...scanner,
     enabled: byId.get(scanner.id)?.enabled ?? scanner.enabled,
+    model: byId.get(scanner.id)?.model ?? null,
+    effort: byId.get(scanner.id)?.effort ?? null,
   }))
   const customs = rows.flatMap((row): ScannerDefinition[] => {
     if (!row.definition || getScanner(row.scannerId)) return []
@@ -49,6 +54,8 @@ export function resolveScannerConfigurations(
         kind: 'agent',
         enabled: row.enabled,
         custom: true,
+        model: row.model,
+        effort: row.effort,
       },
     ]
   })
