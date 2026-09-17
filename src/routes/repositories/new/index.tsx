@@ -10,17 +10,24 @@ import {
   createRepository,
   getAvailableRepositories,
 } from '@/lib/server/repositories'
+import { getScheduleSettings } from '@/lib/server/schedule-settings'
 import { AvailableRepositoryList } from './-components/available-repository-list'
 
 export const Route = createFileRoute('/repositories/new/')({
-  loader: () => getAvailableRepositories(),
+  loader: async () => {
+    const [available, schedule] = await Promise.all([
+      getAvailableRepositories(),
+      getScheduleSettings(),
+    ])
+    return { available, schedule }
+  },
   component: NewRepositoryPage,
   pendingComponent: ListPending,
   errorComponent: ({ error }) => <RouteError error={error} />,
 })
 
 function NewRepositoryPage() {
-  const available = Route.useLoaderData()
+  const { available, schedule } = Route.useLoaderData()
   const [addByUrl, setAddByUrl] = useState(false)
 
   return (
@@ -45,6 +52,7 @@ function NewRepositoryPage() {
       {addByUrl ? (
         <RepositoryForm
           submitLabel="Add repository"
+          globalSchedule={schedule}
           onSubmit={(values) => createRepository({ data: values })}
           onCancel={() => setAddByUrl(false)}
         />

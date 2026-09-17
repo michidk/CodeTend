@@ -38,7 +38,9 @@ function EditRepositoryPage() {
           name: repository.name,
           url: repository.url,
           branch: repository.branch,
+          scheduleCronExpression: repository.scheduleCronExpression,
         }}
+        globalSchedule={detail.globalSchedule}
         onSubmit={(values) =>
           updateRepository({ data: { ...values, id: repository.id } })
         }

@@ -114,7 +114,9 @@ export function ScheduleSettingsForm({
             <div>
               <Label htmlFor="schedule-enabled">Scheduled scans enabled</Label>
               <p className="mt-1 text-xs text-muted-foreground">
-                Each run adds every registered repository to one queue.
+                Each run adds repositories without a custom schedule to one
+                queue. Repository overrides use their own cron while this is
+                enabled.
               </p>
             </div>
             <Switch

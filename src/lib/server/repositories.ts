@@ -2,11 +2,18 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/db'
-import { findingPatches, findings, repositories, scans } from '@/db/schema'
+import {
+  findingPatches,
+  findings,
+  repositories,
+  scans,
+  scheduledRepositoryQueue,
+} from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { validateRepositoryLocation } from '@/lib/repository-access'
+import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
 import {
   MAX_SCAN_INPUT_TOKEN_BUDGET,
   scanTargetSchema,
@@ -22,6 +29,7 @@ import {
   startScan,
 } from '@/lib/server/scan-pipeline.server'
 import { removeScanUsage } from '@/lib/server/scan-usage.server'
+import { ensureScheduleSettingsRow } from '@/lib/server/schedule-settings'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
@@ -38,6 +46,13 @@ const repositoryInputSchema = z.object({
       'Enter a Git URL (https://, ssh://, git@ or an absolute local path)',
     ),
   branch: z.string().trim().min(1).max(200),
+  scheduleCronExpression: z
+    .string()
+    .trim()
+    .min(9)
+    .max(100)
+    .refine(isValidCronExpression, 'Enter a valid 5-field cron expression')
+    .nullable(),
 })
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>
@@ -59,9 +74,12 @@ function assertRepositoryAccess(url: string): void {
 export const getDashboard = createServerFn({ method: 'GET' }).handler(
   async () => {
     ensureScheduler()
-    const rows = await db.query.repositories.findMany({
-      orderBy: [desc(repositories.createdAt)],
-    })
+    const [rows, scheduleSettings] = await Promise.all([
+      db.query.repositories.findMany({
+        orderBy: [desc(repositories.createdAt)],
+      }),
+      ensureScheduleSettingsRow(),
+    ])
     if (rows.length === 0) return []
 
     const ids = rows.map((row) => row.id)
@@ -133,6 +151,17 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
         scoreDelta: delta,
         activeFindings: openByRepository.get(repository.id) ?? 0,
         runningScan: runningByRepository.get(repository.id) ?? null,
+        schedule: {
+          enabled: scheduleSettings.enabled,
+          cronExpression:
+            repository.scheduleCronExpression ??
+            scheduleSettings.cronExpression,
+          nextRunAt:
+            repository.scheduleCronExpression === null
+              ? scheduleSettings.nextRunAt
+              : repository.nextScheduledScanAt,
+          overridden: repository.scheduleCronExpression !== null,
+        },
       }
     })
   },
@@ -184,7 +213,15 @@ export const createRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema)
   .handler(async ({ data }) => {
     assertRepositoryAccess(data.url)
-    const [row] = await db.insert(repositories).values(data).returning()
+    const [row] = await db
+      .insert(repositories)
+      .values({
+        ...data,
+        nextScheduledScanAt: data.scheduleCronExpression
+          ? computeNextScanAt(data.scheduleCronExpression, new Date())
+          : null,
+      })
+      .returning()
     return expectReturnedRow(row, 'Repository')
   })
 
@@ -197,14 +234,29 @@ export const updateRepository = createServerFn({ method: 'POST' })
       where: eq(repositories.id, id),
     })
     if (!current) throw new DomainError('not_found', 'Repository not found')
-    const [row] = await db
-      .update(repositories)
-      .set({
-        ...values,
-        updatedAt: new Date(),
-      })
-      .where(eq(repositories.id, id))
-      .returning()
+    const scheduleChanged =
+      current.scheduleCronExpression !== values.scheduleCronExpression
+    const [row] = await db.transaction(async (transaction) => {
+      const updated = await transaction
+        .update(repositories)
+        .set({
+          ...values,
+          nextScheduledScanAt: scheduleChanged
+            ? values.scheduleCronExpression
+              ? computeNextScanAt(values.scheduleCronExpression, new Date())
+              : null
+            : current.nextScheduledScanAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(repositories.id, id))
+        .returning()
+      if (scheduleChanged) {
+        await transaction
+          .delete(scheduledRepositoryQueue)
+          .where(eq(scheduledRepositoryQueue.repositoryId, id))
+      }
+      return updated
+    })
     return expectReturnedRow(row, 'Repository')
   })
 

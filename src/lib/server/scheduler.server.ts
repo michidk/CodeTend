@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { asc, eq, inArray, lte } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   findingPatches,
@@ -32,9 +32,10 @@ interface SchedulerState {
 }
 
 /**
- * Lightweight in-process scheduler. A due global schedule durably enqueues
- * every repository as one batch. Each tick dispatches at most one queue entry,
- * honoring the configured cooldown and the normal scan-capacity limits.
+ * Lightweight in-process scheduler. The global schedule durably enqueues
+ * repositories that inherit it, while due repository overrides enqueue only
+ * their repository. Each tick dispatches at most one queue entry, honoring the
+ * configured cooldown and the normal scan-capacity limits.
  */
 export function ensureScheduler(): void {
   const globalState = globalThis as { [SCHEDULER_KEY]?: SchedulerState }
@@ -96,6 +97,7 @@ async function tick(state: SchedulerState) {
       const repositoryIds = await db
         .select({ repositoryId: repositories.id })
         .from(repositories)
+        .where(isNull(repositories.scheduleCronExpression))
         .orderBy(asc(repositories.createdAt), asc(repositories.id))
       if (repositoryIds.length > 0) {
         await db
@@ -118,6 +120,54 @@ async function tick(state: SchedulerState) {
     }
 
     if (!settings.enabled) return
+
+    const dueOverrides = await db.query.repositories.findMany({
+      where: and(
+        isNotNull(repositories.scheduleCronExpression),
+        isNotNull(repositories.nextScheduledScanAt),
+        lte(repositories.nextScheduledScanAt, now),
+      ),
+      columns: {
+        id: true,
+        scheduleCronExpression: true,
+        nextScheduledScanAt: true,
+      },
+      orderBy: [asc(repositories.nextScheduledScanAt), asc(repositories.id)],
+    })
+    if (dueOverrides.length > 0) {
+      await db.transaction(async (transaction) => {
+        await transaction
+          .insert(scheduledRepositoryQueue)
+          .values(
+            dueOverrides.map((repository) => ({
+              repositoryId: repository.id,
+            })),
+          )
+          .onConflictDoNothing()
+        for (const repository of dueOverrides) {
+          if (!repository.scheduleCronExpression) continue
+          await transaction
+            .update(repositories)
+            .set({
+              nextScheduledScanAt: computeNextScanAt(
+                repository.scheduleCronExpression,
+                now,
+              ),
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(repositories.id, repository.id),
+                lte(repositories.nextScheduledScanAt, now),
+              ),
+            )
+        }
+      })
+      console.info(
+        `[CodeTend] queued ${dueOverrides.length} repository schedule overrides`,
+      )
+    }
+
     if (
       !isScheduleDispatchReady(
         settings.lastDispatchedAt,

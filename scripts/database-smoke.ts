@@ -21,6 +21,29 @@ try {
     )
   }
 
+  const requiredRepositoryScheduleColumns = [
+    'schedule_cron_expression',
+    'next_scheduled_scan_at',
+  ]
+  const repositoryColumns = await client<{ column_name: string }[]>`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'repositories'
+      and column_name = any(${requiredRepositoryScheduleColumns})
+  `
+  const presentRepositoryColumns = new Set(
+    repositoryColumns.map((column) => column.column_name),
+  )
+  const missingRepositoryColumns = requiredRepositoryScheduleColumns.filter(
+    (column) => !presentRepositoryColumns.has(column),
+  )
+  if (missingRepositoryColumns.length > 0) {
+    throw new Error(
+      `Missing repository schedule columns: ${missingRepositoryColumns.join(', ')}`,
+    )
+  }
+
   const requiredFindingColumns = [
     'classification',
     'security_context',

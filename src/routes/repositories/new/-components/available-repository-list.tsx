@@ -39,6 +39,7 @@ export function AvailableRepositoryList({
           name: repository.name,
           url: repository.url,
           branch: repository.branch,
+          scheduleCronExpression: null,
         },
       })
       toast.success(`${repository.name} added`)

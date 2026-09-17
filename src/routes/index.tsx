@@ -18,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useActivityRefresh } from '@/hooks/use-activity-refresh'
 import { getErrorMessage } from '@/lib/error-message'
 import { formatRelative } from '@/lib/format'
+import { describeCron } from '@/lib/schedule-presets'
 import {
   type DashboardRow,
   getDashboard,
@@ -142,10 +143,23 @@ function RepositoryCard({
           )}
         </div>
 
-        <dl className="mt-auto grid grid-cols-2 gap-x-3 border-t border-border/70 pt-3 text-xs">
+        <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/70 pt-3 text-xs">
           <dt className="text-muted-foreground">Last scan</dt>
           <dd className="text-right tabular-nums">
             {formatRelative(row.lastScanAt)}
+          </dd>
+          <dt className="text-muted-foreground">Schedule</dt>
+          <dd
+            className="text-right leading-tight"
+            title={
+              row.schedule.enabled
+                ? `${row.schedule.cronExpression} UTC; next ${formatRelative(row.schedule.nextRunAt)}`
+                : 'Scheduled scans disabled'
+            }
+          >
+            {row.schedule.enabled
+              ? `${describeCron(row.schedule.cronExpression)}${row.schedule.overridden ? ' · override' : ''}`
+              : 'Disabled'}
           </dd>
         </dl>
 

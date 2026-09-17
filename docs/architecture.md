@@ -28,11 +28,13 @@ directory (`TECDEBT_DATA_DIR`) and an authenticated HTTP connection. The app
 owns PostgreSQL; Eve owns clones, sandboxes and model calls. Nothing in Eve
 talks to the database and nothing in the app talks to a model.
 
-Scheduled work uses one global cron configured on the Settings page. When it
-is due, the app writes every registered repository to a durable queue. The
-scheduler dispatches queue entries in registration order, waiting for the
-configured cooldown between repositories and retaining entries when scan
-capacity is full.
+Scheduled work uses a global cron configured on the Settings page. When it is
+due, the app writes every repository that inherits that default to a durable
+queue. A repository can instead define its own cron override; when that cron is
+due, only that repository is added to the same queue. Standard five-field cron
+day-of-week values provide weekday and weekly schedules. The scheduler
+dispatches queue entries in enqueue order, waiting for the configured cooldown
+between repositories and retaining entries when scan capacity is full.
 
 ## Scanners
 

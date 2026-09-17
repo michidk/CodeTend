@@ -81,6 +81,11 @@ export const repositories = pgTable('repositories', {
   name: text('name').notNull(),
   url: text('url').notNull(),
   branch: text('branch').notNull().default('main'),
+  /** Null inherits the global cron from scan_schedule_settings. */
+  scheduleCronExpression: text('schedule_cron_expression'),
+  nextScheduledScanAt: timestamp('next_scheduled_scan_at', {
+    withTimezone: true,
+  }),
   lastScanAt: timestamp('last_scan_at', { withTimezone: true }),
   createdAt,
   updatedAt,
@@ -114,7 +119,7 @@ export const globalScannerSettings = pgTable('global_scanner_settings', {
   updatedAt,
 })
 
-/** Durable queue populated as one batch whenever the global schedule is due. */
+/** Durable queue populated whenever a global or repository schedule is due. */
 export const scheduledRepositoryQueue = pgTable(
   'scheduled_repository_queue',
   {

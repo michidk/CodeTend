@@ -20,6 +20,7 @@ import {
   FINDING_SUMMARY_RELATIONS,
 } from '@/lib/server/finding-detail'
 import { listGlobalScanners } from '@/lib/server/scanner-settings'
+import { ensureScheduleSettingsRow } from '@/lib/server/schedule-settings'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
 
 const positiveId = z.number().int().positive()
@@ -72,6 +73,7 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       where: eq(repositories.id, repositoryId),
     })
     if (!repository) return null
+    const scheduleSettings = await ensureScheduleSettingsRow()
 
     const history = await db.query.scans.findMany({
       where: eq(scans.repositoryId, repositoryId),
@@ -158,6 +160,21 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
 
     return {
       repository,
+      schedule: {
+        enabled: scheduleSettings.enabled,
+        cronExpression:
+          repository.scheduleCronExpression ?? scheduleSettings.cronExpression,
+        nextRunAt:
+          repository.scheduleCronExpression === null
+            ? scheduleSettings.nextRunAt
+            : repository.nextScheduledScanAt,
+        overridden: repository.scheduleCronExpression !== null,
+      },
+      globalSchedule: {
+        enabled: scheduleSettings.enabled,
+        cronExpression: scheduleSettings.cronExpression,
+        nextRunAt: scheduleSettings.nextRunAt,
+      },
       latestScan: latest,
       runningScan: running,
       scannerRuns: latest?.scannerRuns ?? [],

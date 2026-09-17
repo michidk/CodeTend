@@ -64,6 +64,7 @@ import {
   shortSha,
 } from '@/lib/format'
 import { parseIdParam } from '@/lib/route-params'
+import { describeCron } from '@/lib/schedule-presets'
 import { GRADE_DESCRIPTIONS, type Grade } from '@/lib/scoring'
 import { cancelScan, deleteRepository } from '@/lib/server/repositories'
 import {
@@ -109,6 +110,7 @@ function RepositoryPage() {
     )
   const {
     repository,
+    schedule,
     latestScan,
     scannerRuns,
     openFindings,
@@ -165,6 +167,16 @@ function RepositoryPage() {
               {repository.url}
             </a>{' '}
             · branch <code>{repository.branch}</code>
+            {' · '}
+            {schedule.enabled ? (
+              <>
+                {describeCron(schedule.cronExpression)} UTC
+                {schedule.overridden ? ' (override)' : ' (global)'} · next{' '}
+                {formatRelative(schedule.nextRunAt)}
+              </>
+            ) : (
+              'scheduled scans disabled'
+            )}
           </>
         }
         leading={<GradeBadge grade={latestScan?.grade} size="lg" />}

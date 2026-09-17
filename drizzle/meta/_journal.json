@@ -155,6 +155,13 @@
       "when": 1789589251327,
       "tag": "0021_plain_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789624942766,
+      "tag": "0022_acoustic_loa",
+      "breakpoints": true
     }
   ]
 }
