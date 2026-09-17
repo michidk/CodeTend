@@ -61,8 +61,8 @@ export function PageHeader({
     <header
       data-slot="page-header"
       className={cn(
-        'flex flex-col gap-3 sm:flex-row sm:justify-between sm:gap-4',
-        size === 'compact' ? 'sm:items-center' : 'sm:items-end',
+        'flex flex-col gap-3 lg:flex-row lg:justify-between lg:gap-4',
+        size === 'compact' ? 'lg:items-center' : 'lg:items-end',
         className,
       )}
       {...props}
@@ -100,7 +100,7 @@ export function PageHeader({
         </div>
       </div>
       {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
           {actions}
         </div>
       ) : null}

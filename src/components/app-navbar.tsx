@@ -39,13 +39,13 @@ export function AppNavbar() {
             <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-control">
               <Radar className="size-5" aria-hidden="true" />
             </span>
-            <span className="hidden font-display text-xl font-extrabold tracking-tight sm:inline">
+            <span className="hidden font-display text-xl font-extrabold tracking-tight md:inline">
               CodeTend
             </span>
           </Link>
           <nav
             aria-label="Main navigation"
-            className="flex items-center gap-0 text-xs sm:gap-1 sm:text-sm"
+            className="flex items-center gap-0 text-xs md:gap-1 md:text-sm"
           >
             {NAV_ITEMS.map((item) => {
               const active = isActive(pathname, item.url, item.exact)
@@ -55,7 +55,7 @@ export function AppNavbar() {
                   to={item.url}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'inline-flex min-h-11 items-center rounded-full px-2 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-4 sm:text-sm [@media(hover:hover)_and_(pointer:fine)]:min-h-0',
+                    'inline-flex min-h-11 items-center rounded-full px-2 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:px-4 md:text-sm [@media(hover:hover)_and_(pointer:fine)]:min-h-0',
                     active &&
                       'bg-primary text-primary-foreground shadow-control hover:bg-primary hover:text-primary-foreground',
                   )}
@@ -80,14 +80,14 @@ export function AppNavbar() {
                 <Settings className="size-4" aria-hidden="true" />
               </Link>
             </Button>
-            <div className="hidden sm:block">
+            <div className="hidden md:block">
               <ThemeToggle />
             </div>
-            <Button asChild className="gap-1.5 px-3 sm:px-5">
+            <Button asChild className="gap-1.5 px-3 md:px-5">
               <Link to="/repositories/new">
                 <Plus className="size-4" />
-                <span className="hidden sm:inline">Add repository</span>
-                <span className="sr-only sm:hidden">Add repository</span>
+                <span className="hidden md:inline">Add repository</span>
+                <span className="sr-only md:hidden">Add repository</span>
               </Link>
             </Button>
           </div>
