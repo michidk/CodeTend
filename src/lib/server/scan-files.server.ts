@@ -10,22 +10,22 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { z } from 'zod'
 import { getServerEnv } from '@/lib/env.server'
-import { scannerResultSchema } from '@/lib/findings'
 import {
-  type InvestigationReport,
-  investigationReportSchema,
-  type ScanTarget,
-  type SecurityProfile,
-  scanCoverageSchema,
-} from '@/lib/security-scans'
+  type PatchRequest,
+  type PatchResult,
+  patchRequestSchema,
+  patchResultSchema,
+  type ScanCheckpoint,
+  type ScanRequest,
+  type ScanResult,
+  scanCheckpointSchema,
+  scanRequestSchema,
+  scanResultSchema,
+} from '@/lib/eve-protocol'
+import { scannerResultSchema } from '@/lib/findings'
 
-/**
- * The app and the Eve runtime exchange scan requests and results through
- * JSON files under TECDEBT_DATA_DIR. This keeps large payloads out of the
- * model conversation; see eve/agent/lib/contract.ts for the same shapes.
- */
+/** The app and Eve exchange schema-validated JSON through the shared volume. */
 export function dataDir(): string {
   return resolve(getServerEnv().TECDEBT_DATA_DIR)
 }
@@ -35,40 +35,7 @@ const requestsDir = () => join(dataDir(), 'requests')
 const resultsDir = () => join(dataDir(), 'results')
 export const gitnexusHome = () => join(dataDir(), 'gitnexus')
 
-export interface PatchRequestFile {
-  readonly patchId: number
-  readonly repositoryId: number
-  readonly repositoryName: string
-  readonly repositoryUrl: string
-  readonly branch: string
-  readonly revision: string
-  readonly finding: {
-    readonly id: number
-    readonly title: string
-    readonly severity: string
-    readonly description: string
-    readonly rootCause: string | null
-    readonly whyItMatters: string
-    readonly recommendation: string
-    readonly locations: readonly unknown[]
-    readonly codeEvidence: readonly unknown[] | null
-    readonly validationPlan: {
-      readonly method: string
-      readonly commands: readonly {
-        readonly command: string
-        readonly purpose: string
-        readonly timeoutSeconds: number
-      }[]
-    } | null
-    readonly remediationTests: readonly string[] | null
-    readonly preventiveControls: readonly string[] | null
-  }
-  readonly validation: {
-    readonly enabled: boolean
-    readonly runner: 'auto' | 'docker' | 'disabled'
-    readonly image: string
-  }
-}
+export type PatchRequestFile = PatchRequest
 
 export async function writePatchRequest(
   request: PatchRequestFile,
@@ -77,44 +44,15 @@ export async function writePatchRequest(
   await mkdir(resultsDir(), { recursive: true })
   await mkdir(workspacesDir(), { recursive: true })
   const target = join(requestsDir(), `patch-${request.patchId}.json`)
-  await writeFile(`${target}.tmp`, JSON.stringify(request))
+  await writeFile(
+    `${target}.tmp`,
+    JSON.stringify(patchRequestSchema.parse(request)),
+  )
   await rename(`${target}.tmp`, target)
   await rm(join(resultsDir(), `patch-${request.patchId}.json`), { force: true })
 }
 
-export interface ScanRequestFile {
-  readonly scanId: number
-  readonly repositoryId: number
-  readonly repositoryName: string
-  readonly repositoryUrl: string
-  readonly branch: string
-  readonly gitnexus: boolean
-  readonly knowledge: {
-    readonly overview: string
-    readonly summary: unknown
-    readonly sources: readonly { path: string; hash: string }[]
-    readonly fileCount: number | null
-  } | null
-  readonly previousCommitSha: string | null
-  readonly target: ScanTarget
-  readonly maxInputTokens: number
-  readonly maxCostUsd: number | null
-  readonly securityProfile: SecurityProfile | null
-  readonly validation: {
-    readonly enabled: boolean
-    readonly runner: 'auto' | 'docker' | 'disabled'
-    readonly image: string
-  }
-  readonly dependencyAudit: boolean
-  readonly scanners: readonly {
-    readonly id: string
-    readonly name: string
-    readonly prompt: string
-    readonly hypotheses: readonly unknown[]
-    readonly attentionHistory: readonly InvestigationReport[]
-  }[]
-  readonly outputSchema: unknown
-}
+export type ScanRequestFile = ScanRequest
 
 export async function writeScanRequest(
   request: ScanRequestFile,
@@ -123,233 +61,17 @@ export async function writeScanRequest(
   await mkdir(resultsDir(), { recursive: true })
   await mkdir(workspacesDir(), { recursive: true })
   const target = join(requestsDir(), `scan-${request.scanId}.json`)
-  await writeFile(`${target}.tmp`, JSON.stringify(request))
+  await writeFile(
+    `${target}.tmp`,
+    JSON.stringify(scanRequestSchema.parse(request)),
+  )
   await rename(`${target}.tmp`, target)
   await rm(join(resultsDir(), `scan-${request.scanId}.json`), { force: true })
 }
 
-const knowledgeSummarySchema = z.object({
-  languages: z.array(z.string()).default([]),
-  frameworks: z.array(z.string()).default([]),
-  subsystems: z
-    .array(
-      z.object({
-        name: z.string(),
-        paths: z.array(z.string()).default([]),
-        responsibility: z.string().default(''),
-      }),
-    )
-    .default([]),
-  concepts: z.array(z.string()).default([]),
-  securityProfile: z
-    .object({
-      projectOverview: z.string(),
-      assets: z.array(z.string()),
-      entryPoints: z.array(z.string()),
-      trustBoundaries: z.array(z.string()),
-      authAssumptions: z.array(z.string()),
-      sensitiveDataPaths: z.array(z.string()),
-      privilegedActions: z.array(z.string()),
-      securityInvariants: z.array(z.string()),
-      priorities: z.array(z.string()),
-      exclusions: z.array(z.string()),
-    })
-    .optional(),
-})
-
-const subsystemDependencyGraphSchema = z
-  .object({
-    edges: z
-      .array(
-        z.object({
-          source: z.string(),
-          target: z.string(),
-          weight: z.number(),
-        }),
-      )
-      .default([]),
-    cycles: z
-      .array(
-        z.object({
-          files: z.array(z.string()).default([]),
-          subsystems: z.array(z.string()).default([]),
-        }),
-      )
-      .default([]),
-    cycleStatus: z.enum(['clean', 'cycles_found', 'unavailable']),
-    componentCount: z.number().nullable(),
-  })
-  .default({
-    edges: [],
-    cycles: [],
-    cycleStatus: 'unavailable',
-    componentCount: null,
-  })
-
-const scanResultFileSchema = z.object({
-  scanId: z.number().int(),
-  commitSha: z.string(),
-  fileCount: z.number().int(),
-  gitnexusUsed: z.boolean(),
-  knowledge: z.object({
-    refreshed: z.boolean(),
-    overview: z.string(),
-    summary: knowledgeSummarySchema,
-    sources: z.array(z.object({ path: z.string(), hash: z.string() })),
-    reason: z.string(),
-    dependencyGraph: subsystemDependencyGraphSchema,
-  }),
-  securityProfile: z.object({
-    profile: z.object({
-      projectOverview: z.string(),
-      assets: z.array(z.string()),
-      entryPoints: z.array(z.string()),
-      trustBoundaries: z.array(z.string()),
-      authAssumptions: z.array(z.string()),
-      sensitiveDataPaths: z.array(z.string()),
-      privilegedActions: z.array(z.string()),
-      securityInvariants: z.array(z.string()),
-      priorities: z.array(z.string()),
-      exclusions: z.array(z.string()),
-    }),
-    generated: z.boolean(),
-  }),
-  dependencyAudit: z
-    .object({
-      status: z.enum(['completed', 'unavailable', 'failed']),
-      report: z.json().optional(),
-      error: z.string().optional(),
-      toolVersion: z.string().optional(),
-    })
-    .default({
-      status: 'unavailable',
-      error: 'This scan predates dependency auditing.',
-    }),
-  scanners: z.array(
-    z.object({
-      scannerId: z.string(),
-      status: z.enum(['completed', 'failed']),
-      result: scannerResultSchema.optional(),
-      error: z.string().optional(),
-      startedAt: z.string(),
-      finishedAt: z.string(),
-    }),
-  ),
-  investigation: investigationReportSchema,
-  coverage: scanCoverageSchema.default({
-    completeness: 'unknown',
-    reviewed: [],
-    deferred: [],
-    excluded: [],
-    openQuestions: [],
-  }),
-  validations: z
-    .array(
-      z.object({
-        scannerId: z.string(),
-        fingerprint: z.string(),
-        status: z.enum([
-          'not_run',
-          'confirmed',
-          'not_reproduced',
-          'inconclusive',
-          'unavailable',
-          'error',
-        ]),
-        method: z.string(),
-        summary: z.string(),
-        commands: z.array(
-          z.object({
-            command: z.string(),
-            purpose: z.string(),
-            timeoutSeconds: z.number(),
-            exitCode: z.number().nullable(),
-            stdout: z.string(),
-            stderr: z.string(),
-            timedOut: z.boolean(),
-            durationMs: z.number(),
-          }),
-        ),
-        proofGaps: z.array(z.string()),
-        runner: z.string(),
-        validatedAt: z.string(),
-      }),
-    )
-    .default([]),
-  finishedAt: z.string(),
-})
-
-export type ScanResultFile = z.infer<typeof scanResultFileSchema>
-
-const scanCheckpointFileSchema = scanResultFileSchema
-  .pick({
-    scanId: true,
-    commitSha: true,
-    fileCount: true,
-    gitnexusUsed: true,
-    knowledge: true,
-    securityProfile: true,
-    dependencyAudit: true,
-    scanners: true,
-  })
-  .extend({
-    version: z.literal(1),
-    requestFingerprint: z.string().min(1),
-    updatedAt: z.string(),
-  })
-
-export type ScanCheckpointFile = z.infer<typeof scanCheckpointFileSchema>
-
-const patchResultFileSchema = z.object({
-  patchId: z.number().int().positive(),
-  status: z.enum(['published', 'failed']),
-  summary: z.string(),
-  diff: z.string(),
-  changedFiles: z.array(z.string()),
-  testRecommendations: z.array(z.string()),
-  verification: z
-    .object({
-      scannerId: z.string(),
-      fingerprint: z.string(),
-      status: z.enum([
-        'not_run',
-        'confirmed',
-        'not_reproduced',
-        'inconclusive',
-        'unavailable',
-        'error',
-      ]),
-      method: z.string(),
-      summary: z.string(),
-      commands: z.array(
-        z.object({
-          command: z.string(),
-          purpose: z.string(),
-          timeoutSeconds: z.number(),
-          exitCode: z.number().nullable(),
-          stdout: z.string(),
-          stderr: z.string(),
-          timedOut: z.boolean(),
-          durationMs: z.number(),
-        }),
-      ),
-      proofGaps: z.array(z.string()),
-      runner: z.string(),
-      validatedAt: z.string(),
-    })
-    .nullable(),
-  pullRequest: z
-    .object({
-      url: z.string().url(),
-      number: z.number().int().positive(),
-      branch: z.string().min(1),
-    })
-    .nullable(),
-  error: z.string().optional(),
-  finishedAt: z.string(),
-})
-
-export type PatchResultFile = z.infer<typeof patchResultFileSchema>
+export type ScanResultFile = ScanResult
+export type ScanCheckpointFile = ScanCheckpoint
+export type PatchResultFile = PatchResult
 
 export async function readPatchResult(
   patchId: number,
@@ -359,7 +81,7 @@ export async function readPatchResult(
       join(resultsDir(), `patch-${patchId}.json`),
       'utf8',
     )
-    return patchResultFileSchema.parse(JSON.parse(raw) as unknown)
+    return patchResultSchema.parse(JSON.parse(raw) as unknown)
   } catch (error) {
     if (
       typeof error === 'object' &&
@@ -415,7 +137,7 @@ export async function readScanResult(
       }
     })
   }
-  return scanResultFileSchema.parse(parsed)
+  return scanResultSchema.parse(parsed)
 }
 
 export async function readScanCheckpoint(
@@ -426,7 +148,7 @@ export async function readScanCheckpoint(
       join(resultsDir(), `scan-${scanId}.checkpoint.json`),
       'utf8',
     )
-    return scanCheckpointFileSchema.parse(JSON.parse(raw) as unknown)
+    return scanCheckpointSchema.parse(JSON.parse(raw) as unknown)
   } catch (error) {
     if (
       typeof error === 'object' &&

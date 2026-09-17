@@ -4,7 +4,10 @@ import type postgres from 'postgres'
 import { getServerEnv } from '@/lib/env.server'
 import * as schema from './schema'
 
-type Database = PostgresJsDatabase<typeof schema>
+export type Database = PostgresJsDatabase<typeof schema>
+export type DatabaseTransaction = Parameters<
+  Parameters<Database['transaction']>[0]
+>[0]
 type DrizzleFactory = typeof import('drizzle-orm/postgres-js').drizzle
 type PostgresFactory = typeof postgres
 

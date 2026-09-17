@@ -513,7 +513,12 @@ export const findingEvents = pgTable(
     note: text('note'),
     createdAt,
   },
-  (table) => [index('finding_events_finding_idx').on(table.findingId)],
+  (table) => [
+    index('finding_events_finding_idx').on(table.findingId),
+    uniqueIndex('finding_events_scan_kind_idx')
+      .on(table.findingId, table.scanId, table.kind)
+      .where(sql`${table.scanId} is not null`),
+  ],
 )
 
 export const scanArtifacts = pgTable(

@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { db } from '@/db'
+import { type DatabaseTransaction, db } from '@/db'
 import { findingEvents } from '@/db/schema'
 import type {
   FindingDisposition,
@@ -21,15 +21,21 @@ export interface FindingEventInput {
 }
 
 /** Appends one entry to a finding's history log. */
-export async function recordFindingEvent(event: FindingEventInput) {
-  await db.insert(findingEvents).values({
-    findingId: event.findingId,
-    scanId: event.scanId ?? null,
-    kind: event.kind,
-    actor: event.actor,
-    fromState: event.fromState,
-    toState: event.toState,
-    disposition: event.disposition ?? null,
-    note: event.note ?? null,
-  })
+export async function recordFindingEvent(
+  event: FindingEventInput,
+  database: Pick<DatabaseTransaction, 'insert'> = db,
+) {
+  await database
+    .insert(findingEvents)
+    .values({
+      findingId: event.findingId,
+      scanId: event.scanId ?? null,
+      kind: event.kind,
+      actor: event.actor,
+      fromState: event.fromState,
+      toState: event.toState,
+      disposition: event.disposition ?? null,
+      note: event.note ?? null,
+    })
+    .onConflictDoNothing()
 }

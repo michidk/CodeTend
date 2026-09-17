@@ -1,5 +1,6 @@
 import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
+import { scannerResultSchema } from '@/lib/findings'
 import type {
   InvestigationReport,
   KnowledgeResult,
@@ -7,7 +8,10 @@ import type {
   ScanCoverage,
   ScannerOutcome,
   ScanRequest,
+  ScanRequestScanner,
   ScanResult,
+  SecurityProfile,
+  WorkspaceManifest,
 } from '../lib/contract'
 import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
 import type { JsonObject } from '../lib/json'
@@ -80,22 +84,8 @@ export default defineWorkflowTool({
     'use workflow'
 
     const request: ScanRequest = await readScanRequest(scanId)
-    const requestFingerprint = JSON.stringify({
-      repositoryId: request.repositoryId,
-      repositoryUrl: request.repositoryUrl,
-      branch: request.branch,
-      target: request.target,
-      maxInputTokens: request.maxInputTokens,
-      scanners: request.scanners.map((scanner) => scanner.id),
-      dependencyAudit: request.dependencyAudit !== false,
-      validation: request.validation,
-    })
-    const total =
-      5 +
-      request.scanners.length +
-      (request.dependencyAudit === false ? 0 : 1) +
-      (request.gitnexus ? 1 : 0) +
-      (request.scanners.some((scanner) => scanner.id === 'security') ? 1 : 0)
+    const requestFingerprint = fingerprintScanRequest(request)
+    const total = totalScanSteps(request)
     let completed = 0
 
     const cloning: Progress = {
@@ -115,26 +105,11 @@ export default defineWorkflowTool({
       scanTarget.kind === 'diff'
         ? new Set(await resolveDiffTargetFiles(request, workspace))
         : null
-    const scanners = request.scanners.map((scanner) => ({
-      ...scanner,
-      hypotheses: scanner.hypotheses.filter(
-        (hypothesis) =>
-          hypothesis.locations.length === 0 ||
-          scanTarget.kind === 'repository' ||
-          (scanTarget.kind === 'paths'
-            ? hypothesis.locations.some((location) =>
-                scanTarget.paths.some(
-                  (scope) =>
-                    location.path === scope ||
-                    location.path.startsWith(`${scope.replace(/\/$/, '')}/`) ||
-                    scope.startsWith(`${location.path.replace(/\/$/, '')}/`),
-                ),
-              )
-            : hypothesis.locations.some((location) =>
-                diffTargetFiles?.has(location.path),
-              )),
-      ),
-    }))
+    const scanners = filterScannersForTarget(
+      request,
+      scanTarget,
+      diffTargetFiles,
+    )
 
     let dependencyAudit: Awaited<ReturnType<typeof auditDependencies>> = {
       status: 'unavailable',
@@ -181,60 +156,17 @@ export default defineWorkflowTool({
       scannerTotal: scanners.length,
     }
     yield knowledgePhase
-    const staleness = assessKnowledgeStaleness(
-      request.knowledge,
+    const knowledgeBase = await refreshKnowledge({
+      request,
       workspace,
-      request.knowledge?.fileCount ?? null,
-    )
-    let knowledgeBase: Omit<KnowledgeResult, 'dependencyGraph'>
-    if (!staleness.refreshNeeded && request.knowledge) {
-      knowledgeBase = {
-        refreshed: false,
-        overview: request.knowledge.overview,
-        summary: request.knowledge.summary,
-        sources: request.knowledge.sources,
-        reason: staleness.reason,
-      }
-    } else {
-      const output = (await ctx.agent('knowledge', {
-        message: knowledgeAgentMessage({
-          repoPath,
-          repositoryName: request.repositoryName,
-          workspace,
-          previous: request.knowledge,
-          staleness,
-          gitnexusRepo,
-          securityProfile: request.securityProfile,
+      repoPath,
+      gitnexusRepo,
+      runAgent: (message) =>
+        ctx.agent('knowledge', {
+          message,
+          outputSchema: knowledgeOutputSchema,
         }),
-        outputSchema: knowledgeOutputSchema,
-      })) as unknown as KnowledgeAgentOutput | null
-      knowledgeBase = output
-        ? {
-            refreshed: true,
-            overview: output.overview,
-            summary: {
-              languages: output.languages,
-              frameworks: output.frameworks,
-              subsystems: output.subsystems,
-              concepts: output.concepts,
-              securityProfile: output.securityProfile,
-            },
-            sources: resolveSources(output.sources, workspace),
-            reason: staleness.reason,
-          }
-        : {
-            refreshed: false,
-            overview: request.knowledge?.overview ?? '',
-            summary: request.knowledge?.summary ?? {
-              languages: [],
-              frameworks: [],
-              subsystems: [],
-              concepts: [],
-            },
-            sources: request.knowledge?.sources ?? [],
-            reason: 'Knowledge agent returned no structured output.',
-          }
-    }
+    })
     completed += 1
 
     const dependencyGraphPhase: Progress = {
@@ -295,70 +227,21 @@ export default defineWorkflowTool({
       const pending = new Map(
         batch.map((scanner) => [
           scanner.id,
-          (async (): Promise<{
-            scannerId: string
-            outcome: ScannerOutcome
-          }> => {
-            const startedAt = await nowIso()
-            const message = scannerAgentMessage({
-              scanner,
-              siblingScanners: scanners,
-              repoPath,
-              repositoryName: request.repositoryName,
-              workspace,
-              knowledge,
-              gitnexusRepo,
-              previousCommitSha: request.previousCommitSha ?? null,
-              target: request.target,
-              maxInputTokens: Math.max(
-                10_000,
-                Math.floor(
-                  request.maxInputTokens / Math.max(1, scanners.length),
-                ),
-              ),
-              attentionHistory: scanner.attentionHistory,
-              securityProfile,
-            })
-            try {
-              let result: Awaited<ReturnType<typeof ctx.agent>> | null = null
-              let lastError: unknown
-              // Launching a dozen subagents at once occasionally trips a transient
-              // start failure inside the runtime; one retry recovers it.
-              for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
-                try {
-                  result = await ctx.agent('scanner', {
-                    message,
-                    outputSchema: request.outputSchema as JsonObject,
-                  })
-                  lastError = undefined
-                  break
-                } catch (error) {
-                  lastError = error
-                }
-              }
-              if (lastError !== undefined) throw lastError
-              return {
-                scannerId: scanner.id,
-                outcome: {
-                  scannerId: scanner.id,
-                  ...scannerOutput(result),
-                  startedAt,
-                  finishedAt: await nowIso(),
-                },
-              }
-            } catch (error) {
-              return {
-                scannerId: scanner.id,
-                outcome: {
-                  scannerId: scanner.id,
-                  status: 'failed',
-                  error: describeError(error),
-                  startedAt,
-                  finishedAt: await nowIso(),
-                },
-              }
-            }
-          })(),
+          runScanner({
+            scanner,
+            scanners,
+            request,
+            workspace,
+            knowledge,
+            repoPath,
+            gitnexusRepo,
+            securityProfile,
+            runAgent: (message) =>
+              ctx.agent('scanner', {
+                message,
+                outputSchema: request.outputSchema as JsonObject,
+              }),
+          }),
         ]),
       )
       while (pending.size > 0) {
@@ -396,33 +279,7 @@ export default defineWorkflowTool({
 
     const investigation = aggregateInvestigations(outcomes)
     const coverage = aggregateCoverage(outcomes, investigation)
-    const candidates = outcomes
-      .filter((outcome) => outcome.scannerId === 'security')
-      .flatMap((outcome) => {
-        const result = asScannerResult(outcome.result)
-        return (result?.findings ?? [])
-          .filter((finding) => finding && typeof finding === 'object')
-          .map((finding) => {
-            const record = finding as Record<string, unknown>
-            return {
-              scannerId: outcome.scannerId,
-              fingerprint: String(record.fingerprint ?? ''),
-              validationPlan:
-                record.validationPlan &&
-                typeof record.validationPlan === 'object'
-                  ? (record.validationPlan as {
-                      method: string
-                      commands: {
-                        command: string
-                        purpose: string
-                        timeoutSeconds: number
-                      }[]
-                    })
-                  : undefined,
-            }
-          })
-          .filter((candidate) => candidate.fingerprint.length > 0)
-      })
+    const candidates = securityValidationCandidates(outcomes)
 
     const validating: Progress = {
       phase: 'validating',
@@ -541,6 +398,202 @@ export default defineWorkflowTool({
   },
 })
 
+function fingerprintScanRequest(request: ScanRequest): string {
+  return JSON.stringify({
+    repositoryId: request.repositoryId,
+    repositoryUrl: request.repositoryUrl,
+    branch: request.branch,
+    target: request.target,
+    maxInputTokens: request.maxInputTokens,
+    scanners: request.scanners.map((scanner) => scanner.id),
+    dependencyAudit: request.dependencyAudit !== false,
+    validation: request.validation,
+  })
+}
+
+function totalScanSteps(request: ScanRequest): number {
+  return (
+    5 +
+    request.scanners.length +
+    (request.dependencyAudit === false ? 0 : 1) +
+    (request.gitnexus ? 1 : 0) +
+    (request.scanners.some((scanner) => scanner.id === 'security') ? 1 : 0)
+  )
+}
+
+function filterScannersForTarget(
+  request: ScanRequest,
+  target: ScanRequest['target'],
+  diffTargetFiles: ReadonlySet<string> | null,
+): ScanRequestScanner[] {
+  return request.scanners.map((scanner) => ({
+    ...scanner,
+    hypotheses: scanner.hypotheses.filter(
+      (hypothesis) =>
+        hypothesis.locations.length === 0 ||
+        target.kind === 'repository' ||
+        (target.kind === 'paths'
+          ? hypothesis.locations.some((location) =>
+              target.paths.some(
+                (scope) =>
+                  location.path === scope ||
+                  location.path.startsWith(`${scope.replace(/\/$/, '')}/`) ||
+                  scope.startsWith(`${location.path.replace(/\/$/, '')}/`),
+              ),
+            )
+          : hypothesis.locations.some((location) =>
+              diffTargetFiles?.has(location.path),
+            )),
+    ),
+  }))
+}
+
+function securityValidationCandidates(
+  outcomes: readonly ScannerOutcome[],
+): Parameters<typeof validateCandidates>[0]['candidates'] {
+  return outcomes
+    .filter((outcome) => outcome.scannerId === 'security')
+    .flatMap((outcome) => {
+      const result = asScannerResult(outcome.result)
+      return (result?.findings ?? [])
+        .map((finding) => ({
+          scannerId: outcome.scannerId,
+          fingerprint: finding.fingerprint,
+          validationPlan: finding.validationPlan,
+        }))
+        .filter((candidate) => candidate.fingerprint.length > 0)
+    })
+}
+
+async function refreshKnowledge(input: {
+  readonly request: ScanRequest
+  readonly workspace: WorkspaceManifest
+  readonly repoPath: string
+  readonly gitnexusRepo: string | null
+  readonly runAgent: (message: string) => Promise<unknown>
+}): Promise<Omit<KnowledgeResult, 'dependencyGraph'>> {
+  const staleness = assessKnowledgeStaleness(
+    input.request.knowledge,
+    input.workspace,
+    input.request.knowledge?.fileCount ?? null,
+  )
+  if (!staleness.refreshNeeded && input.request.knowledge) {
+    return {
+      refreshed: false,
+      overview: input.request.knowledge.overview,
+      summary: input.request.knowledge.summary,
+      sources: input.request.knowledge.sources,
+      reason: staleness.reason,
+    }
+  }
+
+  const output = (await input.runAgent(
+    knowledgeAgentMessage({
+      repoPath: input.repoPath,
+      repositoryName: input.request.repositoryName,
+      workspace: input.workspace,
+      previous: input.request.knowledge,
+      staleness,
+      gitnexusRepo: input.gitnexusRepo,
+      securityProfile: input.request.securityProfile,
+    }),
+  )) as KnowledgeAgentOutput | null
+  return output
+    ? {
+        refreshed: true,
+        overview: output.overview,
+        summary: {
+          languages: output.languages,
+          frameworks: output.frameworks,
+          subsystems: output.subsystems,
+          concepts: output.concepts,
+          securityProfile: output.securityProfile,
+        },
+        sources: resolveSources(output.sources, input.workspace),
+        reason: staleness.reason,
+      }
+    : {
+        refreshed: false,
+        overview: input.request.knowledge?.overview ?? '',
+        summary: input.request.knowledge?.summary ?? {
+          languages: [],
+          frameworks: [],
+          subsystems: [],
+          concepts: [],
+        },
+        sources: input.request.knowledge?.sources ?? [],
+        reason: 'Knowledge agent returned no structured output.',
+      }
+}
+
+async function runScanner(input: {
+  readonly scanner: ScanRequestScanner
+  readonly scanners: readonly ScanRequestScanner[]
+  readonly request: ScanRequest
+  readonly workspace: WorkspaceManifest
+  readonly knowledge: KnowledgeResult
+  readonly repoPath: string
+  readonly gitnexusRepo: string | null
+  readonly securityProfile: SecurityProfile
+  readonly runAgent: (message: string) => Promise<unknown>
+}): Promise<{ scannerId: string; outcome: ScannerOutcome }> {
+  const startedAt = await nowIso()
+  const message = scannerAgentMessage({
+    scanner: input.scanner,
+    siblingScanners: input.scanners,
+    repoPath: input.repoPath,
+    repositoryName: input.request.repositoryName,
+    workspace: input.workspace,
+    knowledge: input.knowledge,
+    gitnexusRepo: input.gitnexusRepo,
+    previousCommitSha: input.request.previousCommitSha ?? null,
+    target: input.request.target,
+    maxInputTokens: Math.max(
+      10_000,
+      Math.floor(
+        input.request.maxInputTokens / Math.max(1, input.scanners.length),
+      ),
+    ),
+    attentionHistory: input.scanner.attentionHistory,
+    securityProfile: input.securityProfile,
+  })
+  try {
+    let result: unknown = null
+    let lastError: unknown
+    // A transient session-start failure gets one bounded retry.
+    for (let attempt = 0; attempt < SCANNER_ATTEMPTS; attempt += 1) {
+      try {
+        result = await input.runAgent(message)
+        lastError = undefined
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (lastError !== undefined) throw lastError
+    return {
+      scannerId: input.scanner.id,
+      outcome: {
+        scannerId: input.scanner.id,
+        ...scannerOutput(result),
+        startedAt,
+        finishedAt: await nowIso(),
+      },
+    }
+  } catch (error) {
+    return {
+      scannerId: input.scanner.id,
+      outcome: {
+        scannerId: input.scanner.id,
+        status: 'failed',
+        error: describeError(error),
+        startedAt,
+        finishedAt: await nowIso(),
+      },
+    }
+  }
+}
+
 function resolveSources(
   paths: readonly string[],
   workspace: { files: readonly { path: string; hash: string }[]; name: string },
@@ -601,24 +654,19 @@ function securityProfileFromKnowledge(
   )
 }
 
-interface RawScannerResult {
-  readonly summary?: string
-  readonly findings?: readonly Record<string, unknown>[]
-  readonly hypothesisVerdicts?: readonly Record<string, unknown>[]
-  readonly investigation?: InvestigationReport
-  readonly coverage?: ScanCoverage
-}
-
 /**
  * A subagent that never calls `final_output` settles with plain text (a
  * harness message or the model's prose) instead of the structured result.
  * Keeping that text as the error explains the failure in the UI instead of
  * breaking the result file's schema.
  */
-function scannerOutput(
-  result: unknown,
-): Pick<ScannerOutcome, 'status' | 'result' | 'error'> {
-  if (asScannerResult(result)) return { status: 'completed', result }
+function scannerOutput(result: unknown): {
+  readonly status: 'completed' | 'failed'
+  readonly result?: ScannerOutcome['result']
+  readonly error?: string
+} {
+  const parsed = scannerResultSchema.safeParse(result)
+  if (parsed.success) return { status: 'completed', result: parsed.data }
   const text = typeof result === 'string' ? result.trim() : ''
   return {
     status: 'failed',
@@ -629,10 +677,9 @@ function scannerOutput(
   }
 }
 
-function asScannerResult(value: unknown): RawScannerResult | null {
-  return typeof value === 'object' && value !== null
-    ? (value as RawScannerResult)
-    : null
+function asScannerResult(value: unknown) {
+  const parsed = scannerResultSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
 }
 
 function aggregateInvestigations(

@@ -111,6 +111,7 @@ export async function generateFindingPatchImpl(findingId: number) {
   const created = expectReturnedRow(patch, 'Patch')
   try {
     await writePatchRequest({
+      contractVersion: 1,
       patchId: created.id,
       repositoryId: finding.repositoryId,
       repositoryName: finding.repository.name,
@@ -293,7 +294,6 @@ async function persistPatchResult(
         .filter(Boolean)
         .join('\n\n'),
       verification,
-      pullRequest: result.pullRequest,
       model: usage?.model ?? null,
       ...usageColumns(usage?.total),
       updatedAt: new Date(result.finishedAt),

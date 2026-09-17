@@ -176,6 +176,13 @@
       "when": 1789657897028,
       "tag": "0024_deep_warhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789660641514,
+      "tag": "0025_dark_nick_fury",
+      "breakpoints": true
     }
   ]
 }

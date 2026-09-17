@@ -274,8 +274,95 @@ try {
     throw new Error('Active-patch uniqueness constraint was not enforced')
   }
 
+  let lifecycleStateVerified = false
+  try {
+    await client.begin(async (transaction) => {
+      const [repository] = await transaction<[{ id: number }]>`
+        insert into repositories (name, url, branch)
+        values ('lifecycle smoke test', 'https://github.com/example/lifecycle.git', 'main')
+        returning id
+      `
+      const [scan] = await transaction<[{ id: number }]>`
+        insert into scans (repository_id, status, trigger, phase, started_at)
+        values (${repository.id}, 'running', 'manual', 'scanning', now())
+        returning id
+      `
+      await transaction`
+        insert into scanner_runs (scan_id, scanner_id, status, started_at)
+        values (${scan.id}, 'reliability', 'running', now())
+      `
+      const [finding] = await transaction<[{ id: number }]>`
+        insert into findings (
+          repository_id, scanner_id, fingerprint, state, title, severity,
+          confidence, description, why_it_matters, recommendation, effort,
+          first_seen_scan_id, last_seen_scan_id
+        ) values (
+          ${repository.id}, 'reliability', 'retry-safe-event', 'new',
+          'Retry-safe event', 'high', 'high', 'Description', 'Impact',
+          'Recommendation', 'small', ${scan.id}, ${scan.id}
+        )
+        returning id
+      `
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await transaction`
+          insert into finding_events (
+            finding_id, scan_id, kind, actor, from_state, to_state
+          ) values (
+            ${finding.id}, ${scan.id}, 'detected', 'scanner', null, 'new'
+          )
+          on conflict do nothing
+        `
+      }
+      const [eventCount] = await transaction<[{ count: number }]>`
+        select count(*)::int as count
+        from finding_events
+        where finding_id = ${finding.id}
+          and scan_id = ${scan.id}
+          and kind = 'detected'
+      `
+      if (eventCount.count !== 1) {
+        throw new Error('Retried finding event was not idempotent')
+      }
+
+      await transaction`
+        update scans
+        set cancellation_requested_at = now(), phase = 'cancelling'
+        where id = ${scan.id} and status in ('queued', 'running')
+      `
+      await transaction`
+        update scans
+        set status = 'cancelled', phase = 'cancelled', progress = null,
+            error = null, finished_at = now()
+        where id = ${scan.id} and status in ('queued', 'running')
+      `
+      await transaction`
+        update scanner_runs
+        set status = 'cancelled', error = null, finished_at = now()
+        where scan_id = ${scan.id} and status in ('pending', 'running')
+      `
+      const [terminalState] = await transaction<
+        [{ scan_status: string; run_status: string }]
+      >`
+        select scans.status as scan_status, scanner_runs.status as run_status
+        from scans
+        join scanner_runs on scanner_runs.scan_id = scans.id
+        where scans.id = ${scan.id}
+      `
+      lifecycleStateVerified =
+        terminalState.scan_status === 'cancelled' &&
+        terminalState.run_status === 'cancelled'
+      throw rollback
+    })
+  } catch (error) {
+    if (error !== rollback) throw error
+  }
+  if (!lifecycleStateVerified) {
+    throw new Error('Cancellation did not terminate the scan and scanner run')
+  }
+
   console.log(
-    `Database smoke test passed (${migrationFiles.length} migrations, security schema present, active scan/patch constraints enforced)`,
+    `Database smoke test passed (${migrationFiles.length} migrations, security schema present, active constraints and lifecycle idempotency enforced)`,
   )
 } finally {
   await client.end()

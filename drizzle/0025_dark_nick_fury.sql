@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "finding_events_scan_kind_idx" ON "finding_events" USING btree ("finding_id","scan_id","kind") WHERE "finding_events"."scan_id" is not null;

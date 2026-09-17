@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { Check, Download, ExternalLink, GitPullRequest, X } from 'lucide-react'
+import { Check, Download, GitPullRequest, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FindingAgentPromptDialog } from '@/components/health/finding-agent-prompt-dialog'
@@ -34,12 +34,10 @@ export function FindingPatchControls({
     setBusy(true)
     try {
       await generateFindingPatch({ data: findingId })
-      toast.success('Pull request creation started')
+      toast.success('Patch generation started')
       await router.invalidate()
     } catch (error) {
-      toast.error(
-        getErrorMessage(error, 'Could not start pull request creation'),
-      )
+      toast.error(getErrorMessage(error, 'Could not start patch generation'))
     } finally {
       setBusy(false)
     }
@@ -75,8 +73,8 @@ export function FindingPatchControls({
             Automated fix
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Generates a focused fix in a disposable clone, pushes a dedicated
-            branch and opens a pull request for review.
+            Generates a focused diff in a disposable clone for review and
+            download. CodeTend never writes it to the source repository.
           </p>
         </div>
         {latest ? (
@@ -128,14 +126,6 @@ export function FindingPatchControls({
 
       <div className="flex flex-wrap gap-2">
         <FindingAgentPromptDialog prompt={agentPrompt} />
-        {latest?.pullRequest ? (
-          <Button size="sm" asChild>
-            <a href={latest.pullRequest.url} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              Open pull request #{latest.pullRequest.number}
-            </a>
-          </Button>
-        ) : null}
         {canGenerate ? (
           <Button
             size="sm"
@@ -144,17 +134,13 @@ export function FindingPatchControls({
             disabled={busy}
           >
             <GitPullRequest className="size-3.5" aria-hidden="true" />
-            {busy
-              ? 'Starting…'
-              : latest
-                ? 'Try pull request again'
-                : 'Create pull request'}
+            {busy ? 'Starting…' : latest ? 'Try patch again' : 'Generate patch'}
           </Button>
         ) : null}
         {generating ? (
           <Button size="sm" variant="outline" disabled>
             <GitPullRequest className="size-3.5" aria-hidden="true" />
-            Creating pull request…
+            Generating patch…
           </Button>
         ) : null}
         {latest?.diff ? (

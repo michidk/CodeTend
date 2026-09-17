@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
   && grep " osv-scanner_linux_${TARGETARCH}$" osv-scanner_SHA256SUMS | sha256sum -c - \
   && install -m 0755 "osv-scanner_linux_${TARGETARCH}" /usr/local/bin/osv-scanner \
   && rm -rf /var/lib/apt/lists/* /tmp/osv-scanner_*
-COPY src/lib/findings.ts src/lib/scanners.ts ./src/lib/
+COPY src/lib/eve-protocol.ts src/lib/findings.ts src/lib/scanners.ts src/lib/security-scans.ts ./src/lib/
 COPY eve/package.json eve/package-lock.json* ./eve/
 WORKDIR /app/eve
 RUN npm ci
