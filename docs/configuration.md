@@ -34,10 +34,28 @@ boundary in front of it.
 | `TECDEBT_ALLOWED_GIT_HOSTS` | `github.com` | Comma-separated exact clone-host allowlist |
 | `TECDEBT_ALLOW_LOCAL_REPOSITORIES` | `false` | Allow `file://` URLs and absolute paths (development only) |
 | `TECDEBT_ALLOW_INSECURE_GIT` | `false` | Allow plaintext `http://` clones (development only) |
-| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing repositories, cloning private HTTPS repositories, and publishing automated fix pull requests. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN`. Automated fixes require repository contents and pull-request write permissions. |
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | – | Optional GitHub App credentials for browsing repositories, cloning private HTTPS repositories, and publishing automated fix pull requests. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN`. See [GitHub App permissions](#github-app-permissions). |
 | `GITHUB_TOKEN` | – | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured |
 | `HODOR_SECRET` | – | Enables the first-party OAuth-protected MCP endpoint using the same secret configured as Hodor `SECRET`; the app derives a separate OAuth signing key without imposing an additional length requirement |
 | `MCP_ALLOWED_ORIGINS` | – | Comma-separated allowlist for browser MCP clients; native clients omit `Origin` |
+
+### GitHub App permissions
+
+Install the App on every repository CodeTend scans. GitHub grants Metadata
+read access automatically; configure the remaining repository permissions as
+follows:
+
+| Repository permission | Required access | Used for |
+| --- | --- | --- |
+| Contents | Read and write | Clone the repository, create a fix branch, and push its commit |
+| Pull requests | Read and write | Open the generated fix pull request and return its URL |
+| Metadata | Read-only | Resolve the installation and repository metadata (granted automatically by GitHub) |
+
+No organization or account permissions are required. Do not grant
+Administration, Actions, Workflows, Secrets, or Members access. After changing
+an existing App's permissions, an installation owner must approve the pending
+permission request before newly minted installation tokens receive the write
+permissions.
 
 ### OAuth-protected MCP
 

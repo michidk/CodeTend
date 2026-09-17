@@ -25,6 +25,10 @@ a second claim, so the Deployment runs one replica with `Recreate`.
 `github.appAuth.existingSecret` is optional; it enables private-repository
 clones through a GitHub App whose installation tokens CodeTend mints itself
 after resolving every installation (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`).
+Install the App on every scanned repository with **Contents: Read and write**
+and **Pull requests: Read and write** so automated fixes can push a branch and
+open a pull request. GitHub grants the required Metadata read access
+automatically; no organization or account permissions are needed.
 
 ## Example
 
