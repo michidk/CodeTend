@@ -67,11 +67,35 @@ const subsystemDependencyGraphSchema = z
     componentCount: null,
   })
 
+const dependencyImpactEvidenceSchema = z.object({
+  path: z.string().min(1).max(1_000),
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+  symbol: z.string().min(1).max(200).optional(),
+  role: z.enum(['source', 'control', 'sink', 'supporting', 'test']),
+  summary: z.string().min(5).max(1_000),
+})
+
+const dependencyImpactAssessmentSchema = z.object({
+  package: z.object({
+    ecosystem: z.string().min(1),
+    name: z.string().min(1),
+    version: z.string().min(1),
+  }),
+  advisoryIds: z.array(z.string().min(1)).min(1),
+  verdict: z.enum(['confirmed', 'not-confirmed']),
+  rationale: z.string().min(5).max(2_000),
+  inspectedEvidence: z.array(dependencyImpactEvidenceSchema).max(20),
+})
+
 const dependencyAuditResultSchema = z.object({
   status: z.enum(['completed', 'unavailable', 'failed']),
   report: z.unknown().optional(),
   error: z.string().optional(),
   toolVersion: z.string().optional(),
+  exploitabilityAssessments: z
+    .array(dependencyImpactAssessmentSchema)
+    .default([]),
 })
 
 const scannerOutcomeSchema = z.object({
@@ -210,6 +234,7 @@ export const scanResultSchema = z.object({
   dependencyAudit: dependencyAuditResultSchema.default({
     status: 'unavailable',
     error: 'This scan predates dependency auditing.',
+    exploitabilityAssessments: [],
   }),
   scanners: z.array(scannerOutcomeSchema),
   investigation: investigationReportSchema,

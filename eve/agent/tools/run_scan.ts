@@ -2,6 +2,7 @@ import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
 import { scannerResultSchema } from '@/lib/findings'
 import type {
+  DependencyAuditResult,
   InvestigationReport,
   KnowledgeResult,
   ScanCheckpoint,
@@ -14,6 +15,15 @@ import type {
   WorkspaceManifest,
 } from '../lib/contract'
 import { UNAVAILABLE_DEPENDENCY_GRAPH } from '../lib/dependency-graph'
+import {
+  applyDependencyImpactReviews,
+  type DependencyImpactReview,
+  dependencyImpactCandidates,
+  dependencyImpactReviewBatches,
+  dependencyImpactReviewJsonSchema,
+  dependencyImpactReviewMessage,
+  dependencyImpactReviewSchema,
+} from '../lib/dependency-security-review'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -111,9 +121,10 @@ export default defineWorkflowTool({
       diffTargetFiles,
     )
 
-    let dependencyAudit: Awaited<ReturnType<typeof auditDependencies>> = {
+    let dependencyAudit: DependencyAuditResult = {
       status: 'unavailable',
       error: 'The dependency scanner was disabled for this scan.',
+      exploitabilityAssessments: [],
     }
     // Requests from an older app omit this flag and retain the old enabled
     // behavior during rolling deployments.
@@ -346,6 +357,59 @@ export default defineWorkflowTool({
       completed += 1
     }
 
+    if (request.dependencyAudit !== false) {
+      let candidates: ReturnType<typeof dependencyImpactCandidates> = []
+      if (
+        dependencyAudit.status === 'completed' &&
+        dependencyAudit.report !== undefined
+      ) {
+        try {
+          candidates = dependencyImpactCandidates(dependencyAudit.report)
+        } catch {
+          // The deterministic server parser remains authoritative for the
+          // audit. If review candidate extraction fails, no finding is
+          // promoted without a confirmed repository-specific assessment.
+        }
+      }
+      const reviewingDependencies: Progress = {
+        phase: 'reviewing dependency impact',
+        detail: `${candidates.length} dependency vulnerability candidates to review`,
+        completed,
+        total,
+        scannerCompleted: outcomes.length,
+        scannerTotal: scanners.length,
+      }
+      yield reviewingDependencies
+      const reviews: DependencyImpactReview[] = []
+      for (const batch of dependencyImpactReviewBatches(candidates)) {
+        try {
+          const rawReview = await ctx.agent('scanner', {
+            message: dependencyImpactReviewMessage({
+              repoPath,
+              repositoryName: request.repositoryName,
+              candidates: batch,
+              securityProfile,
+              gitnexusRepo,
+            }),
+            outputSchema: dependencyImpactReviewJsonSchema,
+          })
+          const parsed = dependencyImpactReviewSchema.safeParse(rawReview)
+          if (parsed.success) reviews.push(parsed.data)
+        } catch {
+          // Missing batches are converted into not-confirmed assessments.
+        }
+      }
+      dependencyAudit = {
+        ...dependencyAudit,
+        exploitabilityAssessments: applyDependencyImpactReviews(
+          candidates,
+          reviews,
+          workspace.files.map((file) => file.path),
+        ),
+      }
+      completed += 1
+    }
+
     const persisting: Progress = {
       phase: 'persisting',
       detail: 'Writing the scan result',
@@ -415,6 +479,7 @@ function totalScanSteps(request: ScanRequest): number {
   return (
     5 +
     request.scanners.length +
+    (request.dependencyAudit === false ? 0 : 1) +
     (request.dependencyAudit === false ? 0 : 1) +
     (request.gitnexus ? 1 : 0) +
     (request.scanners.some((scanner) => scanner.id === 'security') ? 1 : 0)

@@ -4,6 +4,7 @@ import {
   type ScanRequest,
   scanCheckpointSchema,
   scanRequestSchema,
+  scanResultSchema,
 } from '@/lib/eve-protocol'
 
 const request: ScanRequest = {
@@ -48,6 +49,39 @@ describe('Eve protocol', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  test('defaults dependency impact assessments for older scan results', () => {
+    const parsed = scanResultSchema.shape.dependencyAudit.parse({
+      status: 'completed',
+      report: { results: [] },
+    })
+
+    expect(parsed.exploitabilityAssessments).toEqual([])
+  })
+
+  test('preserves dependency impact assessments across the protocol', () => {
+    const parsed = scanResultSchema.shape.dependencyAudit.parse({
+      status: 'completed',
+      report: { results: [] },
+      exploitabilityAssessments: [
+        {
+          package: { ecosystem: 'npm', name: 'tar', version: '7.4.3' },
+          advisoryIds: ['CVE-2026-59873'],
+          verdict: 'not-confirmed',
+          rationale: 'Only reachable from the trusted CSS build pipeline.',
+          inspectedEvidence: [
+            {
+              path: 'package.json',
+              role: 'supporting',
+              summary: 'Declares the build-only package path.',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(parsed.exploitabilityAssessments[0]?.package.name).toBe('tar')
   })
 
   test('allows review states but not publication in fixer results', () => {

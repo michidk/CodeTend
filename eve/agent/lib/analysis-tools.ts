@@ -197,6 +197,7 @@ export async function auditDependencies(
       status: 'unavailable',
       error:
         'osv-scanner is not installed. Set OSV_SCANNER_BIN or install it in .tools/osv-scanner.',
+      exploitabilityAssessments: [],
     }
   }
 
@@ -225,17 +226,20 @@ export async function auditDependencies(
         status: 'failed',
         error: (scan.stderr || scan.stdout).slice(-2000),
         toolVersion: version.stdout.trim() || undefined,
+        exploitabilityAssessments: [],
       }
     }
     return {
       status: 'completed',
       report: JSON.parse(scan.stdout) as unknown,
       toolVersion: version.stdout.trim() || undefined,
+      exploitabilityAssessments: [],
     }
   } catch (error) {
     return {
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
+      exploitabilityAssessments: [],
     }
   }
 }
