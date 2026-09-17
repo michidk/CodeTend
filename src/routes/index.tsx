@@ -153,12 +153,16 @@ function RepositoryCard({
             className="text-right leading-tight"
             title={
               row.schedule.enabled
-                ? `${row.schedule.cronExpression} UTC; next ${formatRelative(row.schedule.nextRunAt)}`
+                ? row.schedule.mode === 'distributed'
+                  ? `${row.schedule.scansPerDay} scans/day; next ${formatRelative(row.schedule.nextRunAt)}`
+                  : `${row.schedule.cronExpression} UTC; next ${formatRelative(row.schedule.nextRunAt)}`
                 : 'Scheduled scans disabled'
             }
           >
             {row.schedule.enabled
-              ? `${describeCron(row.schedule.cronExpression)}${row.schedule.overridden ? ' · override' : ''}`
+              ? row.schedule.mode === 'distributed'
+                ? `${row.schedule.scansPerDay}/day · distributed`
+                : `${describeCron(row.schedule.cronExpression)}${row.schedule.overridden ? ' · override' : ''}`
               : 'Disabled'}
           </dd>
         </dl>

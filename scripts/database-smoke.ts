@@ -45,6 +45,30 @@ try {
     )
   }
 
+  const requiredScheduleColumns = [
+    'mode',
+    'scans_per_day',
+    'last_distributed_repository_id',
+  ]
+  const scheduleColumns = await client<{ column_name: string }[]>`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'scan_schedule_settings'
+      and column_name = any(${requiredScheduleColumns})
+  `
+  const presentScheduleColumns = new Set(
+    scheduleColumns.map((column) => column.column_name),
+  )
+  const missingScheduleColumns = requiredScheduleColumns.filter(
+    (column) => !presentScheduleColumns.has(column),
+  )
+  if (missingScheduleColumns.length > 0) {
+    throw new Error(
+      `Missing scan schedule columns: ${missingScheduleColumns.join(', ')}`,
+    )
+  }
+
   const requiredFindingColumns = [
     'classification',
     'security_context',

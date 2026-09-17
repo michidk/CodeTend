@@ -10,8 +10,11 @@ import {
   scheduledRepositoryQueue,
 } from '@/db/schema'
 import { getServerEnv } from '@/lib/env.server'
-import { computeNextScanAt } from '@/lib/schedule'
-import { isScheduleDispatchReady } from '@/lib/scheduled-queue'
+import { computeNextDistributedScanAt, computeNextScanAt } from '@/lib/schedule'
+import {
+  isScheduleDispatchReady,
+  selectNextDistributedRepositoryId,
+} from '@/lib/scheduled-queue'
 import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
 import {
   pruneTransientPatchArtifacts,
@@ -32,10 +35,11 @@ interface SchedulerState {
 }
 
 /**
- * Lightweight in-process scheduler. The global schedule durably enqueues
- * repositories that inherit it, while due repository overrides enqueue only
- * their repository. Each tick dispatches at most one queue entry, honoring the
- * configured cooldown and the normal scan-capacity limits.
+ * Lightweight in-process scheduler. Cron mode durably enqueues every
+ * repository that inherits the global schedule; distributed mode rotates
+ * through those repositories at evenly spaced scans-per-day slots. Due
+ * repository overrides enqueue only their repository. Each tick dispatches at
+ * most one queue entry, honoring the configured cooldown and normal capacity.
  */
 export function ensureScheduler(): void {
   const globalState = globalThis as { [SCHEDULER_KEY]?: SchedulerState }
@@ -104,23 +108,41 @@ async function tick(state: SchedulerState) {
           ),
         )
         .orderBy(asc(repositories.createdAt), asc(repositories.id))
-      if (repositoryIds.length > 0) {
+      const repositoryIdsToQueue =
+        settings.mode === 'distributed'
+          ? [
+              selectNextDistributedRepositoryId(
+                repositoryIds.map((row) => row.repositoryId),
+                settings.lastDistributedRepositoryId,
+              ),
+            ].filter((id): id is number => id !== null)
+          : repositoryIds.map((row) => row.repositoryId)
+      if (repositoryIdsToQueue.length > 0) {
         await db
           .insert(scheduledRepositoryQueue)
-          .values(repositoryIds)
+          .values(
+            repositoryIdsToQueue.map((repositoryId) => ({ repositoryId })),
+          )
           .onConflictDoNothing()
       }
       const [advanced] = await db
         .update(scanScheduleSettings)
         .set({
-          nextRunAt: computeNextScanAt(settings.cronExpression, now),
+          nextRunAt:
+            settings.mode === 'distributed'
+              ? computeNextDistributedScanAt(settings.scansPerDay, now)
+              : computeNextScanAt(settings.cronExpression, now),
+          lastDistributedRepositoryId:
+            settings.mode === 'distributed' && repositoryIdsToQueue.length > 0
+              ? repositoryIdsToQueue[0]
+              : settings.lastDistributedRepositoryId,
           updatedAt: now,
         })
         .where(lte(scanScheduleSettings.nextRunAt, now))
         .returning()
       settings = advanced ?? settings
       console.info(
-        `[CodeTend] queued ${repositoryIds.length} repositories for scheduled scanning`,
+        `[CodeTend] queued ${repositoryIdsToQueue.length} repositories for ${settings.mode} scheduled scanning`,
       )
     }
 

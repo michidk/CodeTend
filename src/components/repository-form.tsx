@@ -23,6 +23,8 @@ export interface RepositoryFormProps {
   readonly onCancel?: () => void
   readonly globalSchedule: {
     enabled: boolean
+    mode: 'cron' | 'distributed'
+    scansPerDay: number
     cronExpression: string
     nextRunAt: Date | null
   }
@@ -198,7 +200,9 @@ export function RepositoryForm({
                   </Label>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {globalSchedule.enabled
-                      ? `Default: ${globalSchedule.cronExpression} (UTC), next ${formatDateTime(globalSchedule.nextRunAt)}.`
+                      ? globalSchedule.mode === 'distributed'
+                        ? `Default: distributed at ${globalSchedule.scansPerDay} ${globalSchedule.scansPerDay === 1 ? 'scan' : 'scans'} per day, next ${formatDateTime(globalSchedule.nextRunAt)}.`
+                        : `Default: ${globalSchedule.cronExpression} (UTC), next ${formatDateTime(globalSchedule.nextRunAt)}.`
                       : 'Scheduled scans are globally disabled.'}
                   </p>
                 </div>

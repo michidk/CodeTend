@@ -4,12 +4,19 @@ import { z } from 'zod'
 import { db } from '@/db'
 import { scanScheduleSettings, scheduledRepositoryQueue } from '@/db/schema'
 import { expectReturnedRow } from '@/lib/domain-errors'
-import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
+import {
+  computeNextDistributedScanAt,
+  computeNextScanAt,
+  isValidCronExpression,
+  SCHEDULE_MODES,
+  type ScheduleMode,
+} from '@/lib/schedule'
 import { MAX_SCAN_INPUT_TOKEN_BUDGET } from '@/lib/security-scans'
 
 const SETTINGS_ID = 1
 
 const scheduleSettingsInputSchema = z.object({
+  mode: z.enum(SCHEDULE_MODES),
   cronExpression: z
     .string()
     .trim()
@@ -17,11 +24,23 @@ const scheduleSettingsInputSchema = z.object({
     .max(100)
     .refine(isValidCronExpression, 'Enter a valid 5-field cron expression'),
   enabled: z.boolean(),
+  scansPerDay: z.number().int().min(1).max(1_440),
   cooldownMinutes: z.number().int().min(0).max(10_080),
   maxInputTokens: z.number().int().min(10_000).max(MAX_SCAN_INPUT_TOKEN_BUDGET),
   maxDailyCostUsd: z.number().positive().nullable(),
   defaultScanCostUsd: z.number().positive().nullable(),
 })
+
+function computeNextGlobalRunAt(
+  mode: ScheduleMode,
+  cronExpression: string,
+  scansPerDay: number,
+  from: Date,
+) {
+  return mode === 'distributed'
+    ? computeNextDistributedScanAt(scansPerDay, from)
+    : computeNextScanAt(cronExpression, from)
+}
 
 export async function ensureScheduleSettingsRow() {
   const current = await db.query.scanScheduleSettings.findFirst({
@@ -60,7 +79,11 @@ export const updateScheduleSettings = createServerFn({ method: 'POST' })
   .validator(scheduleSettingsInputSchema)
   .handler(async ({ data }) => {
     const current = await ensureScheduleSettingsRow()
-    const scheduleChanged = current.cronExpression !== data.cronExpression
+    const scheduleChanged =
+      current.mode !== data.mode ||
+      (data.mode === 'cron'
+        ? current.cronExpression !== data.cronExpression
+        : current.scansPerDay !== data.scansPerDay)
 
     const [updated] = await db
       .update(scanScheduleSettings)
@@ -68,7 +91,12 @@ export const updateScheduleSettings = createServerFn({ method: 'POST' })
         ...data,
         nextRunAt: data.enabled
           ? scheduleChanged || !current.nextRunAt || !current.enabled
-            ? computeNextScanAt(data.cronExpression, new Date())
+            ? computeNextGlobalRunAt(
+                data.mode,
+                data.cronExpression,
+                data.scansPerDay,
+                new Date(),
+              )
             : current.nextRunAt
           : null,
         updatedAt: new Date(),

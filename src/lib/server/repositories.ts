@@ -162,6 +162,11 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
         runningScan: runningByRepository.get(repository.id) ?? null,
         schedule: {
           enabled: scheduleSettings.enabled && repository.scheduleEnabled,
+          mode:
+            repository.scheduleCronExpression === null
+              ? scheduleSettings.mode
+              : ('cron' as const),
+          scansPerDay: scheduleSettings.scansPerDay,
           cronExpression:
             repository.scheduleCronExpression ??
             scheduleSettings.cronExpression,

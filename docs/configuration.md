@@ -3,14 +3,15 @@
 Deployment settings are environment variables. `.env.example` documents a
 working local layout; Docker Compose maps the same names into the `app` and
 `eve` services. The app validates its variables on startup with Zod and
-reports the affected names. The default repository cron, enabled state, and
-cooldown between queued repositories are stored in PostgreSQL and edited on
-the Settings page. Individual repositories can override the default cron from
-their edit page or disable scheduled runs for that repository; five-field cron
-day-of-week expressions support weekday and weekly schedules. Scanner
-enablement and custom scanner definitions are also stored in PostgreSQL and
-managed on the Scanners page. A running scan keeps the definitions it started
-with.
+reports the affected names. The default repository scheduling mode, enabled
+state, and cooldown between queued repositories are stored in PostgreSQL and
+edited on the Settings page. Cron mode queues every inherited repository at
+once; distributed mode rotates through them at an evenly spaced scans-per-day
+rate. Individual repositories can override either default with their own cron
+or disable scheduled runs; five-field cron day-of-week expressions support
+weekday and weekly schedules. Scanner enablement and custom scanner definitions
+are also stored in PostgreSQL and managed on the Scanners page. A running scan
+keeps the definitions it started with.
 
 The `TECDEBT_*` prefix is retained for configuration compatibility after the
 project was renamed to CodeTend.

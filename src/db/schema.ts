@@ -82,7 +82,7 @@ export const repositories = pgTable('repositories', {
   url: text('url').notNull(),
   branch: text('branch').notNull().default('main'),
   scheduleEnabled: boolean('schedule_enabled').notNull().default(true),
-  /** Null inherits the global cron from scan_schedule_settings. */
+  /** Null inherits the global scheduling mode from scan_schedule_settings. */
   scheduleCronExpression: text('schedule_cron_expression'),
   nextScheduledScanAt: timestamp('next_scheduled_scan_at', {
     withTimezone: true,
@@ -95,7 +95,10 @@ export const repositories = pgTable('repositories', {
 /** Singleton configuration for the global repository scan queue. */
 export const scanScheduleSettings = pgTable('scan_schedule_settings', {
   id: integer('id').primaryKey().default(1),
+  mode: text('mode').$type<'cron' | 'distributed'>().notNull().default('cron'),
   cronExpression: text('cron_expression').notNull().default('0 3 * * *'),
+  scansPerDay: integer('scans_per_day').notNull().default(1),
+  lastDistributedRepositoryId: integer('last_distributed_repository_id'),
   enabled: boolean('enabled').notNull().default(true),
   cooldownMinutes: integer('cooldown_minutes').notNull().default(5),
   maxFiles: integer('max_files').notNull().default(300),

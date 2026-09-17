@@ -170,9 +170,10 @@ function RepositoryPage() {
             {' · '}
             {schedule.enabled ? (
               <>
-                {describeCron(schedule.cronExpression)} UTC
-                {schedule.overridden ? ' (override)' : ' (global)'} · next{' '}
-                {formatRelative(schedule.nextRunAt)}
+                {schedule.mode === 'distributed'
+                  ? `${schedule.scansPerDay} ${schedule.scansPerDay === 1 ? 'scan' : 'scans'} per day (distributed global schedule)`
+                  : `${describeCron(schedule.cronExpression)} UTC${schedule.overridden ? ' (override)' : ' (global)'}`}{' '}
+                · next {formatRelative(schedule.nextRunAt)}
               </>
             ) : (
               'scheduled scans disabled'

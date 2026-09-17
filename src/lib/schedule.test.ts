@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   CRON_PRESETS,
+  computeNextDistributedScanAt,
   computeNextScanAt,
   isValidCronExpression,
 } from '@/lib/schedule'
@@ -36,5 +37,16 @@ describe('cron schedules', () => {
     expect(computeNextScanAt('0 6 * * 1-5', from).toISOString()).toBe(
       '2026-09-14T06:00:00.000Z',
     )
+  })
+
+  test('spaces distributed scans evenly across a UTC day', () => {
+    const from = new Date('2026-09-17T00:00:00.000Z')
+    expect(computeNextDistributedScanAt(1, from).toISOString()).toBe(
+      '2026-09-18T00:00:00.000Z',
+    )
+    expect(computeNextDistributedScanAt(4, from).toISOString()).toBe(
+      '2026-09-17T06:00:00.000Z',
+    )
+    expect(() => computeNextDistributedScanAt(0, from)).toThrow()
   })
 })

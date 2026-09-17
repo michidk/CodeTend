@@ -162,6 +162,11 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       repository,
       schedule: {
         enabled: scheduleSettings.enabled && repository.scheduleEnabled,
+        mode:
+          repository.scheduleCronExpression === null
+            ? scheduleSettings.mode
+            : ('cron' as const),
+        scansPerDay: scheduleSettings.scansPerDay,
         cronExpression:
           repository.scheduleCronExpression ?? scheduleSettings.cronExpression,
         nextRunAt: !repository.scheduleEnabled
@@ -173,6 +178,8 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       },
       globalSchedule: {
         enabled: scheduleSettings.enabled,
+        mode: scheduleSettings.mode,
+        scansPerDay: scheduleSettings.scansPerDay,
         cronExpression: scheduleSettings.cronExpression,
         nextRunAt: scheduleSettings.nextRunAt,
       },
