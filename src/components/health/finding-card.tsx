@@ -8,8 +8,6 @@ import { FindingTriageControls } from '@/components/health/finding-triage-contro
 import {
   ConfidenceBadge,
   FindingStateBadge,
-  PriorityBadge,
-  SeverityBadge,
 } from '@/components/health/severity-badge'
 import { Markdown } from '@/components/markdown'
 import { Badge } from '@/components/ui/badge'
@@ -42,13 +40,10 @@ export type FindingSummary = Pick<
   Finding,
   | 'id'
   | 'title'
-  | 'severity'
   | 'confidence'
   | 'state'
   | 'effort'
   | 'scannerId'
-  | 'priority'
-  | 'priorityScore'
   | 'disposition'
   | 'dispositionNote'
 > & {
@@ -62,10 +57,7 @@ type FindingEventSummary = Pick<FindingEvent, 'kind' | 'disposition' | 'note'>
 /** Occurrence-level overrides shown on a scan page instead of the latest values. */
 export interface FindingSnapshot {
   readonly state: Finding['state']
-  readonly severity: Finding['severity']
   readonly confidence: Finding['confidence']
-  readonly priority: Finding['priority']
-  readonly priorityScore: Finding['priorityScore']
 }
 
 export function FindingCard({
@@ -101,13 +93,6 @@ export function FindingCard({
               {finding.title}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
-              {shown.priority ? (
-                <PriorityBadge
-                  priority={shown.priority}
-                  score={shown.priorityScore}
-                />
-              ) : null}
-              <SeverityBadge severity={shown.severity} />
               <ConfidenceBadge confidence={shown.confidence} />
               <FindingStateBadge
                 state={shown.state}

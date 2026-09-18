@@ -1,7 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import type {
   FindingClassification,
-  FindingPriority,
   SecurityContext,
   VulnerabilityMetadata,
 } from '@/lib/findings'
@@ -10,9 +9,6 @@ interface FindingRiskData {
   readonly classification: FindingClassification | null
   readonly securityContext: SecurityContext | null
   readonly vulnerability: VulnerabilityMetadata | null
-  readonly priority: FindingPriority | null
-  readonly priorityScore: number | null
-  readonly priorityReasons: readonly string[]
 }
 
 export function FindingRiskDetails({
@@ -28,7 +24,6 @@ export function FindingRiskDetails({
   if (
     classification.length === 0 &&
     !vulnerability &&
-    !finding.priority &&
     !finding.securityContext
   ) {
     return null
@@ -36,29 +31,6 @@ export function FindingRiskDetails({
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-      <div>
-        <RiskHeading>Contextual priority</RiskHeading>
-        <p className="mt-1">
-          {finding.priority ? (
-            <>
-              <span className="font-semibold capitalize">
-                {finding.priority}
-              </span>
-              {finding.priorityScore == null
-                ? null
-                : ` · ${Math.round(finding.priorityScore)}/100`}
-            </>
-          ) : (
-            'Not scored'
-          )}
-        </p>
-        {finding.priorityReasons.length > 0 ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {finding.priorityReasons.join(' · ')}
-          </p>
-        ) : null}
-      </div>
-
       {classification.length > 0 ? (
         <div>
           <RiskHeading>Classification</RiskHeading>
