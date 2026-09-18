@@ -1,6 +1,5 @@
 export * from './analysis-tools'
 export * from './patches'
-export * from './process'
 export * from './protocol'
 export * from './repository-workspaces'
 export * from './validation'

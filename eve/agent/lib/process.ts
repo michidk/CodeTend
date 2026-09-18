@@ -13,6 +13,7 @@ export async function run(
     timeoutMs?: number
   } = {},
 ): Promise<CommandResult> {
+  'use step'
   const { spawn } = await import('node:child_process')
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
