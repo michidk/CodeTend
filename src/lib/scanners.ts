@@ -240,6 +240,26 @@ Calibrate: group findings by concern (one finding for "competing HTTP clients", 
       'This scanner is deterministic and is populated by OSV Scanner; it is not handed to an agent.',
   },
   {
+    id: 'ci-security',
+    name: 'CI & GitHub Actions Security',
+    shortName: 'CI security',
+    description:
+      'Workflow trust boundaries, token permissions, script injection, action supply chain and runner isolation.',
+    weight: 1,
+    enabled: true,
+    fixPromptTitle: 'Harden CI & GitHub Actions',
+    fixGuidance: `- Preserve the workflow's intended triggers and release behavior while closing the specific trust-boundary failure. Do not disable a check, deployment or automation path merely to remove the finding.
+- Pin every non-local action and reusable workflow to a verified full 40-character commit SHA and retain the exact release tag in a comment so Dependabot can update it. Never invent a SHA.
+- Default the workflow token to read-only and grant write or OIDC permissions only to the job that demonstrably needs them. Pass only the required secrets to reusable workflows; do not replace explicit secrets with \`secrets: inherit\`.
+- Move attacker-controlled GitHub contexts and inputs out of \`run:\` or inline JavaScript and into step environment variables, then quote them in the receiving shell or program.
+- Treat fork code, downloaded artifacts, caches and self-hosted runners as untrusted until the workflow proves a stronger boundary. Never validate a fix by exposing a real secret or executing an active exploit against external infrastructure.`,
+    prompt: `Review the repository's CI/CD automation, with specific attention to GitHub Actions. Inspect every workflow under .github/workflows, reusable workflow and local action (action.yml/action.yaml and .github/actions), plus the scripts and configuration those workflows execute. Build a trust map from each trigger through attacker-controlled inputs and checked-out code to token permissions, secrets, artifacts, caches, runners, deployments and releases.
+Look for: pull_request_target, issue_comment, workflow_run or reusable-workflow paths that execute fork-controlled code with base-repository privileges; untrusted GitHub contexts, inputs, matrix values or step outputs interpolated into shell commands or inline JavaScript; comment commands and label gates without a reliable authorization check; artifacts or caches produced in a lower-trust workflow and consumed by a privileged job without binding them to the expected run and commit; public-repository pull requests reaching persistent self-hosted runners; broad or implicit GITHUB_TOKEN permissions, unnecessary id-token: write, long-lived credentials, secrets: inherit, or checkout credentials exposed to later untrusted steps; third-party actions and reusable workflows referenced by mutable tags, branches or short SHAs; local composite actions that pass untrusted inputs into a shell; and deployment or release jobs whose environment, approval or concurrency controls can be bypassed.
+Verify the whole path before reporting. A dangerous-looking trigger alone is not a finding: pull_request_target can be safe when it handles metadata without checking out or executing fork code, and expressions in if:, with: or env: are not shell injection merely because they contain \`\${{ ... }}\`. Likewise, do not claim missing permissions are exploitable until you establish the effective privilege or explain precisely what repository setting remains unknown. Treat full commit-SHA pins as immutable at this repository boundary, while noting concrete transitive risk only when the checked-in files establish it.
+Not yours: whether CI runs the documented build commands or uses consistent tool versions (Dependencies & Build Health), whether tests exist or are selected by CI (Tests & Testability), vulnerabilities in application source and runtime trust boundaries (Security Hygiene), vulnerable package versions (Vulnerable Dependencies), or ordinary flaky jobs and retry behavior without a security consequence (Reliability & Error Handling).
+Calibrate: every finding must identify the workflow and trigger, the external actor or lower-trust producer, the controlled input or code, the missing or bypassed control, the privilege or secret that becomes reachable, and the concrete impact. Search all gates and called scripts before deciding. Report uncertain repository-setting assumptions explicitly and lower confidence; if you cannot construct a realistic attack or supply-chain failure path, do not report the issue. Never run an exploit, exfiltrate credentials or print secret values during review.`,
+  },
+  {
     id: 'security',
     name: 'Security Hygiene',
     shortName: 'Security',
