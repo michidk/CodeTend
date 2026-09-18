@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.2",
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    }
+  },
   "scripts": {
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",

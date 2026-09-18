@@ -103,6 +103,12 @@ describe('CodeTend MCP tools', () => {
           tool.annotations.readOnlyHint,
       ),
     ).toBe(true)
+
+    const repositoryTool = message.result.tools.find(
+      (tool: { name: string }) => tool.name === 'get_repository',
+    )
+    expect(repositoryTool.outputSchema.properties.repository).toBeDefined()
+    expect(repositoryTool.outputSchema.additionalProperties).toBe(false)
   })
 
   test('write tools require their scope and preserve structured output', async () => {

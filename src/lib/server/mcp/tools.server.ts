@@ -22,6 +22,21 @@ import {
   type McpToolName,
 } from '@/lib/mcp/catalog'
 import {
+  type FindingMutationOutput,
+  type FindingOutput,
+  findingMutationOutputSchema,
+  findingOutputSchema,
+  type RepositoryListOutput,
+  type RepositoryOutput,
+  repositoryListOutputSchema,
+  repositoryOutputSchema,
+  type ScanListOutput,
+  type ScanOutput,
+  scanListOutputSchema,
+  scanOutputSchema,
+  toDto,
+} from '@/lib/mcp/dtos'
+import {
   updateFindingAsFixed,
   updateFindingDisposition,
 } from '@/lib/server/finding-triage'
@@ -46,26 +61,7 @@ const writeAnnotations = {
   openWorldHint: false,
 } as const
 
-const jsonObject = z.looseObject({})
-const repositoryListOutput = z.object({
-  repositories: z.array(jsonObject),
-  total: z.number().int(),
-  offset: z.number().int(),
-  limit: z.number().int(),
-  hasMore: z.boolean(),
-})
-const repositoryOutput = z.object({ repository: jsonObject.nullable() })
-const scanListOutput = z.object({
-  scans: z.array(jsonObject),
-  total: z.number().int(),
-  offset: z.number().int(),
-  limit: z.number().int(),
-  hasMore: z.boolean(),
-})
-const scanOutput = z.object({ scan: jsonObject.nullable() })
-const findingOutput = z.object({ finding: jsonObject.nullable() })
 const scanMutationOutput = z.object({ scanId: z.number().int().positive() })
-const findingMutationOutput = z.object({ finding: jsonObject })
 const fixPromptOutput = z.object({
   repositoryId: z.number().int().positive(),
   scannerId: z.string(),
@@ -89,18 +85,30 @@ const SCAN_STATUS_VALUES = [
 ] as const
 
 export type McpLoaders = {
-  listRepositories(input: ListInput): Promise<unknown>
-  getRepository(repositoryId: number): Promise<unknown>
-  listScans(input: ScanListInput): Promise<unknown>
-  getScan(scanId: number): Promise<unknown>
-  getFinding(findingId: number): Promise<unknown>
-  generateFixPrompt(repositoryId: number, scannerId: string): Promise<unknown>
-  triggerScan(repositoryId: number): Promise<unknown>
-  cancelScan(scanId: number): Promise<unknown>
-  markFindingFixed(findingId: number, note: string): Promise<unknown>
-  markFindingFalsePositive(findingId: number, note: string): Promise<unknown>
-  acceptFindingRisk(findingId: number, note: string): Promise<unknown>
-  reopenFinding(findingId: number): Promise<unknown>
+  listRepositories(input: ListInput): Promise<RepositoryListOutput>
+  getRepository(repositoryId: number): Promise<RepositoryOutput>
+  listScans(input: ScanListInput): Promise<ScanListOutput>
+  getScan(scanId: number): Promise<ScanOutput>
+  getFinding(findingId: number): Promise<FindingOutput>
+  generateFixPrompt(
+    repositoryId: number,
+    scannerId: string,
+  ): Promise<z.infer<typeof fixPromptOutput>>
+  triggerScan(repositoryId: number): Promise<z.infer<typeof scanMutationOutput>>
+  cancelScan(scanId: number): Promise<z.infer<typeof scanMutationOutput>>
+  markFindingFixed(
+    findingId: number,
+    note: string,
+  ): Promise<FindingMutationOutput>
+  markFindingFalsePositive(
+    findingId: number,
+    note: string,
+  ): Promise<FindingMutationOutput>
+  acceptFindingRisk(
+    findingId: number,
+    note: string,
+  ): Promise<FindingMutationOutput>
+  reopenFinding(findingId: number): Promise<FindingMutationOutput>
 }
 
 const defaultLoaders: McpLoaders = {
@@ -126,7 +134,7 @@ const defaultLoaders: McpLoaders = {
       },
     })
     const total = await db.$count(repositories)
-    return {
+    return toDto(repositoryListOutputSchema, {
       repositories: rows
         .slice(0, limit)
         .map(({ scans: recent, ...repository }) => ({
@@ -137,7 +145,7 @@ const defaultLoaders: McpLoaders = {
       offset,
       limit,
       hasMore: rows.length > limit,
-    }
+    })
   },
 
   async getRepository(repositoryId) {
@@ -165,7 +173,7 @@ const defaultLoaders: McpLoaders = {
         },
       },
     })
-    return { repository: repository ?? null }
+    return toDto(repositoryOutputSchema, { repository: repository ?? null })
   },
 
   async listScans({ repositoryId, status, offset, limit }) {
@@ -184,13 +192,13 @@ const defaultLoaders: McpLoaders = {
       with: { repository: { columns: { id: true, name: true } } },
     })
     const total = await db.$count(scans, where)
-    return {
+    return toDto(scanListOutputSchema, {
       scans: rows.slice(0, limit),
       total,
       offset,
       limit,
       hasMore: rows.length > limit,
-    }
+    })
   },
 
   async getScan(scanId) {
@@ -210,7 +218,7 @@ const defaultLoaders: McpLoaders = {
       limit: 200,
       with: { finding: true },
     })
-    return { scan: { ...scan, occurrences } }
+    return toDto(scanOutputSchema, { scan: { ...scan, occurrences } })
   },
 
   async getFinding(findingId) {
@@ -230,7 +238,7 @@ const defaultLoaders: McpLoaders = {
         events: { orderBy: [desc(findingEvents.createdAt)], limit: 20 },
       },
     })
-    return { finding: finding ?? null }
+    return toDto(findingOutputSchema, { finding: finding ?? null })
   },
 
   async generateFixPrompt(repositoryId, scannerId) {
@@ -314,12 +322,12 @@ const defaultLoaders: McpLoaders = {
       disposition: 'false_positive',
       note,
     })
-    return { finding }
+    return toDto(findingMutationOutputSchema, { finding })
   },
 
   async markFindingFixed(findingId, note) {
     const finding = await updateFindingAsFixed({ findingId, note })
-    return { finding }
+    return toDto(findingMutationOutputSchema, { finding })
   },
 
   async acceptFindingRisk(findingId, note) {
@@ -328,7 +336,7 @@ const defaultLoaders: McpLoaders = {
       disposition: 'accepted_risk',
       note,
     })
-    return { finding }
+    return toDto(findingMutationOutputSchema, { finding })
   },
 
   async reopenFinding(findingId) {
@@ -337,7 +345,7 @@ const defaultLoaders: McpLoaders = {
       disposition: null,
       note: '',
     })
-    return { finding }
+    return toDto(findingMutationOutputSchema, { finding })
   },
 }
 
@@ -406,11 +414,13 @@ export function createCodeTendMcpServer(
           offset: z.int().min(0).default(0),
           limit: z.int().min(1).max(100).default(25),
         }),
-        outputSchema: repositoryListOutput,
+        outputSchema: repositoryListOutputSchema,
         annotations: readOnlyAnnotations,
       },
       (input) =>
-        result(repositoryListOutput, () => loaders.listRepositories(input)),
+        result(repositoryListOutputSchema, () =>
+          loaders.listRepositories(input),
+        ),
     )
 
   if (allowed('get_repository'))
@@ -421,11 +431,13 @@ export function createCodeTendMcpServer(
         description:
           'Get one repository with up to 20 recent scans, 100 recent findings, and its knowledge overview.',
         inputSchema: z.object({ repositoryId: z.int().positive() }),
-        outputSchema: repositoryOutput,
+        outputSchema: repositoryOutputSchema,
         annotations: readOnlyAnnotations,
       },
       ({ repositoryId }) =>
-        result(repositoryOutput, () => loaders.getRepository(repositoryId)),
+        result(repositoryOutputSchema, () =>
+          loaders.getRepository(repositoryId),
+        ),
     )
 
   if (allowed('list_scans'))
@@ -441,10 +453,10 @@ export function createCodeTendMcpServer(
           offset: z.int().min(0).default(0),
           limit: z.int().min(1).max(100).default(25),
         }),
-        outputSchema: scanListOutput,
+        outputSchema: scanListOutputSchema,
         annotations: readOnlyAnnotations,
       },
-      (input) => result(scanListOutput, () => loaders.listScans(input)),
+      (input) => result(scanListOutputSchema, () => loaders.listScans(input)),
     )
 
   if (allowed('get_scan'))
@@ -455,10 +467,10 @@ export function createCodeTendMcpServer(
         description:
           'Get one scan with scanner runs and up to 200 occurrences.',
         inputSchema: z.object({ scanId: z.int().positive() }),
-        outputSchema: scanOutput,
+        outputSchema: scanOutputSchema,
         annotations: readOnlyAnnotations,
       },
-      ({ scanId }) => result(scanOutput, () => loaders.getScan(scanId)),
+      ({ scanId }) => result(scanOutputSchema, () => loaders.getScan(scanId)),
     )
 
   if (allowed('get_finding'))
@@ -469,11 +481,11 @@ export function createCodeTendMcpServer(
         description:
           'Get a finding with its evidence and bounded occurrence, validation, patch, and event history.',
         inputSchema: z.object({ findingId: z.int().positive() }),
-        outputSchema: findingOutput,
+        outputSchema: findingOutputSchema,
         annotations: readOnlyAnnotations,
       },
       ({ findingId }) =>
-        result(findingOutput, () => loaders.getFinding(findingId)),
+        result(findingOutputSchema, () => loaders.getFinding(findingId)),
     )
 
   if (allowed('generate_fix_prompt'))
@@ -536,11 +548,11 @@ export function createCodeTendMcpServer(
           findingId: z.int().positive(),
           note: z.string().trim().max(2_000).default(''),
         }),
-        outputSchema: findingMutationOutput,
+        outputSchema: findingMutationOutputSchema,
         annotations: writeAnnotations,
       },
       ({ findingId, note }) =>
-        result(findingMutationOutput, () =>
+        result(findingMutationOutputSchema, () =>
           loaders.markFindingFalsePositive(findingId, note),
         ),
     )
@@ -556,11 +568,11 @@ export function createCodeTendMcpServer(
           findingId: z.int().positive(),
           note: z.string().trim().min(5).max(2_000),
         }),
-        outputSchema: findingMutationOutput,
+        outputSchema: findingMutationOutputSchema,
         annotations: writeAnnotations,
       },
       ({ findingId, note }) =>
-        result(findingMutationOutput, () =>
+        result(findingMutationOutputSchema, () =>
           loaders.markFindingFixed(findingId, note),
         ),
     )
@@ -576,11 +588,11 @@ export function createCodeTendMcpServer(
           findingId: z.int().positive(),
           note: z.string().trim().min(5).max(2_000),
         }),
-        outputSchema: findingMutationOutput,
+        outputSchema: findingMutationOutputSchema,
         annotations: writeAnnotations,
       },
       ({ findingId, note }) =>
-        result(findingMutationOutput, () =>
+        result(findingMutationOutputSchema, () =>
           loaders.acceptFindingRisk(findingId, note),
         ),
     )
@@ -593,11 +605,13 @@ export function createCodeTendMcpServer(
         description:
           'Remove a false-positive or accepted-risk disposition and return the finding to active.',
         inputSchema: z.object({ findingId: z.int().positive() }),
-        outputSchema: findingMutationOutput,
+        outputSchema: findingMutationOutputSchema,
         annotations: writeAnnotations,
       },
       ({ findingId }) =>
-        result(findingMutationOutput, () => loaders.reopenFinding(findingId)),
+        result(findingMutationOutputSchema, () =>
+          loaders.reopenFinding(findingId),
+        ),
     )
 
   return server

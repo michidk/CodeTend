@@ -136,12 +136,28 @@ Secret reference for DATABASE_URL, shared by the app container and the migration
 {{- end -}}
 
 {{/*
-Environment shared by the app and Eve containers: model endpoint, clone credentials,
-data directory and the per-scan guardrails Eve reads directly.
+Environment shared by the app and Eve containers: data directory and clone
+credentials used by repository browsing and private checkouts.
 */}}
 {{- define "codetend.sharedEnv" -}}
 - name: TECDEBT_DATA_DIR
   value: {{ .Values.data.path | quote }}
+{{- if .Values.github.appAuth.existingSecret }}
+- name: GITHUB_APP_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.github.appAuth.existingSecret }}
+      key: {{ .Values.github.appAuth.appIdKey }}
+- name: GITHUB_APP_PRIVATE_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.github.appAuth.existingSecret }}
+      key: {{ .Values.github.appAuth.privateKeyKey }}
+{{- end }}
+{{- end }}
+
+{{/* Model credentials and guardrails belong exclusively to Eve. */}}
+{{- define "codetend.eveModelEnv" -}}
 - name: OPENAI_API_KEY
   valueFrom:
     secretKeyRef:
@@ -170,17 +186,5 @@ data directory and the per-scan guardrails Eve reads directly.
 {{- with .Values.model.maxInputTokensPerSession }}
 - name: TECDEBT_MAX_INPUT_TOKENS_PER_SESSION
   value: {{ . | quote }}
-{{- end }}
-{{- if .Values.github.appAuth.existingSecret }}
-- name: GITHUB_APP_ID
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.github.appAuth.existingSecret }}
-      key: {{ .Values.github.appAuth.appIdKey }}
-- name: GITHUB_APP_PRIVATE_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.github.appAuth.existingSecret }}
-      key: {{ .Values.github.appAuth.privateKeyKey }}
 {{- end }}
 {{- end }}

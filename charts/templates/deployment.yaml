@@ -117,6 +117,7 @@ spec:
           # this Pod's network namespace, can reach it.
           env:
             {{- include "codetend.sharedEnv" . | nindent 12 }}
+            {{- include "codetend.eveModelEnv" . | nindent 12 }}
             - name: EVE_USERNAME
               value: {{ .Values.eve.username | quote }}
             - name: EVE_PASSWORD

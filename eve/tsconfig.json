@@ -14,6 +14,7 @@
     "agent/**/*.ts",
     "../src/lib/eve-protocol.ts",
     "../src/lib/findings.ts",
+    "../src/lib/github-app-auth.ts",
     "../src/lib/scanners.ts",
     "../src/lib/security-scans.ts"
   ]

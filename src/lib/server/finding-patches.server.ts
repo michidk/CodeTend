@@ -11,6 +11,7 @@ import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { isDailyAiCostBudgetReached } from '@/lib/server/ai-cost-budget.server'
 import {
+  cancelAndDrainEveSession,
   cancelEveScanSession,
   startEvePatchSession,
 } from '@/lib/server/eve-client.server'
@@ -225,10 +226,19 @@ export async function runPatchPipeline(patchId: number, repositoryId: number) {
       await cancelEveScanSession(session.sessionId).catch(() => undefined)
       return
     }
-    const outcome = await Promise.race([
-      session.settle(async () => undefined),
-      waitForPatchResult(patchId, PATCH_TIMEOUT_MS).then(() => null),
+    const settlement = session.settle(async () => undefined)
+    const completion = await Promise.race([
+      settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
+      waitForPatchResult(patchId, PATCH_TIMEOUT_MS).then(
+        () => ({ kind: 'result' as const }),
+        (error: unknown) => ({ kind: 'deadline' as const, error }),
+      ),
     ])
+    if (completion.kind === 'deadline') {
+      await cancelAndDrainEveSession(session.sessionId, settlement)
+      throw completion.error
+    }
+    const outcome = completion.kind === 'settled' ? completion.outcome : null
     let result = await readPatchResult(patchId)
     // Eve can emit turn.completed just before the workflow result step becomes
     // visible on the shared volume. Give that durable write a short grace

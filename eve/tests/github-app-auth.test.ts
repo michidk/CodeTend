@@ -59,8 +59,7 @@ describe('getGitHubAppToken', () => {
   test('signs a short-lived RS256 App JWT and caches the minted token', async () => {
     resetGitHubAppTokenCache()
     const requests: { url: string; authorization: string | null }[] = []
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    const request = (async (url: string, init?: RequestInit) => {
       requests.push({
         url: String(url),
         authorization:
@@ -84,7 +83,9 @@ describe('getGitHubAppToken', () => {
         appId: '123',
         privateKey,
       }
-      const token = await getGitHubAppToken(credentials, 'example', 'repo')
+      const token = await getGitHubAppToken(credentials, 'example', 'repo', {
+        request,
+      })
       expect(token).toBe('ghs_minted')
       expect(requests).toHaveLength(2)
       expect(requests[0].url).toBe(
@@ -106,29 +107,44 @@ describe('getGitHubAppToken', () => {
         credentials,
         'example',
         'repo',
+        { request },
       )
       expect(cachedToken).toBe('ghs_minted')
       // Installation lookup is cheap and ensures repository access still
       // exists; the installation token itself remains cached.
       expect(requests).toHaveLength(3)
     } finally {
-      globalThis.fetch = originalFetch
       resetGitHubAppTokenCache()
     }
   })
 
   test('raises a clear error when GitHub rejects the token request', async () => {
     resetGitHubAppTokenCache()
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () =>
+    const request = (async () =>
       new Response('installation not found', { status: 404 })) as typeof fetch
 
     try {
       await expect(
-        getGitHubAppToken({ appId: '1', privateKey }, 'example', 'repo'),
+        getGitHubAppToken({ appId: '1', privateKey }, 'example', 'repo', {
+          request,
+        }),
       ).rejects.toThrow(/404/)
     } finally {
-      globalThis.fetch = originalFetch
+      resetGitHubAppTokenCache()
+    }
+  })
+
+  test('rejects a malformed installation lookup response', async () => {
+    resetGitHubAppTokenCache()
+    const request = (async () => Response.json({ id: '456' })) as typeof fetch
+
+    try {
+      await expect(
+        getGitHubAppToken({ appId: '1', privateKey }, 'example', 'repo', {
+          request,
+        }),
+      ).rejects.toThrow()
+    } finally {
       resetGitHubAppTokenCache()
     }
   })

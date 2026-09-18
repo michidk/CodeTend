@@ -13,6 +13,7 @@ import {
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES, scannerResultJsonSchema } from '@/lib/findings'
 import {
+  cancelAndDrainEveSession,
   cancelEveScanSession,
   startEveScanSession,
 } from '@/lib/server/eve-client.server'
@@ -262,21 +263,40 @@ export async function runScanPipeline(scanId: number, repository: Repository) {
         await persistScanCheckpoint(scanId, repository, checkpoint)
       }
     }
-    const outcome = await Promise.race([
-      session
-        .settle(async (progress) => {
-          await setScanProgress(scanId, progress)
-          await ingestCheckpoint()
-        })
-        .catch((error) => {
-          console.warn(
-            `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
-            error,
-          )
-          return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
-        }),
-      waitForResultWithCheckpoints(scanId, SCAN_TIMEOUT_MS, ingestCheckpoint),
+    const settlement = session
+      .settle(async (progress) => {
+        await setScanProgress(scanId, progress)
+        await ingestCheckpoint()
+      })
+      .catch((error) => {
+        console.warn(
+          `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
+          error,
+        )
+        return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
+      })
+    const completion = await Promise.race([
+      settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
+      waitForResultWithCheckpoints(
+        scanId,
+        SCAN_TIMEOUT_MS,
+        ingestCheckpoint,
+      ).then(
+        () => ({ kind: 'result' as const }),
+        (error: unknown) => ({ kind: 'deadline' as const, error }),
+      ),
     ])
+    if (completion.kind === 'deadline') {
+      await setScanProgress(scanId, {
+        phase: 'cancelling',
+        detail: 'Scan deadline reached; draining Eve session',
+        completed: 1,
+        total: 1,
+      })
+      await cancelAndDrainEveSession(session.sessionId, settlement)
+      throw completion.error
+    }
+    const outcome = completion.kind === 'settled' ? completion.outcome : null
 
     const result = await readScanResult(scanId)
     if (await cancellationRequested(scanId)) {

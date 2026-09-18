@@ -1,106 +1,37 @@
-/**
- * Resolves the GitHub App installation for a repository, then mints and
- * caches its installation access token from `GITHUB_APP_ID` /
- * `GITHUB_APP_PRIVATE_KEY`.
- * Installation tokens are valid for one hour; the "hosting control plane"
- * that operates CodeTend does not need to rotate or feed in a token itself —
- * CodeTend mints its own from the App credentials, cached in-process and
- * refreshed ahead of expiry so a clone never races an expiring token.
- *
- * Only imported from "use step" functions (needs Node.js APIs).
- */
+/** GitHub App repository-installation lookup for Eve clone credentials. */
+import {
+  createGitHubAppJwt,
+  GITHUB_API_URL,
+  type GitHubAppCredentials,
+  getGitHubInstallationToken,
+  githubHeaders,
+  githubInstallationSchema,
+  githubRequest,
+  readGitHubAppCredentials as readSharedGitHubAppCredentials,
+  resetGitHubInstallationTokenCache,
+} from '../../../src/lib/github-app-auth'
 
-const REFRESH_BUFFER_MS = 5 * 60 * 1000
-const GITHUB_API_URL = 'https://api.github.com'
-
-const cachedTokens = new Map<string, { token: string; expiresAt: number }>()
-
-export interface GitHubAppCredentials {
-  readonly appId: string
-  readonly privateKey: string
-}
+export type { GitHubAppCredentials }
 
 export function readGitHubAppCredentials(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): GitHubAppCredentials | null {
-  const appId = env.GITHUB_APP_ID?.trim()
-  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim()
-  if (!appId || !privateKey) return null
-  return { appId, privateKey: normalizePrivateKey(privateKey) }
-}
-
-/** Accepts a PEM pasted with literal `\n` escapes as well as real newlines. */
-function normalizePrivateKey(privateKey: string): string {
-  return privateKey.includes('\n')
-    ? privateKey
-    : privateKey.replace(/\\n/g, '\n')
-}
-
-function base64url(input: string | Buffer): string {
-  return Buffer.from(input).toString('base64url')
-}
-
-/**
- * GitHub rejects App JWTs older than 10 minutes; `iat` is backdated by a
- * minute to tolerate clock drift between this host and GitHub's servers.
- */
-async function signAppJwt(credentials: GitHubAppCredentials): Promise<string> {
-  const { sign } = await import('node:crypto')
-  const nowSeconds = Math.floor(Date.now() / 1000)
-  const header = { alg: 'RS256', typ: 'JWT' }
-  const payload = {
-    iat: nowSeconds - 60,
-    exp: nowSeconds + 570,
-    iss: credentials.appId,
-  }
-  const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`
-  const signature = sign(
-    'RSA-SHA256',
-    Buffer.from(signingInput),
-    credentials.privateKey,
-  )
-  return `${signingInput}.${base64url(signature)}`
-}
-
-async function fetchInstallationToken(
-  credentials: GitHubAppCredentials,
-  installationId: string,
-): Promise<{ token: string; expiresAt: number }> {
-  const jwt = await signAppJwt(credentials)
-  const response = await fetch(
-    `${GITHUB_API_URL}/app/installations/${installationId}/access_tokens`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  )
-  if (!response.ok) {
-    throw new Error(
-      `GitHub App installation token request failed with ${response.status}: ${await response.text()}`,
-    )
-  }
-  const body = (await response.json()) as { token: string; expires_at: string }
-  return { token: body.token, expiresAt: new Date(body.expires_at).getTime() }
+  return readSharedGitHubAppCredentials(env)
 }
 
 async function resolveInstallationId(
   credentials: GitHubAppCredentials,
   owner: string,
   repository: string,
+  request: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const jwt = await signAppJwt(credentials)
-  const response = await fetch(
+  const response = await githubRequest(
+    request,
     `${GITHUB_API_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/installation`,
     {
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: githubHeaders(createGitHubAppJwt(credentials)),
+      signal,
     },
   )
   if (!response.ok) {
@@ -108,8 +39,7 @@ async function resolveInstallationId(
       `GitHub App installation lookup failed for ${owner}/${repository} with ${response.status}: ${await response.text()}`,
     )
   }
-  const body = (await response.json()) as { id: number }
-  return String(body.id)
+  return String(githubInstallationSchema.parse(await response.json()).id)
 }
 
 /** Resolves and returns a cached installation token for one repository. */
@@ -117,22 +47,26 @@ export async function getGitHubAppToken(
   credentials: GitHubAppCredentials,
   owner: string,
   repository: string,
+  options: {
+    readonly request?: typeof fetch
+    readonly signal?: AbortSignal
+  } = {},
 ): Promise<string> {
+  const request = options.request ?? fetch
   const installationId = await resolveInstallationId(
     credentials,
     owner,
     repository,
+    request,
+    options.signal,
   )
-  const cached = cachedTokens.get(installationId)
-  if (cached && cached.expiresAt - REFRESH_BUFFER_MS > Date.now()) {
-    return cached.token
-  }
-  const token = await fetchInstallationToken(credentials, installationId)
-  cachedTokens.set(installationId, token)
-  return token.token
+  return getGitHubInstallationToken(credentials, installationId, {
+    request,
+    signal: options.signal,
+  })
 }
 
-/** Test-only: clears the module-level cache between cases. */
+/** Test-only: clears the shared module cache between cases. */
 export function resetGitHubAppTokenCache(): void {
-  cachedTokens.clear()
+  resetGitHubInstallationTokenCache()
 }

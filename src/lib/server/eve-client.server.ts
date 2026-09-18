@@ -92,6 +92,33 @@ export async function cancelEveScanSession(
   return result.status
 }
 
+/** Cancels a durable Eve turn and gives its stream a bounded drain window. */
+export async function cancelAndDrainEveSession(
+  sessionId: string,
+  settlement: Promise<unknown>,
+  options: {
+    readonly timeoutMs?: number
+    readonly cancel?: typeof cancelEveScanSession
+  } = {},
+): Promise<void> {
+  const cancel = options.cancel ?? cancelEveScanSession
+  await cancel(sessionId).catch((error) =>
+    console.warn(
+      `[CodeTend] Eve cancellation request failed for session ${sessionId}`,
+      error,
+    ),
+  )
+  const timeoutMs = options.timeoutMs ?? 30_000
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    settlement.catch(() => undefined),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs)
+    }),
+  ])
+  if (timer) clearTimeout(timer)
+}
+
 interface StreamResponse
   extends AsyncIterable<{ readonly type: string; readonly data?: unknown }> {
   readonly sessionId: string

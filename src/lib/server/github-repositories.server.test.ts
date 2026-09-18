@@ -130,4 +130,24 @@ describe('available GitHub repositories', () => {
     expect(urls[1]).toContain('/user/repos?')
     expect(result[0]?.name).toBe('example/private-repo')
   })
+
+  test('rejects malformed repository pages', async () => {
+    const request = (async (_input: string | URL | Request) =>
+      Response.json({
+        repositories: [{ ...repository, clone_url: 'file:///tmp/repo' }],
+      })) as typeof fetch
+
+    await expect(
+      listGitHubRepositoriesWithToken('token', request),
+    ).rejects.toThrow()
+  })
+
+  test('rejects malformed App installation records', async () => {
+    const request = (async (_input: string | URL | Request) =>
+      Response.json([{ id: 'not-a-number' }])) as typeof fetch
+
+    await expect(
+      listGitHubRepositoriesWithApp({ appId: '123', privateKey }, request),
+    ).rejects.toThrow()
+  })
 })

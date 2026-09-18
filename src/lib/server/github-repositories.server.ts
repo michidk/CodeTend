@@ -1,32 +1,27 @@
 import '@tanstack/react-start/server-only'
 
-import { Buffer } from 'node:buffer'
-import { sign } from 'node:crypto'
 import type { ServerEnv } from '@/lib/env.server'
 import { getServerEnv } from '@/lib/env.server'
+import {
+  createGitHubAppJwt,
+  GITHUB_API_URL,
+  type GitHubAppCredentials,
+  type GitHubRepositoryResponse,
+  getGitHubInstallationToken,
+  githubHeaders,
+  githubInstallationListSchema,
+  githubRepositoryPageSchema,
+  githubRequest,
+  readGitHubAppCredentials,
+} from '@/lib/github-app-auth'
 
-const GITHUB_API_URL = 'https://api.github.com'
-const REFRESH_BUFFER_MS = 5 * 60_000
 const PAGE_SIZE = 100
 const MAX_PAGES = 10
-
-const cachedInstallationTokens = new Map<
-  string,
-  { readonly token: string; readonly expiresAt: number }
->()
 
 export interface AvailableGitHubRepository {
   readonly name: string
   readonly url: string
   readonly branch: string
-  readonly private: boolean
-  readonly archived: boolean
-}
-
-interface GitHubRepositoryResponse {
-  readonly full_name: string
-  readonly clone_url: string
-  readonly default_branch: string
   readonly private: boolean
   readonly archived: boolean
 }
@@ -37,69 +32,8 @@ class GitHubApiError extends Error {
   }
 }
 
-function normalizePrivateKey(value: string): string {
-  return value.includes('\n') ? value : value.replace(/\\n/g, '\n')
-}
-
-function base64url(value: string | Buffer): string {
-  return Buffer.from(value).toString('base64url')
-}
-
-function createAppJwt(appId: string, privateKey: string): string {
-  const now = Math.floor(Date.now() / 1_000)
-  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
-  const payload = base64url(
-    JSON.stringify({ iat: now - 60, exp: now + 570, iss: appId }),
-  )
-  const input = `${header}.${payload}`
-  const signature = sign(
-    'RSA-SHA256',
-    Buffer.from(input),
-    normalizePrivateKey(privateKey),
-  )
-  return `${input}.${base64url(signature)}`
-}
-
-async function getInstallationToken(
-  appId: string,
-  installationId: string,
-  privateKey: string,
-  request: typeof fetch = fetch,
-): Promise<string> {
-  const cachedInstallationToken = cachedInstallationTokens.get(installationId)
-  if (
-    cachedInstallationToken &&
-    cachedInstallationToken.expiresAt - REFRESH_BUFFER_MS > Date.now()
-  ) {
-    return cachedInstallationToken.token
-  }
-
-  const response = await request(
-    `${GITHUB_API_URL}/app/installations/${installationId}/access_tokens`,
-    {
-      method: 'POST',
-      headers: githubHeaders(createAppJwt(appId, privateKey)),
-    },
-  )
-  if (!response.ok) {
-    throw new Error(
-      `GitHub installation authentication failed (${response.status})`,
-    )
-  }
-  const body = (await response.json()) as {
-    readonly token: string
-    readonly expires_at: string
-  }
-  const cached = {
-    token: body.token,
-    expiresAt: new Date(body.expires_at).getTime(),
-  }
-  cachedInstallationTokens.set(installationId, cached)
-  return cached.token
-}
-
 export async function listGitHubRepositoriesWithApp(
-  credentials: { readonly appId: string; readonly privateKey: string },
+  credentials: GitHubAppCredentials,
   request: typeof fetch = fetch,
 ): Promise<AvailableGitHubRepository[]> {
   const installationIds = await listAppInstallationIds(
@@ -109,11 +43,10 @@ export async function listGitHubRepositoriesWithApp(
   )
   const repositoryGroups = await Promise.all(
     installationIds.map(async (installationId) => {
-      const token = await getInstallationToken(
-        credentials.appId,
+      const token = await getGitHubInstallationToken(
+        credentials,
         installationId,
-        credentials.privateKey,
-        request,
+        { request },
       )
       return fetchPages('/installation/repositories', token, request)
     }),
@@ -125,23 +58,11 @@ export async function listGitHubRepositoriesWithApp(
   return toAvailableRepositories([...uniqueRepositories.values()])
 }
 
-function githubHeaders(token: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'CodeTend',
-  }
-}
-
 function appCredentials(env: ServerEnv) {
-  if (env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY) {
-    return {
-      appId: env.GITHUB_APP_ID,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY,
-    }
-  }
-  return null
+  return readGitHubAppCredentials({
+    GITHUB_APP_ID: env.GITHUB_APP_ID,
+    GITHUB_APP_PRIVATE_KEY: env.GITHUB_APP_PRIVATE_KEY,
+  })
 }
 
 async function listAppInstallationIds(
@@ -149,10 +70,11 @@ async function listAppInstallationIds(
   privateKey: string,
   request: typeof fetch = fetch,
 ): Promise<string[]> {
-  const jwt = createAppJwt(appId, privateKey)
+  const jwt = createGitHubAppJwt({ appId, privateKey })
   const installationIds: string[] = []
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const response = await request(
+    const response = await githubRequest(
+      request,
       `${GITHUB_API_URL}/app/installations?per_page=${PAGE_SIZE}&page=${page}`,
       { headers: githubHeaders(jwt) },
     )
@@ -161,7 +83,7 @@ async function listAppInstallationIds(
         `GitHub App installation request failed (${response.status})`,
       )
     }
-    const rows = (await response.json()) as { readonly id: number }[]
+    const rows = githubInstallationListSchema.parse(await response.json())
     installationIds.push(...rows.map((row) => String(row.id)))
     if (rows.length < PAGE_SIZE) break
   }
@@ -176,16 +98,15 @@ async function fetchPages(
   const repositories: GitHubRepositoryResponse[] = []
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const separator = path.includes('?') ? '&' : '?'
-    const response = await request(
+    const response = await githubRequest(
+      request,
       `${GITHUB_API_URL}${path}${separator}per_page=${PAGE_SIZE}&page=${page}`,
       { headers: githubHeaders(token) },
     )
     if (!response.ok) {
       throw new GitHubApiError(response.status)
     }
-    const body = (await response.json()) as
-      | GitHubRepositoryResponse[]
-      | { readonly repositories: GitHubRepositoryResponse[] }
+    const body = githubRepositoryPageSchema.parse(await response.json())
     const pageRows = Array.isArray(body) ? body : body.repositories
     repositories.push(...pageRows)
     if (pageRows.length < PAGE_SIZE) break
