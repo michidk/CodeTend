@@ -194,9 +194,9 @@ text-only unified diff, and must pass path/symlink/binary restrictions plus
 clone is rerun through the same isolated validator; a patch is marked verified
 only when the vulnerable behavior no longer reproduces. Reviewers explicitly
 approve or reject the stored diff. Approval is an audit decision only: CodeTend
-does not modify the registered checkout. After validating the generated diff,
-it commits the change in the disposable clone, pushes a dedicated branch and
-opens a pull request for review.
+does not modify the registered checkout or publish a branch. Approved diffs are
+downloaded and applied through the repository owner's normal review and CI
+process.
 
 ## Repository knowledge
 

@@ -36,6 +36,11 @@ export const getDb = createServerOnlyFn((): Database => {
   return instance
 })
 
+/** Installs an isolated migrated database for executable lifecycle checks. */
+export function setDatabaseForTesting(database: Database | undefined): void {
+  instance = database
+}
+
 export const db = new Proxy({} as Database, {
   get: (_target, property) => Reflect.get(getDb(), property),
 })

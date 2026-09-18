@@ -146,9 +146,9 @@ scanning:
   scannerConcurrency: 4
 
 github:
-  # Dedicated GitHub App installed on every scanned repository. Automated PR
-  # publishing requires Contents and Pull requests read/write; GitHub grants
-  # Metadata read-only automatically. CodeTend mints installation tokens.
+  # Dedicated GitHub App installed on every scanned repository. Private clone
+  # access requires Contents read-only; GitHub grants Metadata read-only
+  # automatically. CodeTend mints installation tokens.
   appAuth:
     existingSecret: ""
     appIdKey: GITHUB_APP_ID

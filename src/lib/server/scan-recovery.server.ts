@@ -31,16 +31,19 @@ import {
 
 const ORPHAN_GRACE_MS = 30 * 60_000
 
-export async function recoverInterruptedScans(): Promise<void> {
+export async function recoverInterruptedScans(
+  options: { readonly waitForCompletion?: boolean } = {},
+): Promise<void> {
   const active = await db.query.scans.findMany({
     where: eq(scans.status, 'running'),
     with: { repository: true },
   })
-  for (const scan of active) {
-    void adoptScan(scan.id, scan.repository, scan.createdAt).catch((error) =>
+  const recoveries = active.map((scan) =>
+    adoptScan(scan.id, scan.repository, scan.createdAt).catch((error) =>
       console.error(`[CodeTend] failed to recover scan ${scan.id}`, error),
-    )
-  }
+    ),
+  )
+  if (options.waitForCompletion) await Promise.all(recoveries)
 }
 
 async function adoptScan(

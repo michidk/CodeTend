@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { findingPatches, findings, repositories } from '@/db/schema'
 
-/** Recent fix-agent work, including queued/running jobs and published PRs. */
+/** Recent fix-agent work, including queued/running jobs and reviewable patches. */
 export const getAgentHistory = createServerFn({ method: 'GET' }).handler(
   async () =>
     db

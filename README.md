@@ -73,10 +73,10 @@ agent.
   evidence, an attack path, and optional executable validation that runs
   only in a networkless, capability-dropped container, never on the host.
 - 🩹 **Review-gated patches.** Generate a unified diff for one finding in a
-  disposable clone, re-run its reproducer, then approve or reject. CodeTend
-  pushes a dedicated branch and opens a pull request for review when the
-  configured GitHub credential has repository contents and pull-request write
-  access.
+  disposable clone, re-run its reproducer, then approve or reject the stored
+  proposal. Download approved diffs and apply them through your normal review
+  and CI process; CodeTend never writes generated patches to the source
+  repository.
 - 📊 **Cost you can see.** Provider-reported tokens per scanner, per scan and
   per repository, with list-price estimates, a UTC-day budget cap, and
   concurrency limits.
