@@ -251,7 +251,7 @@ export async function runPatchPipeline(patchId: number, repositoryId: number) {
   }
 }
 
-async function persistPatchResult(
+export async function persistPatchResult(
   patchId: number,
   result: NonNullable<Awaited<ReturnType<typeof readPatchResult>>>,
 ) {
@@ -349,19 +349,22 @@ async function cleanupPatchFiles(repositoryId: number, patchId: number) {
   ])
 }
 
-export async function recoverInterruptedPatches(): Promise<void> {
+export async function recoverInterruptedPatches(
+  options: { readonly waitForCompletion?: boolean } = {},
+): Promise<void> {
   const generating = await db.query.findingPatches.findMany({
     where: eq(findingPatches.status, 'generating'),
     with: { finding: true },
   })
-  for (const patch of generating) {
+  const recoveries = generating.map((patch) => {
     const recovery = patch.eveSessionId
       ? adoptPatch(patch.id, patch.finding.repositoryId, patch.createdAt)
       : runPatchPipeline(patch.id, patch.finding.repositoryId)
-    void recovery.catch((error) =>
+    return recovery.catch((error) =>
       console.error(`[CodeTend] failed to recover patch ${patch.id}`, error),
     )
-  }
+  })
+  if (options.waitForCompletion) await Promise.all(recoveries)
 }
 
 function postgresErrorCode(error: unknown): string | undefined {

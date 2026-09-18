@@ -1,12 +1,29 @@
-import { readdir } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
+import { setDatabaseForTesting } from '@/db'
+import * as schema from '@/db/schema'
+import type { EnrichedScannerFinding } from '@/lib/findings'
+import {
+  decideFindingPatchImpl,
+  persistPatchResult,
+  recoverInterruptedPatches,
+} from '@/lib/server/finding-patches.server'
+import { reconcileScannerFindings } from '@/lib/server/finding-reconciliation.server'
+import { recoverInterruptedScans } from '@/lib/server/scan-recovery.server'
+import { runSchedulerTick } from '@/lib/server/scheduler.server'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error('DATABASE_URL is required')
 
 const client = postgres(connectionString, { max: 1 })
 const rollback = new Error('rollback database smoke test')
+const lifecycleDataDir = await mkdtemp(join(tmpdir(), 'codetend-lifecycle-'))
+process.env.TECDEBT_DATA_DIR = lifecycleDataDir
+process.env.GITNEXUS_ENABLED = 'false'
+setDatabaseForTesting(drizzle(client, { schema }))
 
 try {
   const migrationFiles = (await readdir(resolve('drizzle'))).filter((file) =>
@@ -361,9 +378,244 @@ try {
     throw new Error('Cancellation did not terminate the scan and scanner run')
   }
 
+  const lifecycleRepositoryName = `lifecycle-services-${Date.now()}`
+  const [lifecycleRepository] = await client<[{ id: number }]>`
+    insert into repositories (name, url, branch)
+    values (
+      ${lifecycleRepositoryName},
+      'https://github.com/example/lifecycle-services.git',
+      'main'
+    )
+    returning id
+  `
+  try {
+    const [sourceScan] = await client<[{ id: number }]>`
+      insert into scans (
+        repository_id, status, trigger, phase, commit_sha, branch, finished_at
+      ) values (
+        ${lifecycleRepository.id}, 'completed', 'manual', 'done',
+        '0123456789abcdef0123456789abcdef01234567', 'main', now()
+      )
+      returning id
+    `
+    const finding: EnrichedScannerFinding = {
+      fingerprint: 'service-lifecycle-finding',
+      title: 'Service lifecycle finding',
+      severity: 'high',
+      confidence: 'high',
+      description: 'A finding used to exercise persisted lifecycle services.',
+      whyItMatters: 'State, occurrence, and event writes must agree.',
+      recommendation: 'Persist the transition atomically.',
+      effort: 'small',
+      subject: { kind: 'file', path: 'src/example.ts' },
+      evidence: [
+        {
+          kind: 'file',
+          path: 'src/example.ts',
+          startLine: 1,
+          summary: 'Representative lifecycle evidence.',
+        },
+      ],
+      locations: [{ path: 'src/example.ts', startLine: 1 }],
+      priorityReasons: [],
+    }
+    const scannerResult = (fresh: readonly EnrichedScannerFinding[]) => ({
+      summary: 'Lifecycle smoke result.',
+      findings: fresh,
+      hypothesisVerdicts: [],
+      investigation: {
+        strategy: 'Exercise the persisted lifecycle.',
+        focusAreas: [],
+        evidence: [],
+        blindSpots: [],
+        confidence: 'high' as const,
+      },
+      coverage: {
+        completeness: 'complete' as const,
+        reviewed: [],
+        deferred: [],
+        excluded: [],
+        openQuestions: [],
+      },
+    })
+
+    const reconciliation = await reconcileScannerFindings({
+      repositoryId: lifecycleRepository.id,
+      scanId: sourceScan.id,
+      scannerId: 'reliability',
+      result: scannerResult([finding]),
+      target: { kind: 'repository' },
+    })
+    const reconciledFinding = reconciliation.findings[0]
+    if (!reconciledFinding || reconciliation.counts.new !== 1) {
+      throw new Error('Finding reconciliation did not create the finding')
+    }
+    const [reconciliationRows] = await client<
+      [{ occurrences: number; events: number }]
+    >`
+      select
+        (select count(*)::int from finding_occurrences
+          where finding_id = ${reconciledFinding.id}) as occurrences,
+        (select count(*)::int from finding_events
+          where finding_id = ${reconciledFinding.id}) as events
+    `
+    if (
+      reconciliationRows.occurrences !== 1 ||
+      reconciliationRows.events !== 1
+    ) {
+      throw new Error('Reconciliation omitted its occurrence or history event')
+    }
+
+    let atomicFailureObserved = false
+    try {
+      await reconcileScannerFindings({
+        repositoryId: lifecycleRepository.id,
+        scanId: 2_000_000_000,
+        scannerId: 'reliability',
+        result: scannerResult([{ ...finding, severity: 'low' }]),
+        target: { kind: 'repository' },
+      })
+    } catch {
+      atomicFailureObserved = true
+    }
+    const [afterFailedReconciliation] = await client<[{ severity: string }]>`
+      select severity from findings where id = ${reconciledFinding.id}
+    `
+    if (
+      !atomicFailureObserved ||
+      afterFailedReconciliation.severity !== 'high'
+    ) {
+      throw new Error('Failed reconciliation was not rolled back atomically')
+    }
+
+    const [patch] = await client<[{ id: number }]>`
+      insert into finding_patches (
+        finding_id, source_scan_id, status, diff, summary
+      ) values (
+        ${reconciledFinding.id}, ${sourceScan.id}, 'generating', '', 'Generating'
+      )
+      returning id
+    `
+    const proposedResult = {
+      patchId: patch.id,
+      status: 'proposed' as const,
+      summary: 'Generated a reviewable patch.',
+      diff: 'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new\n',
+      changedFiles: ['src/example.ts'],
+      testRecommendations: ['Run the focused lifecycle test.'],
+      verification: null,
+      finishedAt: new Date().toISOString(),
+    }
+    await persistPatchResult(patch.id, proposedResult)
+    const accepted = await decideFindingPatchImpl({
+      patchId: patch.id,
+      decision: 'accepted',
+    })
+    if (accepted.status !== 'accepted') {
+      throw new Error('Reviewable patch was not accepted')
+    }
+
+    const [recoveringPatch] = await client<[{ id: number }]>`
+      insert into finding_patches (
+        finding_id, source_scan_id, status, diff, summary, eve_session_id
+      ) values (
+        ${reconciledFinding.id}, ${sourceScan.id}, 'generating', '',
+        'Recovering', 'lifecycle-smoke-session'
+      )
+      returning id
+    `
+    await mkdir(join(lifecycleDataDir, 'results'), { recursive: true })
+    await writeFile(
+      join(lifecycleDataDir, 'results', `patch-${recoveringPatch.id}.json`),
+      JSON.stringify({
+        ...proposedResult,
+        patchId: recoveringPatch.id,
+        status: 'verified',
+      }),
+    )
+    await recoverInterruptedPatches({ waitForCompletion: true })
+    const [recoveredPatch] = await client<[{ status: string }]>`
+      select status from finding_patches where id = ${recoveringPatch.id}
+    `
+    if (recoveredPatch.status !== 'verified') {
+      throw new Error('Interrupted patch result was not recovered')
+    }
+    await decideFindingPatchImpl({
+      patchId: recoveringPatch.id,
+      decision: 'rejected',
+    })
+
+    const [cancelledScan] = await client<[{ id: number }]>`
+      insert into scans (
+        repository_id, status, trigger, phase, branch,
+        cancellation_requested_at, started_at
+      ) values (
+        ${lifecycleRepository.id}, 'running', 'manual', 'cancelling', 'main',
+        now(), now()
+      )
+      returning id
+    `
+    await client`
+      insert into scanner_runs (scan_id, scanner_id, status, started_at)
+      values (${cancelledScan.id}, 'reliability', 'running', now())
+    `
+    await recoverInterruptedScans({ waitForCompletion: true })
+    const [recoveredCancellation] = await client<
+      [{ scan_status: string; run_status: string }]
+    >`
+      select scans.status as scan_status, scanner_runs.status as run_status
+      from scans
+      join scanner_runs on scanner_runs.scan_id = scans.id
+      where scans.id = ${cancelledScan.id}
+    `
+    if (
+      recoveredCancellation.scan_status !== 'cancelled' ||
+      recoveredCancellation.run_status !== 'cancelled'
+    ) {
+      throw new Error('Restart recovery did not finalize cancellation')
+    }
+
+    await client`
+      insert into scan_schedule_settings (
+        id, enabled, mode, cron_expression, next_run_at,
+        last_dispatched_at, cooldown_minutes
+      ) values (
+        1, true, 'cron', '0 2 * * *', now() - interval '1 minute',
+        now(), 60
+      )
+      on conflict (id) do update set
+        enabled = excluded.enabled,
+        mode = excluded.mode,
+        cron_expression = excluded.cron_expression,
+        next_run_at = excluded.next_run_at,
+        last_dispatched_at = excluded.last_dispatched_at,
+        cooldown_minutes = excluded.cooldown_minutes
+    `
+    await runSchedulerTick()
+    const [scheduled] = await client<[{ queued: number }]>`
+      select count(*)::int as queued
+      from scheduled_repository_queue
+      where repository_id = ${lifecycleRepository.id}
+    `
+    if (scheduled.queued !== 1) {
+      throw new Error('Scheduler tick did not durably enqueue the repository')
+    }
+  } finally {
+    await client`
+      delete from repositories where id = ${lifecycleRepository.id}
+    `
+    await client`
+      update scan_schedule_settings
+      set enabled = false, next_run_at = null, last_dispatched_at = null
+      where id = 1
+    `
+  }
+
   console.log(
-    `Database smoke test passed (${migrationFiles.length} migrations, security schema present, active constraints and lifecycle idempotency enforced)`,
+    `Database smoke test passed (${migrationFiles.length} migrations, security schema present, active constraints, lifecycle services, recovery, and scheduling verified)`,
   )
 } finally {
+  setDatabaseForTesting(undefined)
+  await rm(lifecycleDataDir, { recursive: true, force: true })
   await client.end()
 }

@@ -16,10 +16,7 @@ interface ScanFindingOccurrence {
   readonly id: number
   readonly finding: FindingSummary
   readonly state: Finding['state']
-  readonly severity: Finding['severity']
   readonly confidence: Finding['confidence']
-  readonly priority: Finding['priority']
-  readonly priorityScore: Finding['priorityScore']
 }
 
 export function FindingGroups({
@@ -73,10 +70,7 @@ export function FindingGroups({
                     finding={occurrence.finding}
                     snapshot={{
                       state: occurrence.state,
-                      severity: occurrence.severity,
                       confidence: occurrence.confidence,
-                      priority: occurrence.priority,
-                      priorityScore: occurrence.priorityScore,
                     }}
                   />
                 ))}

@@ -35,6 +35,11 @@ interface SchedulerState {
   ticking: boolean
 }
 
+/** Runs one complete scheduler pass and resolves after its writes commit. */
+export async function runSchedulerTick(): Promise<void> {
+  await tick({ ticking: false })
+}
+
 /**
  * Lightweight in-process scheduler. Cron mode durably enqueues every
  * repository that inherits the global schedule; distributed mode rotates
@@ -93,7 +98,7 @@ export function ensureScheduler(): void {
     )
 }
 
-async function tick(state: SchedulerState) {
+async function tick(state: Pick<SchedulerState, 'ticking'>) {
   if (state.ticking) return
   state.ticking = true
   try {

@@ -38,7 +38,7 @@ function AgentHistoryPage() {
       <PageHeader
         eyebrow="Workforce"
         title="Fix agents"
-        description="Queued and active coding agents working findings toward reviewable patches and pull requests."
+        description="Queued and active coding agents working findings toward reviewable patch proposals."
         help="Fix work is dispatched in FIFO order up to the concurrency configured in Settings. Each row keeps the model and effort selected when it was queued."
       />
       {agents.length === 0 ? (
