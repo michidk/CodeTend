@@ -2,11 +2,66 @@ import { describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PatchRequest, PatchResult } from '../agent/lib/contract'
+import type {
+  CandidateValidation,
+  PatchRequest,
+  PatchResult,
+} from '../agent/lib/contract'
 import { applyGeneratedPatch, assertSafeUnifiedDiff } from '../agent/lib/steps'
-import runFix from '../agent/tools/run_fix'
+import runFix, { patchResultAfterValidation } from '../agent/tools/run_fix'
+
+const validation = (
+  status: CandidateValidation['status'],
+): CandidateValidation => ({
+  scannerId: 'security',
+  fingerprint: 'patch-1',
+  status,
+  method: 'test',
+  summary: `Validation ${status}`,
+  commands: [],
+})
 
 describe('generated patch boundary', () => {
+  test('maps remediation validation outcomes to durable patch states', () => {
+    const input = {
+      patchId: 1,
+      candidate: {
+        summary: 'Applied a focused fix.',
+        testRecommendations: ['Run the focused test.'],
+      },
+      applied: { diff: '+safe()', changedFiles: ['auth.ts'] },
+      finishedAt: '2026-09-24T00:00:00.000Z',
+    }
+
+    expect(
+      patchResultAfterValidation({
+        ...input,
+        verification: validation('confirmed'),
+      }).result,
+    ).toMatchObject({
+      status: 'failed',
+      error: 'The finding still reproduced after applying the generated patch.',
+    })
+    expect(
+      patchResultAfterValidation({
+        ...input,
+        verification: validation('not_reproduced'),
+      }).result.status,
+    ).toBe('verified')
+    expect(
+      patchResultAfterValidation({
+        ...input,
+        verification: validation('inconclusive'),
+      }).result.status,
+    ).toBe('proposed')
+    expect(
+      patchResultAfterValidation({
+        ...input,
+        verification: validation('unavailable'),
+      }).result.status,
+    ).toBe('proposed')
+  })
+
   test('accepts a text-only repository-relative unified diff', () => {
     expect(() =>
       assertSafeUnifiedDiff(

@@ -22,6 +22,7 @@ import { startScan } from '@/lib/server/scan-admission.server'
 import {
   recoverInterruptedScans,
   requestScanCancellation,
+  requestScanCancellationWith,
 } from '@/lib/server/scan-recovery.server'
 import {
   persistScanCheckpoint,
@@ -624,6 +625,69 @@ try {
       throw new Error('Checkpoint and final ingestion were not idempotent')
     }
 
+    const persistOutcomeFixture = async (
+      scannerIds: readonly string[],
+      outcomes: ScanResult['scanners'],
+    ) => {
+      const [scan] = await client<[{ id: number }]>`
+        insert into scans (
+          repository_id, status, trigger, phase, branch, target, started_at
+        ) values (
+          ${lifecycleRepository.id}, 'running', 'manual', 'scanning', 'main',
+          '{"kind":"repository"}'::jsonb, now()
+        )
+        returning id
+      `
+      for (const scannerId of scannerIds) {
+        await client`
+          insert into scanner_runs (scan_id, scanner_id, status, started_at)
+          values (${scan.id}, ${scannerId}, 'running', now())
+        `
+      }
+      await persistScanResult(scan.id, repositoryRecord, {
+        ...finalResult,
+        scanId: scan.id,
+        scanners: outcomes,
+        finishedAt: new Date().toISOString(),
+      })
+      const [state] = await client<[{ status: string; error: string | null }]>`
+        select status, error from scans where id = ${scan.id}
+      `
+      return state
+    }
+    const outcomeTime = new Date().toISOString()
+    const completedOutcome = {
+      scannerId: 'reliability',
+      status: 'completed' as const,
+      result: scannerResult([]),
+      startedAt: outcomeTime,
+      finishedAt: outcomeTime,
+    }
+    const failedOutcome = (scannerId: string) => ({
+      scannerId,
+      status: 'failed' as const,
+      error: `${scannerId} fixture failure`,
+      startedAt: outcomeTime,
+      finishedAt: outcomeTime,
+    })
+    const partialState = await persistOutcomeFixture(
+      ['reliability', 'tests'],
+      [completedOutcome, failedOutcome('tests')],
+    )
+    if (partialState.status !== 'partial') {
+      throw new Error('Mixed scanner outcomes did not produce a partial scan')
+    }
+    const failedState = await persistOutcomeFixture(
+      ['complexity', 'tests'],
+      [failedOutcome('complexity'), failedOutcome('tests')],
+    )
+    if (
+      failedState.status !== 'failed' ||
+      failedState.error !== 'Every scanner failed.'
+    ) {
+      throw new Error('All scanner failures did not fail the scan')
+    }
+
     await client`
       update scan_schedule_settings
       set scan_concurrency = 0, fix_concurrency = 0
@@ -642,6 +706,36 @@ try {
     if (cancelledAdmission.status !== 'cancelled') {
       throw new Error('Queued scan cancellation did not finalize')
     }
+
+    const [attachedScan] = await client<[{ id: number }]>`
+      insert into scans (
+        repository_id, status, trigger, phase, branch, target,
+        eve_session_id, started_at
+      ) values (
+        ${lifecycleRepository.id}, 'running', 'manual', 'scanning', 'main',
+        '{"kind":"repository"}'::jsonb, 'fixture-session', now()
+      )
+      returning id
+    `
+    let cancelledSession: string | null = null
+    await requestScanCancellationWith(attachedScan.id, async (sessionId) => {
+      cancelledSession = sessionId
+    })
+    const [attachedCancellation] = await client<
+      [{ status: string; phase: string; requested: boolean }]
+    >`
+      select status, phase, cancellation_requested_at is not null as requested
+      from scans where id = ${attachedScan.id}
+    `
+    if (
+      cancelledSession !== 'fixture-session' ||
+      attachedCancellation.status !== 'running' ||
+      attachedCancellation.phase !== 'cancelling' ||
+      !attachedCancellation.requested
+    ) {
+      throw new Error('Attached-session cancellation was not cooperative')
+    }
+    await recoverInterruptedScans({ waitForCompletion: true })
 
     const admittedPatch = await generateFindingPatchImpl(ingestionState.id)
     const [queuedPatch] = await client<[{ status: string }]>`

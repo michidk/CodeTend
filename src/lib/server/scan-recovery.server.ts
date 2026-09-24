@@ -105,6 +105,14 @@ async function adoptScan(
  * observed it. Queued scans without a session can be finalized immediately.
  */
 export async function requestScanCancellation(scanId: number): Promise<void> {
+  return requestScanCancellationWith(scanId, cancelEveScanSession)
+}
+
+/** Injectable cancellation boundary used by lifecycle integration tests. */
+export async function requestScanCancellationWith(
+  scanId: number,
+  cancelSession: (sessionId: string) => Promise<unknown>,
+): Promise<void> {
   const scan = await db.query.scans.findFirst({
     where: eq(scans.id, scanId),
     columns: {
@@ -135,7 +143,7 @@ export async function requestScanCancellation(scanId: number): Promise<void> {
     return
   }
   try {
-    await cancelEveScanSession(scan.eveSessionId)
+    await cancelSession(scan.eveSessionId)
   } catch (error) {
     console.warn(
       `[CodeTend] Eve cancellation request failed for scan ${scanId}; the pipeline will stop at its next checkpoint`,

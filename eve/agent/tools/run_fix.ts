@@ -1,7 +1,11 @@
 import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
 import { executionProfileMarker } from '@/lib/agent-execution'
-import type { PatchResult, ScanRequest } from '../lib/contract'
+import type {
+  CandidateValidation,
+  PatchResult,
+  ScanRequest,
+} from '../lib/contract'
 import type { JsonObject } from '../lib/json'
 import { sandboxRepoPath } from '../lib/paths'
 import {
@@ -48,6 +52,50 @@ const fixerOutputSchema = {
     },
   },
 } satisfies JsonObject
+
+interface FixerCandidate {
+  readonly summary: string
+  readonly testRecommendations: string[]
+}
+
+interface AppliedPatch {
+  readonly diff: string
+  readonly changedFiles: string[]
+}
+
+export function patchResultAfterValidation(input: {
+  readonly patchId: number
+  readonly candidate: FixerCandidate
+  readonly applied: AppliedPatch
+  readonly verification: CandidateValidation | null
+  readonly finishedAt: string
+}): { readonly result: PatchResult; readonly message: string } {
+  const base = {
+    patchId: input.patchId,
+    summary: input.candidate.summary,
+    diff: input.applied.diff,
+    changedFiles: input.applied.changedFiles,
+    testRecommendations: input.candidate.testRecommendations,
+    verification: input.verification,
+    finishedAt: input.finishedAt,
+  }
+  if (input.verification?.status === 'confirmed') {
+    return {
+      result: {
+        ...base,
+        status: 'failed',
+        error:
+          'The finding still reproduced after applying the generated patch.',
+      },
+      message: `Patch ${input.patchId} failed remediation verification.`,
+    }
+  }
+  const verified = input.verification?.status === 'not_reproduced'
+  return {
+    result: { ...base, status: verified ? 'verified' : 'proposed' },
+    message: `Patch ${input.patchId} generated for review (${input.applied.changedFiles.length} files${verified ? ', verified' : ''}).`,
+  }
+}
 
 export default defineWorkflowTool({
   description: 'Generate and validate one fix for human review.',
@@ -116,35 +164,15 @@ export default defineWorkflowTool({
         })
         verification = result ?? null
       }
-      const verified = verification?.status === 'not_reproduced'
-      const stillReproduces = verification?.status === 'confirmed'
-      if (stillReproduces) {
-        await writePatchResult({
-          patchId,
-          status: 'failed',
-          summary: candidate.summary,
-          diff: applied.diff,
-          changedFiles: applied.changedFiles,
-          testRecommendations: candidate.testRecommendations,
-          verification,
-          error:
-            'The finding still reproduced after applying the generated patch.',
-          finishedAt: await nowIso(),
-        })
-        return `Patch ${patchId} failed remediation verification.`
-      }
-      const result: PatchResult = {
+      const outcome = patchResultAfterValidation({
         patchId,
-        status: verified ? 'verified' : 'proposed',
-        summary: candidate.summary,
-        diff: applied.diff,
-        changedFiles: applied.changedFiles,
-        testRecommendations: candidate.testRecommendations,
+        candidate,
+        applied,
         verification,
         finishedAt: await nowIso(),
-      }
-      await writePatchResult(result)
-      return `Patch ${patchId} generated for review (${applied.changedFiles.length} files${verified ? ', verified' : ''}).`
+      })
+      await writePatchResult(outcome.result)
+      return outcome.message
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await writePatchResult({

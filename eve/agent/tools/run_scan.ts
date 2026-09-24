@@ -78,6 +78,25 @@ interface Progress {
   readonly failed?: number
 }
 
+interface PreparedScanWorkflowState {
+  readonly request: ScanRequest
+  readonly requestFingerprint: string
+  readonly total: number
+  readonly completed: number
+  readonly workspace: WorkspaceManifest
+  readonly repoPath: string
+  readonly scanners: readonly ScanRequestScanner[]
+  readonly gitnexusRepo: string | null
+  readonly knowledge: KnowledgeResult
+  readonly securityProfile: SecurityProfile
+  readonly dependencyAudit: DependencyAuditResult
+}
+
+interface FinalizedScanWorkflowState {
+  readonly completed: number
+  readonly outcomes: readonly ScannerOutcome[]
+}
+
 /**
  * The durable scan pipeline. Each `"use step"` function is checkpointed by
  * Eve; the subagent calls are durable too, so a crashed process resumes from
@@ -94,116 +113,26 @@ export default defineWorkflowTool({
   async *execute({ scanId }, ctx) {
     'use workflow'
 
-    const request: ScanRequest = await readScanRequest(scanId)
-    const requestFingerprint = fingerprintScanRequest(request)
-    const total = totalScanSteps(request)
-    let completed = 0
-
-    const cloning: Progress = {
-      phase: 'cloning',
-      detail: `${request.repositoryUrl}#${request.branch}`,
-      completed,
-      total,
-      scannerCompleted: 0,
-      scannerTotal: request.scanners.length,
-    }
-    yield cloning
-    const workspace = await cloneRepository(request)
-    completed += 1
-    const repoPath = sandboxRepoPath(workspace.name)
-    const scanTarget = request.target
-    const diffTargetFiles =
-      scanTarget.kind === 'diff'
-        ? new Set(await resolveDiffTargetFiles(request, workspace))
-        : null
-    const scanners = filterScannersForTarget(
-      request,
-      scanTarget,
-      diffTargetFiles,
-    )
-
-    let dependencyAudit: DependencyAuditResult = {
-      status: 'unavailable',
-      error: 'The dependency scanner was disabled for this scan.',
-      exploitabilityAssessments: [],
-    }
-    // Requests from an older app omit this flag and retain the old enabled
-    // behavior during rolling deployments.
-    if (request.dependencyAudit !== false) {
-      const auditing: Progress = {
-        phase: 'dependency audit',
-        detail: 'Checking dependency lockfiles with OSV',
-        completed,
-        total,
-        scannerCompleted: 0,
-        scannerTotal: scanners.length,
-      }
-      yield auditing
-      dependencyAudit = await auditDependencies(workspace)
-      completed += 1
-    }
-
-    let gitnexusRepo: string | null = null
-    if (request.gitnexus) {
-      const indexing: Progress = {
-        phase: 'indexing',
-        detail: 'Building the GitNexus code index',
-        completed,
-        total,
-        scannerCompleted: 0,
-        scannerTotal: scanners.length,
-      }
-      yield indexing
-      const indexed = await indexWithGitNexus(workspace)
-      if (indexed.ok) gitnexusRepo = workspace.name
-      completed += 1
-    }
-
-    const knowledgePhase: Progress = {
-      phase: 'knowledge',
-      detail: 'Refreshing repository architecture knowledge',
-      completed,
-      total,
-      scannerCompleted: 0,
-      scannerTotal: scanners.length,
-    }
-    yield knowledgePhase
-    const knowledgeBase = await refreshKnowledge({
-      request,
-      workspace,
-      repoPath,
-      gitnexusRepo,
-      runAgent: (message) =>
+    const prepared = yield* prepareScanWorkflow({
+      scanId,
+      runKnowledgeAgent: (request, message) =>
         ctx.agent('knowledge', {
           message: `${executionProfileMarker(request.executionProfile)}\n${message}`,
           outputSchema: knowledgeOutputSchema,
         }),
     })
-    completed += 1
-
-    const dependencyGraphPhase: Progress = {
-      phase: 'dependency graph',
-      detail: 'Mapping subsystem dependencies',
-      completed,
+    const {
+      request,
+      requestFingerprint,
       total,
-      scannerCompleted: 0,
-      scannerTotal: scanners.length,
-    }
-    yield dependencyGraphPhase
-    const dependencyGraph =
-      gitnexusRepo && knowledgeBase.summary.subsystems.length > 0
-        ? await extractSubsystemDependencyGraph(
-            gitnexusRepo,
-            knowledgeBase.summary.subsystems,
-          )
-        : UNAVAILABLE_DEPENDENCY_GRAPH
-    completed += 1
-    const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
-
-    const securityProfile =
-      (knowledge.refreshed
-        ? knowledge.summary.securityProfile
-        : request.securityProfile) ?? securityProfileFromKnowledge(knowledge)
+      workspace,
+      repoPath,
+      scanners,
+      gitnexusRepo,
+      knowledge,
+      securityProfile,
+    } = prepared
+    let { completed } = prepared
 
     const scannerExecution = yield* runScannerBatches({
       scanId,
@@ -215,7 +144,7 @@ export default defineWorkflowTool({
       repoPath,
       gitnexusRepo,
       securityProfile,
-      dependencyAudit,
+      dependencyAudit: prepared.dependencyAudit,
       completed,
       total,
       runAgent: (scanner, message) =>
@@ -226,126 +155,23 @@ export default defineWorkflowTool({
     })
     const outcomes = scannerExecution.outcomes
     completed = scannerExecution.completed
-
-    const investigation = aggregateInvestigations(outcomes)
-    const coverage = aggregateCoverage(outcomes, investigation)
-    const candidates = securityValidationCandidates(outcomes)
-
-    const validating: Progress = {
-      phase: 'validating',
-      detail: `${candidates.length} security candidates to validate`,
-      completed,
-      total,
-      scannerCompleted: outcomes.length,
-      scannerTotal: scanners.length,
-    }
-    yield validating
-    const validations = await validateCandidates({
+    const finalized = yield* finalizeScanWorkflow({
+      scanId,
       request,
       workspace,
-      candidates,
-    })
-    completed += 1
-
-    const securityOutcomeIndex = outcomes.findIndex(
-      (outcome) => outcome.scannerId === 'security',
-    )
-    const securityResult =
-      securityOutcomeIndex >= 0
-        ? asScannerResult(outcomes[securityOutcomeIndex]?.result)
-        : null
-    if (securityOutcomeIndex >= 0 && securityResult?.findings?.length) {
-      const reviewing: Progress = {
-        phase: 'reviewing security exploitability',
-        detail: `${securityResult.findings.length} security findings to review`,
-        completed,
-        total,
-        scannerCompleted: outcomes.length,
-        scannerTotal: scanners.length,
-      }
-      yield reviewing
-      outcomes[securityOutcomeIndex] = await performSourceSecurityReview({
-        outcome: outcomes[securityOutcomeIndex] as ScannerOutcome,
-        securityResult,
-        request,
-        repoPath,
-        validations,
-        securityProfile,
-        gitnexusRepo,
-        workspace,
-        runAgent: (message, outputSchema) =>
-          ctx.agent('scanner', { message, outputSchema }),
-      })
-      completed += 1
-    } else if (request.scanners.some((scanner) => scanner.id === 'security')) {
-      completed += 1
-    }
-
-    if (request.dependencyAudit !== false) {
-      let candidates: ReturnType<typeof dependencyImpactCandidates> = []
-      if (
-        dependencyAudit.status === 'completed' &&
-        dependencyAudit.report !== undefined
-      ) {
-        try {
-          candidates = dependencyImpactCandidates(dependencyAudit.report)
-        } catch {
-          // The deterministic server parser remains authoritative for the
-          // audit. If review candidate extraction fails, no finding is
-          // promoted without a confirmed repository-specific assessment.
-        }
-      }
-      const reviewingDependencies: Progress = {
-        phase: 'reviewing dependency impact',
-        detail: `${candidates.length} dependency vulnerability candidates to review`,
-        completed,
-        total,
-        scannerCompleted: outcomes.length,
-        scannerTotal: scanners.length,
-      }
-      yield reviewingDependencies
-      dependencyAudit = await performDependencyImpactReview({
-        dependencyAudit,
-        candidates,
-        request,
-        repoPath,
-        securityProfile,
-        gitnexusRepo,
-        workspace,
-        runAgent: (message, outputSchema) =>
-          ctx.agent('scanner', { message, outputSchema }),
-      })
-      completed += 1
-    }
-
-    const persisting: Progress = {
-      phase: 'persisting',
-      detail: 'Writing the scan result',
+      scanners,
+      knowledge,
+      repoPath,
+      gitnexusRepo,
+      securityProfile,
+      dependencyAudit: prepared.dependencyAudit,
+      outcomes,
       completed,
       total,
-      scannerCompleted: outcomes.length,
-      scannerTotal: scanners.length,
-    }
-    yield persisting
-    const result: ScanResult = {
-      scanId,
-      commitSha: workspace.commitSha,
-      fileCount: workspace.fileCount,
-      gitnexusUsed: gitnexusRepo !== null,
-      knowledge,
-      securityProfile: {
-        profile: securityProfile,
-        generated: request.target.kind === 'repository',
-      },
-      dependencyAudit,
-      scanners: outcomes,
-      investigation,
-      coverage,
-      validations,
-      finishedAt: await nowIso(),
-    }
-    await writeScanResult(result)
-    completed += 1
+      runReviewAgent: (message, outputSchema) =>
+        ctx.agent('scanner', { message, outputSchema }),
+    })
+    completed = finalized.completed
 
     const done: Progress = {
       phase: 'done',
@@ -353,12 +179,14 @@ export default defineWorkflowTool({
       commitSha: workspace.commitSha,
       completed,
       total,
-      scannerCompleted: outcomes.length,
+      scannerCompleted: finalized.outcomes.length,
       scannerTotal: scanners.length,
-      completedScanners: outcomes.filter(
+      completedScanners: finalized.outcomes.filter(
         (outcome) => outcome.status === 'completed',
       ).length,
-      failed: outcomes.filter((outcome) => outcome.status === 'failed').length,
+      failed: finalized.outcomes.filter(
+        (outcome) => outcome.status === 'failed',
+      ).length,
     }
     return done
   },
@@ -369,6 +197,262 @@ export default defineWorkflowTool({
     }
   },
 })
+
+async function* prepareScanWorkflow(input: {
+  readonly scanId: number
+  readonly runKnowledgeAgent: (
+    request: ScanRequest,
+    message: string,
+  ) => Promise<unknown>
+}): AsyncGenerator<Progress, PreparedScanWorkflowState, void> {
+  const request = await readScanRequest(input.scanId)
+  const requestFingerprint = fingerprintScanRequest(request)
+  const total = totalScanSteps(request)
+  let completed = 0
+
+  yield {
+    phase: 'cloning',
+    detail: `${request.repositoryUrl}#${request.branch}`,
+    completed,
+    total,
+    scannerCompleted: 0,
+    scannerTotal: request.scanners.length,
+  }
+  const workspace = await cloneRepository(request)
+  completed += 1
+  const repoPath = sandboxRepoPath(workspace.name)
+  const diffTargetFiles =
+    request.target.kind === 'diff'
+      ? new Set(await resolveDiffTargetFiles(request, workspace))
+      : null
+  const scanners = filterScannersForTarget(
+    request,
+    request.target,
+    diffTargetFiles,
+  )
+
+  let dependencyAudit: DependencyAuditResult = {
+    status: 'unavailable',
+    error: 'The dependency scanner was disabled for this scan.',
+    exploitabilityAssessments: [],
+  }
+  // Requests from an older app omit this flag and retain the old enabled
+  // behavior during rolling deployments.
+  if (request.dependencyAudit !== false) {
+    yield {
+      phase: 'dependency audit',
+      detail: 'Checking dependency lockfiles with OSV',
+      completed,
+      total,
+      scannerCompleted: 0,
+      scannerTotal: scanners.length,
+    }
+    dependencyAudit = await auditDependencies(workspace)
+    completed += 1
+  }
+
+  let gitnexusRepo: string | null = null
+  if (request.gitnexus) {
+    yield {
+      phase: 'indexing',
+      detail: 'Building the GitNexus code index',
+      completed,
+      total,
+      scannerCompleted: 0,
+      scannerTotal: scanners.length,
+    }
+    const indexed = await indexWithGitNexus(workspace)
+    if (indexed.ok) gitnexusRepo = workspace.name
+    completed += 1
+  }
+
+  yield {
+    phase: 'knowledge',
+    detail: 'Refreshing repository architecture knowledge',
+    completed,
+    total,
+    scannerCompleted: 0,
+    scannerTotal: scanners.length,
+  }
+  const knowledgeBase = await refreshKnowledge({
+    request,
+    workspace,
+    repoPath,
+    gitnexusRepo,
+    runAgent: (message) => input.runKnowledgeAgent(request, message),
+  })
+  completed += 1
+
+  yield {
+    phase: 'dependency graph',
+    detail: 'Mapping subsystem dependencies',
+    completed,
+    total,
+    scannerCompleted: 0,
+    scannerTotal: scanners.length,
+  }
+  const dependencyGraph =
+    gitnexusRepo && knowledgeBase.summary.subsystems.length > 0
+      ? await extractSubsystemDependencyGraph(
+          gitnexusRepo,
+          knowledgeBase.summary.subsystems,
+        )
+      : UNAVAILABLE_DEPENDENCY_GRAPH
+  completed += 1
+  const knowledge: KnowledgeResult = { ...knowledgeBase, dependencyGraph }
+  const securityProfile =
+    (knowledge.refreshed
+      ? knowledge.summary.securityProfile
+      : request.securityProfile) ?? securityProfileFromKnowledge(knowledge)
+
+  return {
+    request,
+    requestFingerprint,
+    total,
+    completed,
+    workspace,
+    repoPath,
+    scanners,
+    gitnexusRepo,
+    knowledge,
+    securityProfile,
+    dependencyAudit,
+  }
+}
+
+async function* finalizeScanWorkflow(input: {
+  readonly scanId: number
+  readonly request: ScanRequest
+  readonly workspace: WorkspaceManifest
+  readonly scanners: readonly ScanRequestScanner[]
+  readonly knowledge: KnowledgeResult
+  readonly repoPath: string
+  readonly gitnexusRepo: string | null
+  readonly securityProfile: SecurityProfile
+  readonly dependencyAudit: DependencyAuditResult
+  readonly outcomes: ScannerOutcome[]
+  readonly completed: number
+  readonly total: number
+  readonly runReviewAgent: ReviewAgent
+}): AsyncGenerator<Progress, FinalizedScanWorkflowState, void> {
+  let completed = input.completed
+  let dependencyAudit = input.dependencyAudit
+  const investigation = aggregateInvestigations(input.outcomes)
+  const coverage = aggregateCoverage(input.outcomes, investigation)
+  const candidates = securityValidationCandidates(input.outcomes)
+
+  yield {
+    phase: 'validating',
+    detail: `${candidates.length} security candidates to validate`,
+    completed,
+    total: input.total,
+    scannerCompleted: input.outcomes.length,
+    scannerTotal: input.scanners.length,
+  }
+  const validations = await validateCandidates({
+    request: input.request,
+    workspace: input.workspace,
+    candidates,
+  })
+  completed += 1
+
+  const securityOutcomeIndex = input.outcomes.findIndex(
+    (outcome) => outcome.scannerId === 'security',
+  )
+  const securityResult =
+    securityOutcomeIndex >= 0
+      ? asScannerResult(input.outcomes[securityOutcomeIndex]?.result)
+      : null
+  if (securityOutcomeIndex >= 0 && securityResult?.findings?.length) {
+    yield {
+      phase: 'reviewing security exploitability',
+      detail: `${securityResult.findings.length} security findings to review`,
+      completed,
+      total: input.total,
+      scannerCompleted: input.outcomes.length,
+      scannerTotal: input.scanners.length,
+    }
+    input.outcomes[securityOutcomeIndex] = await performSourceSecurityReview({
+      outcome: input.outcomes[securityOutcomeIndex] as ScannerOutcome,
+      securityResult,
+      request: input.request,
+      repoPath: input.repoPath,
+      validations,
+      securityProfile: input.securityProfile,
+      gitnexusRepo: input.gitnexusRepo,
+      workspace: input.workspace,
+      runAgent: input.runReviewAgent,
+    })
+    completed += 1
+  } else if (
+    input.request.scanners.some((scanner) => scanner.id === 'security')
+  ) {
+    completed += 1
+  }
+
+  if (input.request.dependencyAudit !== false) {
+    let reviewCandidates: ReturnType<typeof dependencyImpactCandidates> = []
+    if (
+      dependencyAudit.status === 'completed' &&
+      dependencyAudit.report !== undefined
+    ) {
+      try {
+        reviewCandidates = dependencyImpactCandidates(dependencyAudit.report)
+      } catch {
+        // The deterministic server parser remains authoritative for the
+        // audit. Failed extraction cannot promote an unconfirmed finding.
+      }
+    }
+    yield {
+      phase: 'reviewing dependency impact',
+      detail: `${reviewCandidates.length} dependency vulnerability candidates to review`,
+      completed,
+      total: input.total,
+      scannerCompleted: input.outcomes.length,
+      scannerTotal: input.scanners.length,
+    }
+    dependencyAudit = await performDependencyImpactReview({
+      dependencyAudit,
+      candidates: reviewCandidates,
+      request: input.request,
+      repoPath: input.repoPath,
+      securityProfile: input.securityProfile,
+      gitnexusRepo: input.gitnexusRepo,
+      workspace: input.workspace,
+      runAgent: input.runReviewAgent,
+    })
+    completed += 1
+  }
+
+  yield {
+    phase: 'persisting',
+    detail: 'Writing the scan result',
+    completed,
+    total: input.total,
+    scannerCompleted: input.outcomes.length,
+    scannerTotal: input.scanners.length,
+  }
+  const result: ScanResult = {
+    scanId: input.scanId,
+    commitSha: input.workspace.commitSha,
+    fileCount: input.workspace.fileCount,
+    gitnexusUsed: input.gitnexusRepo !== null,
+    knowledge: input.knowledge,
+    securityProfile: {
+      profile: input.securityProfile,
+      generated: input.request.target.kind === 'repository',
+    },
+    dependencyAudit,
+    scanners: input.outcomes,
+    investigation,
+    coverage,
+    validations,
+    finishedAt: await nowIso(),
+  }
+  await writeScanResult(result)
+  completed += 1
+  return { completed, outcomes: input.outcomes }
+}
 
 async function* runScannerBatches(input: {
   readonly scanId: number
