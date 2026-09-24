@@ -326,35 +326,18 @@ export default defineWorkflowTool({
         scannerTotal: scanners.length,
       }
       yield reviewing
-      let review: ExploitabilityReview = { assessments: [] }
-      try {
-        const rawReview = await ctx.agent('scanner', {
-          message: `${executionProfileMarker(request.executionProfile)}\n${exploitabilityReviewMessage(
-            {
-              repoPath,
-              repositoryName: request.repositoryName,
-              findings: securityResult.findings,
-              validations,
-              securityProfile,
-              gitnexusRepo,
-            },
-          )}`,
-          outputSchema: exploitabilityReviewJsonSchema,
-        })
-        const parsed = exploitabilityReviewSchema.safeParse(rawReview)
-        if (parsed.success) review = parsed.data
-      } catch {
-        // A failed review must not promote unverified findings. The fallback
-        // assessment below leaves every finding at low contextual priority.
-      }
-      outcomes[securityOutcomeIndex] = {
-        ...outcomes[securityOutcomeIndex],
-        result: applyExploitabilityReview(
-          securityResult,
-          review,
-          workspace.files.map((file) => file.path),
-        ),
-      } as ScannerOutcome
+      outcomes[securityOutcomeIndex] = await performSourceSecurityReview({
+        outcome: outcomes[securityOutcomeIndex] as ScannerOutcome,
+        securityResult,
+        request,
+        repoPath,
+        validations,
+        securityProfile,
+        gitnexusRepo,
+        workspace,
+        runAgent: (message, outputSchema) =>
+          ctx.agent('scanner', { message, outputSchema }),
+      })
       completed += 1
     } else if (request.scanners.some((scanner) => scanner.id === 'security')) {
       completed += 1
@@ -383,35 +366,17 @@ export default defineWorkflowTool({
         scannerTotal: scanners.length,
       }
       yield reviewingDependencies
-      const reviews: DependencyImpactReview[] = []
-      for (const batch of dependencyImpactReviewBatches(candidates)) {
-        try {
-          const rawReview = await ctx.agent('scanner', {
-            message: `${executionProfileMarker(request.executionProfile)}\n${dependencyImpactReviewMessage(
-              {
-                repoPath,
-                repositoryName: request.repositoryName,
-                candidates: batch,
-                securityProfile,
-                gitnexusRepo,
-              },
-            )}`,
-            outputSchema: dependencyImpactReviewJsonSchema,
-          })
-          const parsed = dependencyImpactReviewSchema.safeParse(rawReview)
-          if (parsed.success) reviews.push(parsed.data)
-        } catch {
-          // Missing batches are converted into not-confirmed assessments.
-        }
-      }
-      dependencyAudit = {
-        ...dependencyAudit,
-        exploitabilityAssessments: applyDependencyImpactReviews(
-          candidates,
-          reviews,
-          workspace.files.map((file) => file.path),
-        ),
-      }
+      dependencyAudit = await performDependencyImpactReview({
+        dependencyAudit,
+        candidates,
+        request,
+        repoPath,
+        securityProfile,
+        gitnexusRepo,
+        workspace,
+        runAgent: (message, outputSchema) =>
+          ctx.agent('scanner', { message, outputSchema }),
+      })
       completed += 1
     }
 
@@ -466,6 +431,93 @@ export default defineWorkflowTool({
     }
   },
 })
+
+type ReviewAgent = (
+  message: string,
+  outputSchema: JsonObject,
+) => Promise<unknown>
+
+async function performSourceSecurityReview(input: {
+  readonly outcome: ScannerOutcome
+  readonly securityResult: NonNullable<ReturnType<typeof asScannerResult>>
+  readonly request: ScanRequest
+  readonly repoPath: string
+  readonly validations: ScanResult['validations']
+  readonly securityProfile: SecurityProfile
+  readonly gitnexusRepo: string | null
+  readonly workspace: WorkspaceManifest
+  readonly runAgent: ReviewAgent
+}): Promise<ScannerOutcome> {
+  let review: ExploitabilityReview = { assessments: [] }
+  try {
+    const rawReview = await input.runAgent(
+      `${executionProfileMarker(input.request.executionProfile)}\n${exploitabilityReviewMessage(
+        {
+          repoPath: input.repoPath,
+          repositoryName: input.request.repositoryName,
+          findings: input.securityResult.findings,
+          validations: input.validations,
+          securityProfile: input.securityProfile,
+          gitnexusRepo: input.gitnexusRepo,
+        },
+      )}`,
+      exploitabilityReviewJsonSchema,
+    )
+    const parsed = exploitabilityReviewSchema.safeParse(rawReview)
+    if (parsed.success) review = parsed.data
+  } catch {
+    // A failed review must not promote unverified findings.
+  }
+  return {
+    ...input.outcome,
+    result: applyExploitabilityReview(
+      input.securityResult,
+      review,
+      input.workspace.files.map((file) => file.path),
+    ),
+  }
+}
+
+async function performDependencyImpactReview(input: {
+  readonly dependencyAudit: DependencyAuditResult
+  readonly candidates: ReturnType<typeof dependencyImpactCandidates>
+  readonly request: ScanRequest
+  readonly repoPath: string
+  readonly securityProfile: SecurityProfile
+  readonly gitnexusRepo: string | null
+  readonly workspace: WorkspaceManifest
+  readonly runAgent: ReviewAgent
+}): Promise<DependencyAuditResult> {
+  const reviews: DependencyImpactReview[] = []
+  for (const batch of dependencyImpactReviewBatches(input.candidates)) {
+    try {
+      const rawReview = await input.runAgent(
+        `${executionProfileMarker(input.request.executionProfile)}\n${dependencyImpactReviewMessage(
+          {
+            repoPath: input.repoPath,
+            repositoryName: input.request.repositoryName,
+            candidates: batch,
+            securityProfile: input.securityProfile,
+            gitnexusRepo: input.gitnexusRepo,
+          },
+        )}`,
+        dependencyImpactReviewJsonSchema,
+      )
+      const parsed = dependencyImpactReviewSchema.safeParse(rawReview)
+      if (parsed.success) reviews.push(parsed.data)
+    } catch {
+      // Missing batches are converted into not-confirmed assessments.
+    }
+  }
+  return {
+    ...input.dependencyAudit,
+    exploitabilityAssessments: applyDependencyImpactReviews(
+      input.candidates,
+      reviews,
+      input.workspace.files.map((file) => file.path),
+    ),
+  }
+}
 
 function fingerprintScanRequest(request: ScanRequest): string {
   return JSON.stringify({

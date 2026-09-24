@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { setDatabaseForTesting } from '@/db'
+import { db, setDatabaseForTesting } from '@/db'
 import * as schema from '@/db/schema'
+import type { ScanCheckpoint, ScanResult } from '@/lib/eve-protocol'
 import type { EnrichedScannerFinding } from '@/lib/findings'
 import {
   decideFindingPatchImpl,
@@ -13,6 +14,10 @@ import {
 } from '@/lib/server/finding-patches.server'
 import { reconcileScannerFindings } from '@/lib/server/finding-reconciliation.server'
 import { recoverInterruptedScans } from '@/lib/server/scan-recovery.server'
+import {
+  persistScanCheckpoint,
+  persistScanResult,
+} from '@/lib/server/scan-result-ingestion.server'
 import { runSchedulerTick } from '@/lib/server/scheduler.server'
 
 const connectionString = process.env.DATABASE_URL
@@ -398,6 +403,10 @@ try {
       )
       returning id
     `
+    await client`
+      insert into scanner_runs (scan_id, scanner_id, status, started_at, finished_at)
+      values (${sourceScan.id}, 'reliability', 'completed', now(), now())
+    `
     const finding: EnrichedScannerFinding = {
       fingerprint: 'service-lifecycle-finding',
       title: 'Service lifecycle finding',
@@ -421,7 +430,7 @@ try {
     }
     const scannerResult = (fresh: readonly EnrichedScannerFinding[]) => ({
       summary: 'Lifecycle smoke result.',
-      findings: fresh,
+      findings: [...fresh],
       hypothesisVerdicts: [],
       investigation: {
         strategy: 'Exercise the persisted lifecycle.',
@@ -464,6 +473,145 @@ try {
       reconciliationRows.events !== 1
     ) {
       throw new Error('Reconciliation omitted its occurrence or history event')
+    }
+
+    const repeatedReconciliation = await reconcileScannerFindings({
+      repositoryId: lifecycleRepository.id,
+      scanId: sourceScan.id,
+      scannerId: 'reliability',
+      result: scannerResult([finding]),
+      target: { kind: 'repository' },
+    })
+    const [afterRepeatedReconciliation] = await client<
+      [{ state: string; occurrences: number; events: number }]
+    >`
+      select
+        findings.state,
+        (select count(*)::int from finding_occurrences
+          where finding_id = findings.id) as occurrences,
+        (select count(*)::int from finding_events
+          where finding_id = findings.id) as events
+      from findings
+      where findings.id = ${reconciledFinding.id}
+    `
+    if (
+      repeatedReconciliation.counts.new !== 1 ||
+      repeatedReconciliation.findings[0]?.state !== 'new' ||
+      afterRepeatedReconciliation.state !== 'new' ||
+      afterRepeatedReconciliation.occurrences !== 1 ||
+      afterRepeatedReconciliation.events !== 1
+    ) {
+      throw new Error(
+        'Repeated reconciliation changed persisted lifecycle state',
+      )
+    }
+
+    const repositoryRecord = await db.query.repositories.findFirst({
+      where: (table, { eq }) => eq(table.id, lifecycleRepository.id),
+    })
+    if (!repositoryRecord) throw new Error('Lifecycle repository disappeared')
+    const [ingestionScan] = await client<[{ id: number }]>`
+      insert into scans (
+        repository_id, status, trigger, phase, branch, target, started_at
+      ) values (
+        ${lifecycleRepository.id}, 'running', 'manual', 'scanning', 'main',
+        '{"kind":"repository"}'::jsonb, now()
+      )
+      returning id
+    `
+    await client`
+      insert into scanner_runs (scan_id, scanner_id, status, started_at)
+      values (${ingestionScan.id}, 'reliability', 'running', now())
+    `
+    const ingestionFinding = {
+      ...finding,
+      fingerprint: 'checkpoint-result-idempotency',
+      title: 'Checkpoint result idempotency',
+    }
+    const ingestionOutcome = {
+      scannerId: 'reliability',
+      status: 'completed' as const,
+      result: scannerResult([ingestionFinding]),
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    }
+    const commitSha = 'abcdef0123456789abcdef0123456789abcdef01'
+    const knowledge = {
+      refreshed: false,
+      overview: '',
+      summary: {
+        languages: [],
+        frameworks: [],
+        subsystems: [],
+        concepts: [],
+      },
+      sources: [],
+      reason: 'Lifecycle smoke fixture.',
+      dependencyGraph: {
+        edges: [],
+        cycles: [],
+        cycleStatus: 'unavailable' as const,
+        componentCount: null,
+      },
+    }
+    const securityProfile = {
+      projectOverview: '',
+      assets: [],
+      entryPoints: [],
+      trustBoundaries: [],
+      authAssumptions: [],
+      sensitiveDataPaths: [],
+      privilegedActions: [],
+      securityInvariants: [],
+      priorities: [],
+      exclusions: [],
+    }
+    const checkpoint: ScanCheckpoint = {
+      version: 1,
+      requestFingerprint: 'lifecycle-smoke-request',
+      scanId: ingestionScan.id,
+      commitSha,
+      fileCount: 1,
+      gitnexusUsed: false,
+      knowledge,
+      securityProfile: { profile: securityProfile, generated: false },
+      dependencyAudit: {
+        status: 'unavailable',
+        error: 'Disabled for lifecycle smoke test.',
+        exploitabilityAssessments: [],
+      },
+      scanners: [ingestionOutcome],
+      updatedAt: new Date().toISOString(),
+    }
+    await persistScanCheckpoint(ingestionScan.id, repositoryRecord, checkpoint)
+    const finalResult: ScanResult = {
+      ...checkpoint,
+      investigation: scannerResult([]).investigation,
+      coverage: scannerResult([]).coverage,
+      validations: [],
+      finishedAt: new Date().toISOString(),
+    }
+    await persistScanResult(ingestionScan.id, repositoryRecord, finalResult)
+    const [ingestionState] = await client<
+      [{ state: string; occurrences: number; events: number }]
+    >`
+      select
+        findings.state,
+        (select count(*)::int from finding_occurrences
+          where finding_id = findings.id) as occurrences,
+        (select count(*)::int from finding_events
+          where finding_id = findings.id) as events
+      from findings
+      where repository_id = ${lifecycleRepository.id}
+        and scanner_id = 'reliability'
+        and fingerprint = ${ingestionFinding.fingerprint}
+    `
+    if (
+      ingestionState.state !== 'new' ||
+      ingestionState.occurrences !== 1 ||
+      ingestionState.events !== 1
+    ) {
+      throw new Error('Checkpoint and final ingestion were not idempotent')
     }
 
     let atomicFailureObserved = false

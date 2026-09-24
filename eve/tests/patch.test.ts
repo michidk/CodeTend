@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { PatchRequest, PatchResult } from '../agent/lib/contract'
 import { applyGeneratedPatch, assertSafeUnifiedDiff } from '../agent/lib/steps'
+import runFix from '../agent/tools/run_fix'
 
 describe('generated patch boundary', () => {
   test('accepts a text-only repository-relative unified diff', () => {
@@ -119,6 +121,129 @@ describe('generated patch boundary', () => {
       expect(result.diff).toContain('+safe()')
     } finally {
       await rm(repository, { recursive: true, force: true })
+    }
+  })
+
+  test('runs the fixer workflow through success and failure outcomes offline', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'codetend-fix-workflow-test-'))
+    const repository = join(root, 'repository')
+    const dataDir = join(root, 'data')
+    const previousDataDir = process.env.TECDEBT_DATA_DIR
+    process.env.TECDEBT_DATA_DIR = dataDir
+    try {
+      await mkdir(repository)
+      await writeFile(join(repository, 'auth.ts'), 'unsafe()\n')
+      for (const args of [
+        ['init', '--quiet'],
+        ['config', 'user.email', 'test@example.com'],
+        ['config', 'user.name', 'CodeTend Test'],
+        ['add', 'auth.ts'],
+        ['commit', '--quiet', '-m', 'test fixture'],
+      ]) {
+        const command = Bun.spawnSync(['git', ...args], { cwd: repository })
+        expect(command.exitCode).toBe(0)
+      }
+      const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
+        cwd: repository,
+      })
+        .stdout.toString()
+        .trim()
+
+      const run = async (
+        patchId: number,
+        agent: () => Promise<unknown>,
+      ): Promise<PatchResult> => {
+        const request: PatchRequest = {
+          contractVersion: 1,
+          executionProfile: { model: 'test-model', effort: 'medium' },
+          patchId,
+          repositoryId: 91,
+          repositoryName: 'offline-fixture',
+          repositoryUrl: repository,
+          branch: 'main',
+          revision,
+          finding: {
+            id: 17,
+            title: 'Unsafe call',
+            severity: 'high',
+            description: 'The fixture contains an unsafe call.',
+            rootCause: null,
+            whyItMatters: 'The call should be replaced.',
+            recommendation: 'Replace it with safe().',
+            locations: [{ path: 'auth.ts', startLine: 1 }],
+            codeEvidence: null,
+            validationPlan: null,
+            remediationTests: null,
+            preventiveControls: null,
+          },
+          validation: {
+            enabled: false,
+            runner: 'disabled',
+            image: 'unused',
+          },
+        }
+        await mkdir(join(dataDir, 'requests'), { recursive: true })
+        await writeFile(
+          join(dataDir, 'requests', `patch-${patchId}.json`),
+          JSON.stringify(request),
+        )
+        const execution = runFix.execute({ patchId }, { agent } as Parameters<
+          typeof runFix.execute
+        >[1])
+        for await (const _progress of execution) {
+          // Exhaust the real workflow generator so its durable steps run.
+        }
+        return JSON.parse(
+          await readFile(
+            join(dataDir, 'results', `patch-${patchId}.json`),
+            'utf8',
+          ),
+        ) as PatchResult
+      }
+
+      const proposed = await run(1, async () => ({
+        outcome: 'patched',
+        summary: 'Replaced the unsafe call.',
+        diff: [
+          'diff --git a/auth.ts b/auth.ts',
+          '--- a/auth.ts',
+          '+++ b/auth.ts',
+          '@@ -1 +1 @@',
+          '-unsafe()',
+          '+safe()',
+          '',
+        ].join('\n'),
+        changedFiles: ['auth.ts'],
+        testRecommendations: ['Run the focused test.'],
+      }))
+      expect(proposed.status).toBe('proposed')
+      expect(proposed.changedFiles).toEqual(['auth.ts'])
+
+      const notReproduced = await run(2, async () => ({
+        outcome: 'not_reproduced',
+        summary: 'The finding is no longer present.',
+        diff: '',
+        changedFiles: [],
+        testRecommendations: [],
+      }))
+      expect(notReproduced).toMatchObject({
+        status: 'failed',
+        error:
+          'The fixer could not reproduce the finding in the current revision.',
+      })
+
+      const failed = await run(3, async () => {
+        throw new Error('agent unavailable')
+      })
+      expect(failed).toMatchObject({
+        status: 'failed',
+        summary: 'Patch generation failed.',
+        error: 'agent unavailable',
+      })
+    } finally {
+      if (previousDataDir === undefined) delete process.env.TECDEBT_DATA_DIR
+      else process.env.TECDEBT_DATA_DIR = previousDataDir
+      await rm(root, { recursive: true, force: true })
     }
   })
 })

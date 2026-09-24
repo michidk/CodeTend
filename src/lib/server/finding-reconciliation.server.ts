@@ -1,12 +1,13 @@
 import '@tanstack/react-start/server-only'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { type DatabaseTransaction, db } from '@/db'
 import {
   type Finding,
   type FindingCounts,
   findingOccurrences,
   findings,
+  scannerRuns,
 } from '@/db/schema'
 import {
   type EnrichedScannerFinding,
@@ -92,6 +93,29 @@ export async function reconcileScannerFindings(
   input: ReconciliationInput,
 ): Promise<ReconciliationOutcome> {
   return db.transaction(async (transaction) => {
+    await transaction.execute(sql`
+      select 1
+      from ${scannerRuns}
+      where ${scannerRuns.scanId} = ${input.scanId}
+        and ${scannerRuns.scannerId} = ${input.scannerId}
+      for update
+    `)
+    const persisted = await transaction
+      .select({
+        finding: findings,
+        observedState: findingOccurrences.state,
+      })
+      .from(findingOccurrences)
+      .innerJoin(findings, eq(findings.id, findingOccurrences.findingId))
+      .where(
+        and(
+          eq(findingOccurrences.scanId, input.scanId),
+          eq(findings.repositoryId, input.repositoryId),
+          eq(findings.scannerId, input.scannerId),
+        ),
+      )
+    if (persisted.length > 0) return outcomeFromPersistedOccurrences(persisted)
+
     const existing = await transaction.query.findings.findMany({
       where: and(
         eq(findings.repositoryId, input.repositoryId),
@@ -101,6 +125,24 @@ export async function reconcileScannerFindings(
     const plans = planFindingTransitions(input, existing)
     return executeFindingTransitionPlans(transaction, input, plans)
   })
+}
+
+function outcomeFromPersistedOccurrences(
+  persisted: readonly {
+    readonly finding: Finding
+    readonly observedState: FindingState
+  }[],
+): ReconciliationOutcome {
+  const counts = { ...EMPTY_COUNTS }
+  for (const entry of persisted) counts[entry.observedState] += 1
+  return {
+    counts,
+    findings: persisted.map((entry) => ({
+      id: entry.finding.id,
+      state: entry.observedState,
+      finding: toScannerFinding(entry.finding),
+    })),
+  }
 }
 
 /** Pure lifecycle policy. Persistence is handled separately and atomically. */
