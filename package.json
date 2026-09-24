@@ -41,10 +41,7 @@
     "@jmondi/oauth2-server": "^5",
     "@modelcontextprotocol/server": "^2",
     "@t3-oss/env-core": "^0.13.11",
-    "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-devtools": "^0.10.12",
     "@tanstack/react-router": "^1.170.36",
-    "@tanstack/react-router-devtools": "^1.167.2",
     "@tanstack/react-start": "^1.168.54",
     "ae-cvss-calculator": "1.0.13",
     "class-variance-authority": "^0.7.1",
@@ -61,13 +58,15 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
-    "tailwindcss": "^4.3.3",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
+    "@tailwindcss/vite": "^4.3.3",
     "@tanstack/devtools-vite": "^0.8.5",
+    "@tanstack/react-devtools": "^0.10.12",
+    "@tanstack/react-router-devtools": "^1.167.2",
     "@tanstack/router-cli": "^1.167.36",
     "@types/bun": "^1.4.2",
     "@types/node": "^26.5.1",
@@ -77,6 +76,7 @@
     "drizzle-kit": "^0.31.10",
     "knip": "^6.35.1",
     "nitro": "^3.0.260903-beta",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
   }

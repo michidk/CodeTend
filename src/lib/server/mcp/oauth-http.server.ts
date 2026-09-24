@@ -36,7 +36,7 @@ async function recordAudit(
   try {
     await store.audit(event)
   } catch {
-    console.error('Failed to persist an MCP OAuth audit event')
+    console.error('[CodeTend] failed to persist an MCP OAuth audit event')
   }
 }
 

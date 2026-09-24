@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { DependencyAuditResult, SecurityProfile } from './contract'
 import type { JsonObject } from './json'
+import {
+  confirmReviewEvidence,
+  inspectedEvidenceSchema,
+} from './security-review-evidence'
 
 const REVIEW_BATCH_SIZE = 25
 
@@ -38,25 +42,6 @@ const osvReviewReportSchema = z.object({
     .nullable()
     .default([])
     .transform((results) => results ?? []),
-})
-
-const inspectedEvidenceSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .max(1_000)
-    .refine(
-      (path) =>
-        !path.startsWith('/') &&
-        !path.startsWith('\\') &&
-        !path.split(/[\\/]/).includes('..'),
-      'Evidence paths must be repository-relative and may not traverse upward.',
-    ),
-  startLine: z.number().int().positive().optional(),
-  endLine: z.number().int().positive().optional(),
-  symbol: z.string().min(1).max(200).optional(),
-  role: z.enum(['source', 'control', 'sink', 'supporting', 'test']),
-  summary: z.string().min(5).max(1_000),
 })
 
 const reviewAssessmentSchema = z.object({
@@ -211,7 +196,6 @@ export function applyDependencyImpactReviews(
   reviews: readonly DependencyImpactReview[],
   repositoryFiles: readonly string[],
 ): DependencyImpactAssessment[] {
-  const availableFiles = new Set(repositoryFiles.map(normalizePath))
   const reviewed = new Map(
     reviews.flatMap((review) =>
       review.assessments.map((assessment) => [
@@ -223,16 +207,12 @@ export function applyDependencyImpactReviews(
 
   return candidates.map((candidate) => {
     const assessment = reviewed.get(candidate.id)
-    const validEvidence =
-      assessment?.inspectedEvidence.filter((evidence) =>
-        availableFiles.has(normalizePath(evidence.path)),
-      ) ?? []
-    const hasSource = validEvidence.some(
-      (evidence) => evidence.role === 'source',
-    )
-    const hasSink = validEvidence.some((evidence) => evidence.role === 'sink')
-    const confirmed =
-      assessment?.verdict === 'confirmed' && hasSource && hasSink
+    const { confirmed: evidenceConfirmed, validEvidence } =
+      confirmReviewEvidence(
+        assessment?.inspectedEvidence ?? [],
+        repositoryFiles,
+      )
+    const confirmed = assessment?.verdict === 'confirmed' && evidenceConfirmed
 
     return {
       package: candidate.package,
@@ -259,8 +239,4 @@ function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((left, right) =>
     left.localeCompare(right),
   )
-}
-
-function normalizePath(path: string): string {
-  return path.replaceAll('\\', '/').replace(/^\.\//, '')
 }

@@ -40,61 +40,70 @@ export type MarkFindingFixedInput = z.infer<typeof markFixedInputSchema>
 export const updateFindingDisposition = createServerOnlyFn(
   async (data: FindingDispositionInput) => {
     const parsed = triageInputSchema.parse(data)
-    const current = await db.query.findings.findFirst({
-      where: eq(findings.id, parsed.findingId),
-      columns: { id: true, state: true, disposition: true },
-    })
-    if (!current) throw new DomainError('not_found', 'Finding not found')
-    if (parsed.disposition === null && current.disposition === null) {
-      throw new DomainError('conflict', 'This finding is not manually triaged.')
-    }
-    const editing =
-      parsed.disposition !== null && current.disposition === parsed.disposition
-
-    const [updated] = await db
-      .update(findings)
-      .set(
-        parsed.disposition
-          ? {
-              state: 'resolved',
-              disposition: parsed.disposition,
-              dispositionNote: parsed.note || null,
-              ...(editing ? {} : { triagedAt: new Date() }),
-              resolvedScanId: null,
-              updatedAt: new Date(),
-            }
-          : {
-              state: 'active',
-              disposition: null,
-              dispositionNote: null,
-              triagedAt: null,
-              resolvedScanId: null,
-              updatedAt: new Date(),
-            },
-      )
-      .where(eq(findings.id, parsed.findingId))
-      .returning({
-        id: findings.id,
-        state: findings.state,
-        disposition: findings.disposition,
+    return db.transaction(async (transaction) => {
+      const current = await transaction.query.findings.findFirst({
+        where: eq(findings.id, parsed.findingId),
+        columns: { id: true, state: true, disposition: true },
       })
-    const row = expectReturnedRow(updated, 'Finding')
+      if (!current) throw new DomainError('not_found', 'Finding not found')
+      if (parsed.disposition === null && current.disposition === null) {
+        throw new DomainError(
+          'conflict',
+          'This finding is not manually triaged.',
+        )
+      }
+      const editing =
+        parsed.disposition !== null &&
+        current.disposition === parsed.disposition
 
-    await recordFindingEvent({
-      findingId: row.id,
-      actor: 'operator',
-      kind: parsed.disposition
-        ? editing
-          ? 'disposition_updated'
-          : 'disposition_set'
-        : 'reopened',
-      fromState: current.state,
-      toState: row.state,
-      disposition: parsed.disposition ?? current.disposition,
-      note: parsed.disposition ? parsed.note || null : null,
+      const [updated] = await transaction
+        .update(findings)
+        .set(
+          parsed.disposition
+            ? {
+                state: 'resolved',
+                disposition: parsed.disposition,
+                dispositionNote: parsed.note || null,
+                ...(editing ? {} : { triagedAt: new Date() }),
+                resolvedScanId: null,
+                updatedAt: new Date(),
+              }
+            : {
+                state: 'active',
+                disposition: null,
+                dispositionNote: null,
+                triagedAt: null,
+                resolvedScanId: null,
+                updatedAt: new Date(),
+              },
+        )
+        .where(eq(findings.id, parsed.findingId))
+        .returning({
+          id: findings.id,
+          state: findings.state,
+          disposition: findings.disposition,
+        })
+      const row = expectReturnedRow(updated, 'Finding')
+
+      await recordFindingEvent(
+        {
+          findingId: row.id,
+          actor: 'operator',
+          kind: parsed.disposition
+            ? editing
+              ? 'disposition_updated'
+              : 'disposition_set'
+            : 'reopened',
+          fromState: current.state,
+          toState: row.state,
+          disposition: parsed.disposition ?? current.disposition,
+          note: parsed.disposition ? parsed.note || null : null,
+        },
+        transaction,
+      )
+
+      return row
     })
-
-    return row
   },
 )
 
@@ -111,49 +120,54 @@ export const setFindingDisposition = createServerFn({ method: 'POST' })
 export const updateFindingAsFixed = createServerOnlyFn(
   async (data: MarkFindingFixedInput) => {
     const parsed = markFixedInputSchema.parse(data)
-    const current = await db.query.findings.findFirst({
-      where: eq(findings.id, parsed.findingId),
-      columns: { id: true, state: true, disposition: true },
-    })
-    if (!current) throw new DomainError('not_found', 'Finding not found')
-    if (
-      current.disposition !== null ||
-      !OPEN_FINDING_STATES.includes(current.state)
-    ) {
-      throw new DomainError(
-        'conflict',
-        'Only an active, non-triaged finding can be marked as fixed.',
+    return db.transaction(async (transaction) => {
+      const current = await transaction.query.findings.findFirst({
+        where: eq(findings.id, parsed.findingId),
+        columns: { id: true, state: true, disposition: true },
+      })
+      if (!current) throw new DomainError('not_found', 'Finding not found')
+      if (
+        current.disposition !== null ||
+        !OPEN_FINDING_STATES.includes(current.state)
+      ) {
+        throw new DomainError(
+          'conflict',
+          'Only an active, non-triaged finding can be marked as fixed.',
+        )
+      }
+
+      const [updated] = await transaction
+        .update(findings)
+        .set({
+          state: 'resolved',
+          disposition: null,
+          dispositionNote: null,
+          triagedAt: null,
+          resolvedScanId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(findings.id, parsed.findingId))
+        .returning({
+          id: findings.id,
+          state: findings.state,
+          disposition: findings.disposition,
+        })
+      const row = expectReturnedRow(updated, 'Finding')
+
+      await recordFindingEvent(
+        {
+          findingId: row.id,
+          actor: 'operator',
+          kind: 'resolved',
+          fromState: current.state,
+          toState: row.state,
+          note: parsed.note,
+        },
+        transaction,
       )
-    }
 
-    const [updated] = await db
-      .update(findings)
-      .set({
-        state: 'resolved',
-        disposition: null,
-        dispositionNote: null,
-        triagedAt: null,
-        resolvedScanId: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(findings.id, parsed.findingId))
-      .returning({
-        id: findings.id,
-        state: findings.state,
-        disposition: findings.disposition,
-      })
-    const row = expectReturnedRow(updated, 'Finding')
-
-    await recordFindingEvent({
-      findingId: row.id,
-      actor: 'operator',
-      kind: 'resolved',
-      fromState: current.state,
-      toState: row.state,
-      note: parsed.note,
+      return row
     })
-
-    return row
   },
 )
 

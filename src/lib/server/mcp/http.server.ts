@@ -133,7 +133,7 @@ async function recordToolAudit(
   try {
     await store.audit(event)
   } catch {
-    console.error('Failed to persist an MCP tool audit event')
+    console.error('[CodeTend] failed to persist an MCP tool audit event')
   }
 }
 
@@ -246,7 +246,7 @@ export async function handleMcpHttpRequest(
     )
     return await handler(request)
   } catch (error) {
-    console.error('MCP request failed', error)
+    console.error('[CodeTend] MCP request failed', error)
     return Response.json(
       {
         error: 'server_error',

@@ -15,6 +15,7 @@ import { OPEN_FINDING_STATES, scannerResultJsonSchema } from '@/lib/findings'
 import {
   cancelAndDrainEveSession,
   cancelEveScanSession,
+  type EveScanSession,
   startEveScanSession,
 } from '@/lib/server/eve-client.server'
 import { ensureGitNexusServer } from '@/lib/server/gitnexus.server'
@@ -116,51 +117,14 @@ async function superviseScanExecution(
       await persistScanCheckpoint(scanId, repository, checkpoint)
     }
   }
-  const settlement = session
-    .settle(async (progress) => {
-      await setScanProgress(scanId, progress)
-      await ingestCheckpoint()
-    })
-    .catch((error) => {
-      console.warn(
-        `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
-        error,
-      )
-      return waitForScanResult(scanId, SCAN_TIMEOUT_MS).then(() => null)
-    })
-  const completion = await Promise.race([
-    settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
-    waitForResultWithCheckpoints(
-      scanId,
-      SCAN_TIMEOUT_MS,
-      ingestCheckpoint,
-    ).then(
-      () => ({ kind: 'result' as const }),
-      (error: unknown) => ({ kind: 'deadline' as const, error }),
-    ),
-  ])
-  if (completion.kind === 'deadline') {
-    await setScanProgress(scanId, {
-      phase: 'cancelling',
-      detail: 'Scan deadline reached; draining Eve session',
-      completed: 1,
-      total: 1,
-    })
-    await cancelAndDrainEveSession(session.sessionId, settlement)
-    throw completion.error
-  }
-  const outcome = completion.kind === 'settled' ? completion.outcome : null
-
-  const result = await readScanResult(scanId)
+  const result = await waitForScanSessionResult(
+    scanId,
+    session,
+    ingestCheckpoint,
+  )
   if (await cancellationRequested(scanId)) {
     await cancelScanRecord(scanId, repository.id)
     return
-  }
-  if (!result) {
-    throw new Error(
-      outcome?.failure ??
-        `Eve finished with status "${outcome?.status ?? 'unknown'}" but wrote no result file.`,
-    )
   }
 
   await throwIfCancellationRequested(scanId)
@@ -172,6 +136,75 @@ async function superviseScanExecution(
   })
   await persistScanResult(scanId, repository, result)
   await cleanupScanFiles(repository.id, scanId)
+}
+
+type ScanResult = NonNullable<Awaited<ReturnType<typeof readScanResult>>>
+
+interface ScanSessionDependencies {
+  readonly waitForResultWithCheckpoints: typeof waitForResultWithCheckpoints
+  readonly waitForResult: typeof waitForScanResult
+  readonly readResult: typeof readScanResult
+  readonly cancelAndDrain: typeof cancelAndDrainEveSession
+  readonly onProgress: typeof setScanProgress
+}
+
+const scanSessionDependencies: ScanSessionDependencies = {
+  waitForResultWithCheckpoints,
+  waitForResult: waitForScanResult,
+  readResult: readScanResult,
+  cancelAndDrain: cancelAndDrainEveSession,
+  onProgress: setScanProgress,
+}
+
+export async function waitForScanSessionResult(
+  scanId: number,
+  session: EveScanSession,
+  ingestCheckpoint: () => Promise<void>,
+  dependencies: ScanSessionDependencies = scanSessionDependencies,
+): Promise<ScanResult> {
+  const settlement = session
+    .settle(async (progress) => {
+      await dependencies.onProgress(scanId, progress)
+      await ingestCheckpoint()
+    })
+    .catch((error) => {
+      console.warn(
+        `[CodeTend] scan ${scanId}: Eve stream ended early, waiting for the result file`,
+        error,
+      )
+      return dependencies
+        .waitForResult(scanId, SCAN_TIMEOUT_MS)
+        .then(() => null)
+    })
+  const completion = await Promise.race([
+    settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
+    dependencies
+      .waitForResultWithCheckpoints(scanId, SCAN_TIMEOUT_MS, ingestCheckpoint)
+      .then(
+        () => ({ kind: 'result' as const }),
+        (error: unknown) => ({ kind: 'deadline' as const, error }),
+      ),
+  ])
+  if (completion.kind === 'deadline') {
+    await dependencies.onProgress(scanId, {
+      phase: 'cancelling',
+      detail: 'Scan deadline reached; draining Eve session',
+      completed: 1,
+      total: 1,
+    })
+    await dependencies.cancelAndDrain(session.sessionId, settlement)
+    throw completion.error
+  }
+  const outcome = completion.kind === 'settled' ? completion.outcome : null
+
+  const result = await dependencies.readResult(scanId)
+  if (!result) {
+    throw new Error(
+      outcome?.failure ??
+        `Eve finished with status "${outcome?.status ?? 'unknown'}" but wrote no result file.`,
+    )
+  }
+  return result
 }
 
 async function prepareScanExecution(scanId: number, repository: Repository) {

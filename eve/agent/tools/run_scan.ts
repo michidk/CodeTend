@@ -205,89 +205,27 @@ export default defineWorkflowTool({
         ? knowledge.summary.securityProfile
         : request.securityProfile) ?? securityProfileFromKnowledge(knowledge)
 
-    // Every scanner is an independent subagent session; one failing scanner
-    // never discards the others' results.
-    const priorCheckpoint = await readScanCheckpoint(scanId)
-    const checkpointMatches =
-      priorCheckpoint?.version === 1 &&
-      priorCheckpoint.scanId === scanId &&
-      priorCheckpoint.requestFingerprint === requestFingerprint &&
-      priorCheckpoint.commitSha === workspace.commitSha
-    const outcomes: ScannerOutcome[] = checkpointMatches
-      ? [...priorCheckpoint.scanners]
-      : []
-    const completedScannerIds = new Set(
-      outcomes.map((outcome) => outcome.scannerId),
-    )
-    const remainingScanners = scanners.filter(
-      (scanner) => !completedScannerIds.has(scanner.id),
-    )
-    for (
-      let start = 0;
-      start < remainingScanners.length;
-      start += SCANNER_CONCURRENCY
-    ) {
-      const batch = remainingScanners.slice(start, start + SCANNER_CONCURRENCY)
-      yield {
-        phase: 'scanning',
-        detail: `Running ${batch.map((scanner) => scanner.name).join(', ')}`,
-        completed,
-        total,
-        scannerCompleted: outcomes.length,
-        scannerTotal: scanners.length,
-      } satisfies Progress
-      const pending = new Map(
-        batch.map((scanner) => [
-          scanner.id,
-          runScanner({
-            scanner,
-            scanners,
-            request,
-            workspace,
-            knowledge,
-            repoPath,
-            gitnexusRepo,
-            securityProfile,
-            runAgent: (message) =>
-              ctx.agent('scanner', {
-                message: `${executionProfileMarker(scanner.executionProfile)}\n${message}`,
-                outputSchema: request.outputSchema as JsonObject,
-              }),
-          }),
-        ]),
-      )
-      while (pending.size > 0) {
-        const settled = await Promise.race(pending.values())
-        pending.delete(settled.scannerId)
-        outcomes.push(settled.outcome)
-        completed += 1
-        const checkpoint: ScanCheckpoint = {
-          version: 1,
-          scanId,
-          requestFingerprint,
-          commitSha: workspace.commitSha,
-          fileCount: workspace.fileCount,
-          gitnexusUsed: gitnexusRepo !== null,
-          knowledge,
-          securityProfile: {
-            profile: securityProfile,
-            generated: request.target.kind === 'repository',
-          },
-          dependencyAudit,
-          scanners: outcomes,
-          updatedAt: await nowIso(),
-        }
-        await writeScanCheckpoint(checkpoint)
-        yield {
-          phase: 'scanning',
-          detail: `${outcomes.length} of ${scanners.length} scanners completed; ${pending.size} still running in this batch`,
-          completed,
-          total,
-          scannerCompleted: outcomes.length,
-          scannerTotal: scanners.length,
-        } satisfies Progress
-      }
-    }
+    const scannerExecution = yield* runScannerBatches({
+      scanId,
+      request,
+      requestFingerprint,
+      workspace,
+      scanners,
+      knowledge,
+      repoPath,
+      gitnexusRepo,
+      securityProfile,
+      dependencyAudit,
+      completed,
+      total,
+      runAgent: (scanner, message) =>
+        ctx.agent('scanner', {
+          message: `${executionProfileMarker(scanner.executionProfile)}\n${message}`,
+          outputSchema: request.outputSchema as JsonObject,
+        }),
+    })
+    const outcomes = scannerExecution.outcomes
+    completed = scannerExecution.completed
 
     const investigation = aggregateInvestigations(outcomes)
     const coverage = aggregateCoverage(outcomes, investigation)
@@ -431,6 +369,111 @@ export default defineWorkflowTool({
     }
   },
 })
+
+async function* runScannerBatches(input: {
+  readonly scanId: number
+  readonly request: ScanRequest
+  readonly requestFingerprint: string
+  readonly workspace: WorkspaceManifest
+  readonly scanners: readonly ScanRequestScanner[]
+  readonly knowledge: KnowledgeResult
+  readonly repoPath: string
+  readonly gitnexusRepo: string | null
+  readonly securityProfile: SecurityProfile
+  readonly dependencyAudit: DependencyAuditResult
+  readonly completed: number
+  readonly total: number
+  readonly runAgent: (
+    scanner: ScanRequestScanner,
+    message: string,
+  ) => Promise<unknown>
+}): AsyncGenerator<
+  Progress,
+  { readonly outcomes: ScannerOutcome[]; readonly completed: number },
+  void
+> {
+  const priorCheckpoint = await readScanCheckpoint(input.scanId)
+  const checkpointMatches =
+    priorCheckpoint?.version === 1 &&
+    priorCheckpoint.scanId === input.scanId &&
+    priorCheckpoint.requestFingerprint === input.requestFingerprint &&
+    priorCheckpoint.commitSha === input.workspace.commitSha
+  const outcomes: ScannerOutcome[] = checkpointMatches
+    ? [...priorCheckpoint.scanners]
+    : []
+  const completedScannerIds = new Set(
+    outcomes.map((outcome) => outcome.scannerId),
+  )
+  const remainingScanners = input.scanners.filter(
+    (scanner) => !completedScannerIds.has(scanner.id),
+  )
+  let completed = input.completed
+
+  for (
+    let start = 0;
+    start < remainingScanners.length;
+    start += SCANNER_CONCURRENCY
+  ) {
+    const batch = remainingScanners.slice(start, start + SCANNER_CONCURRENCY)
+    yield {
+      phase: 'scanning',
+      detail: `Running ${batch.map((scanner) => scanner.name).join(', ')}`,
+      completed,
+      total: input.total,
+      scannerCompleted: outcomes.length,
+      scannerTotal: input.scanners.length,
+    }
+    const pending = new Map(
+      batch.map((scanner) => [
+        scanner.id,
+        runScanner({
+          scanner,
+          scanners: input.scanners,
+          request: input.request,
+          workspace: input.workspace,
+          knowledge: input.knowledge,
+          repoPath: input.repoPath,
+          gitnexusRepo: input.gitnexusRepo,
+          securityProfile: input.securityProfile,
+          runAgent: (message) => input.runAgent(scanner, message),
+        }),
+      ]),
+    )
+    while (pending.size > 0) {
+      const settled = await Promise.race(pending.values())
+      pending.delete(settled.scannerId)
+      outcomes.push(settled.outcome)
+      completed += 1
+      const checkpoint: ScanCheckpoint = {
+        version: 1,
+        scanId: input.scanId,
+        requestFingerprint: input.requestFingerprint,
+        commitSha: input.workspace.commitSha,
+        fileCount: input.workspace.fileCount,
+        gitnexusUsed: input.gitnexusRepo !== null,
+        knowledge: input.knowledge,
+        securityProfile: {
+          profile: input.securityProfile,
+          generated: input.request.target.kind === 'repository',
+        },
+        dependencyAudit: input.dependencyAudit,
+        scanners: outcomes,
+        updatedAt: await nowIso(),
+      }
+      await writeScanCheckpoint(checkpoint)
+      yield {
+        phase: 'scanning',
+        detail: `${outcomes.length} of ${input.scanners.length} scanners completed; ${pending.size} still running in this batch`,
+        completed,
+        total: input.total,
+        scannerCompleted: outcomes.length,
+        scannerTotal: input.scanners.length,
+      }
+    }
+  }
+
+  return { outcomes, completed }
+}
 
 type ReviewAgent = (
   message: string,

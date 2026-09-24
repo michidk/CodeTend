@@ -1,25 +1,10 @@
 import { z } from 'zod'
 import type { CandidateValidation, SecurityProfile } from './contract'
 import type { JsonObject } from './json'
-
-const inspectedEvidenceSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .max(1_000)
-    .refine(
-      (path) =>
-        !path.startsWith('/') &&
-        !path.startsWith('\\') &&
-        !path.split(/[\\/]/).includes('..'),
-      'Evidence paths must be repository-relative and may not traverse upward.',
-    ),
-  startLine: z.number().int().positive().optional(),
-  endLine: z.number().int().positive().optional(),
-  symbol: z.string().min(1).max(200).optional(),
-  role: z.enum(['source', 'control', 'sink', 'supporting', 'test']),
-  summary: z.string().min(5).max(1_000),
-})
+import {
+  confirmReviewEvidence,
+  inspectedEvidenceSchema,
+} from './security-review-evidence'
 
 const assessmentSchema = z.object({
   fingerprint: z.string().min(1).max(200),
@@ -107,7 +92,6 @@ export function applyExploitabilityReview<T extends SecurityScannerResult>(
     exploitability: { verdict: string; rationale: string }
   })[]
 } {
-  const availableFiles = new Set(repositoryFiles.map(normalizePath))
   const assessments = new Map(
     review.assessments.map((assessment) => [
       assessment.fingerprint,
@@ -118,16 +102,11 @@ export function applyExploitabilityReview<T extends SecurityScannerResult>(
     const fingerprint =
       typeof finding.fingerprint === 'string' ? finding.fingerprint : ''
     const assessment = assessments.get(fingerprint)
-    const validEvidence =
-      assessment?.inspectedEvidence.filter((evidence) =>
-        availableFiles.has(normalizePath(evidence.path)),
-      ) ?? []
-    const hasSource = validEvidence.some(
-      (evidence) => evidence.role === 'source',
+    const { confirmed: evidenceConfirmed } = confirmReviewEvidence(
+      assessment?.inspectedEvidence ?? [],
+      repositoryFiles,
     )
-    const hasSink = validEvidence.some((evidence) => evidence.role === 'sink')
-    const confirmed =
-      assessment?.verdict === 'confirmed' && hasSource && hasSink
+    const confirmed = assessment?.verdict === 'confirmed' && evidenceConfirmed
     return {
       ...finding,
       exploitability: assessment
@@ -146,8 +125,4 @@ export function applyExploitabilityReview<T extends SecurityScannerResult>(
     }
   })
   return { ...result, findings }
-}
-
-function normalizePath(path: string): string {
-  return path.replaceAll('\\', '/').replace(/^\.\//, '')
 }

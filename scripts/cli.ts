@@ -1,7 +1,7 @@
 /**
  * Minimal CLI for scripting the PoC without the UI:
  *   bun run scripts/cli.ts add <name> <url> [branch]
- *   bun run scripts/cli.ts scan <repositoryId>
+ *   bun run scripts/cli.ts due
  *   bun run scripts/cli.ts list
  */
 import { eq } from 'drizzle-orm'

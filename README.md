@@ -197,7 +197,7 @@ boundary in front before exposing it beyond loopback.
 
 ## 🔧 Local development
 
-Prerequisites: Bun 1.4, Node 24 (for Eve), Git, PostgreSQL (Docker is fine),
+Prerequisites: Bun 1.4, Node 26 (for Eve), Git, PostgreSQL (Docker is fine),
 an API key for an OpenAI-compatible endpoint, and
 [OSV Scanner](https://google.github.io/osv-scanner/installation/). Optionally
 GitNexus: `npm i -g gitnexus` or `mkdir -p .tools && (cd .tools && npm i gitnexus)`.
@@ -229,13 +229,19 @@ serves the production build instead.
 | `bun run eve:typecheck` | Type-check the Eve agent |
 | `bun run lint:deadcode` | Find unused code and dependencies with Knip |
 | `bun run build` | Build production assets |
-| `bun run verify` | The complete local quality gate |
+| `bun run verify` | Fast local gate: formatting, tests, types, build and dead-code checks |
 | `bun run eve:build` / `bun run eve:start` | Compile and serve the Eve agent |
 | `bun run db:generate` | Generate a migration after editing `src/db/schema.ts` |
 | `bun run db:migrate` | Apply committed migrations |
 | `bun run scripts/cli.ts add <name> <url> [branch]` | Scripting helper |
 
 </details>
+
+CI additionally validates the Compose and Helm deployment manifests, audits
+production dependencies, applies migrations to PostgreSQL, runs the database
+lifecycle suite, and checks that the generated route tree is current. Run
+those environment-dependent checks when changing deployment, dependency,
+database, or route-generation behavior.
 
 ## 📚 Documentation
 

@@ -9,11 +9,20 @@ import type { ScanCheckpoint, ScanResult } from '@/lib/eve-protocol'
 import type { EnrichedScannerFinding } from '@/lib/findings'
 import {
   decideFindingPatchImpl,
+  generateFindingPatchImpl,
   persistPatchResult,
   recoverInterruptedPatches,
 } from '@/lib/server/finding-patches.server'
 import { reconcileScannerFindings } from '@/lib/server/finding-reconciliation.server'
-import { recoverInterruptedScans } from '@/lib/server/scan-recovery.server'
+import {
+  updateFindingAsFixed,
+  updateFindingDisposition,
+} from '@/lib/server/finding-triage'
+import { startScan } from '@/lib/server/scan-admission.server'
+import {
+  recoverInterruptedScans,
+  requestScanCancellation,
+} from '@/lib/server/scan-recovery.server'
 import {
   persistScanCheckpoint,
   persistScanResult,
@@ -593,9 +602,10 @@ try {
     }
     await persistScanResult(ingestionScan.id, repositoryRecord, finalResult)
     const [ingestionState] = await client<
-      [{ state: string; occurrences: number; events: number }]
+      [{ id: number; state: string; occurrences: number; events: number }]
     >`
       select
+        findings.id,
         findings.state,
         (select count(*)::int from finding_occurrences
           where finding_id = findings.id) as occurrences,
@@ -613,6 +623,46 @@ try {
     ) {
       throw new Error('Checkpoint and final ingestion were not idempotent')
     }
+
+    await client`
+      update scan_schedule_settings
+      set scan_concurrency = 0, fix_concurrency = 0
+      where id = 1
+    `
+    const admittedScanId = await startScan(lifecycleRepository.id, 'schedule')
+    if (!admittedScanId) throw new Error('Scheduled scan was not admitted')
+    const duplicateScanId = await startScan(lifecycleRepository.id, 'schedule')
+    if (duplicateScanId !== null) {
+      throw new Error('Duplicate active scan was admitted')
+    }
+    await requestScanCancellation(admittedScanId)
+    const [cancelledAdmission] = await client<[{ status: string }]>`
+      select status from scans where id = ${admittedScanId}
+    `
+    if (cancelledAdmission.status !== 'cancelled') {
+      throw new Error('Queued scan cancellation did not finalize')
+    }
+
+    const admittedPatch = await generateFindingPatchImpl(ingestionState.id)
+    const [queuedPatch] = await client<[{ status: string }]>`
+      select status from finding_patches where id = ${admittedPatch.patchId}
+    `
+    if (queuedPatch.status !== 'queued') {
+      throw new Error('Finding patch was not durably queued')
+    }
+    let duplicatePatchRejected = false
+    try {
+      await generateFindingPatchImpl(ingestionState.id)
+    } catch {
+      duplicatePatchRejected = true
+    }
+    if (!duplicatePatchRejected) {
+      throw new Error('Duplicate active finding patch was admitted')
+    }
+    await client`
+      update finding_patches set status = 'rejected'
+      where id = ${admittedPatch.patchId}
+    `
 
     let atomicFailureObserved = false
     try {
@@ -692,6 +742,39 @@ try {
       patchId: recoveringPatch.id,
       decision: 'rejected',
     })
+
+    await updateFindingDisposition({
+      findingId: reconciledFinding.id,
+      disposition: 'accepted_risk',
+      note: 'Accepted only for this lifecycle smoke fixture.',
+    })
+    await updateFindingDisposition({
+      findingId: reconciledFinding.id,
+      disposition: null,
+      note: '',
+    })
+    await updateFindingAsFixed({
+      findingId: reconciledFinding.id,
+      note: 'Fixed by the lifecycle smoke fixture.',
+    })
+    const [operatorTransitions] = await client<
+      [{ state: string; events: number }]
+    >`
+      select
+        findings.state,
+        (select count(*)::int from finding_events
+          where finding_id = findings.id and actor = 'operator') as events
+      from findings
+      where findings.id = ${reconciledFinding.id}
+    `
+    if (
+      operatorTransitions.state !== 'resolved' ||
+      operatorTransitions.events !== 3
+    ) {
+      throw new Error(
+        'Operator transitions did not persist atomic audit events',
+      )
+    }
 
     const [cancelledScan] = await client<[{ id: number }]>`
       insert into scans (

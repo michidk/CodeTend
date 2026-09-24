@@ -90,6 +90,19 @@ jobs:
           OPENAI_API_KEY: ci-key
         run: docker compose config --quiet
 
+      - name: Validate Helm chart
+        run: |
+          helm_args=(
+            --set secrets.existingSecret=codetend
+            --set postgresql.existingSecret=codetend-db
+            --set hodor.existingSecret=codetend-hodor
+            --set hodor.image.tag=latest
+          )
+          docker run --rm -v "$PWD:/work:ro" -w /work alpine/helm:3.19.0 \
+            lint charts "${helm_args[@]}"
+          docker run --rm -v "$PWD:/work:ro" -w /work alpine/helm:3.19.0 \
+            template codetend charts "${helm_args[@]}" >/dev/null
+
       - name: Apply database migrations
         run: bun run db:migrate
 

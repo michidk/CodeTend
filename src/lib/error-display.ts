@@ -49,7 +49,7 @@ export function getErrorDisplayState(error: Error): ErrorDisplayState {
     return {
       title: 'Database unavailable',
       message:
-        "Tecdebt couldn't reach PostgreSQL at the configured DATABASE_URL.",
+        "CodeTend couldn't reach PostgreSQL at the configured DATABASE_URL.",
       hint: 'Start the local Postgres service or container, then retry the page.',
     }
   }
@@ -57,7 +57,7 @@ export function getErrorDisplayState(error: Error): ErrorDisplayState {
   if (lowerMessage.includes('database_url environment variable is required')) {
     return {
       title: 'Database not configured',
-      message: 'Tecdebt is missing its DATABASE_URL configuration.',
+      message: 'CodeTend is missing its DATABASE_URL configuration.',
       hint: 'Add DATABASE_URL to your environment before starting the dev server.',
     }
   }
@@ -70,7 +70,7 @@ export function getErrorDisplayState(error: Error): ErrorDisplayState {
     return {
       title: 'Database not initialized',
       message:
-        'Tecdebt connected to PostgreSQL, but the app tables have not been created yet.',
+        'CodeTend connected to PostgreSQL, but the app tables have not been created yet.',
       hint: 'Run the Drizzle migrations, then retry the page.',
     }
   }
@@ -102,13 +102,13 @@ export function toDisplayableError(error: unknown): Error {
     lowerMessage.includes('connect econnrefused')
   ) {
     return new Error(
-      `${DB_UNAVAILABLE_PREFIX} Tecdebt couldn't reach PostgreSQL at the configured DATABASE_URL.`,
+      `${DB_UNAVAILABLE_PREFIX} CodeTend couldn't reach PostgreSQL at the configured DATABASE_URL.`,
     )
   }
 
   if (lowerMessage.includes('database_url environment variable is required')) {
     return new Error(
-      `${DB_NOT_CONFIGURED_PREFIX} Tecdebt is missing its DATABASE_URL configuration.`,
+      `${DB_NOT_CONFIGURED_PREFIX} CodeTend is missing its DATABASE_URL configuration.`,
     )
   }
 
@@ -117,7 +117,7 @@ export function toDisplayableError(error: unknown): Error {
     lowerMessage.includes('relation "scans" does not exist')
   ) {
     return new Error(
-      `${DB_NOT_INITIALIZED_PREFIX} Tecdebt connected to PostgreSQL, but the app tables have not been created yet.`,
+      `${DB_NOT_INITIALIZED_PREFIX} CodeTend connected to PostgreSQL, but the app tables have not been created yet.`,
     )
   }
 

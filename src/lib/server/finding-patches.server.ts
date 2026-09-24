@@ -13,6 +13,7 @@ import { isDailyAiCostBudgetReached } from '@/lib/server/ai-cost-budget.server'
 import {
   cancelAndDrainEveSession,
   cancelEveScanSession,
+  type EveScanSession,
   startEvePatchSession,
 } from '@/lib/server/eve-client.server'
 import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
@@ -226,39 +227,59 @@ export async function runPatchPipeline(patchId: number, repositoryId: number) {
       await cancelEveScanSession(session.sessionId).catch(() => undefined)
       return
     }
-    const settlement = session.settle(async () => undefined)
-    const completion = await Promise.race([
-      settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
-      waitForPatchResult(patchId, PATCH_TIMEOUT_MS).then(
-        () => ({ kind: 'result' as const }),
-        (error: unknown) => ({ kind: 'deadline' as const, error }),
-      ),
-    ])
-    if (completion.kind === 'deadline') {
-      await cancelAndDrainEveSession(session.sessionId, settlement)
-      throw completion.error
-    }
-    const outcome = completion.kind === 'settled' ? completion.outcome : null
-    let result = await readPatchResult(patchId)
-    // Eve can emit turn.completed just before the workflow result step becomes
-    // visible on the shared volume. Give that durable write a short grace
-    // period instead of turning a successful job into a false failure.
-    if (!result && outcome?.status === 'completed') {
-      await waitForPatchResult(patchId, 30_000, 500)
-      result = await readPatchResult(patchId)
-    }
-    if (!result) {
-      throw new Error(
-        outcome?.failure ??
-          `Eve finished with status "${outcome?.status ?? 'unknown'}" but wrote no patch result.`,
-      )
-    }
+    const result = await waitForPatchSessionResult(patchId, session)
     await persistPatchResult(patchId, result)
   } catch (error) {
     await failPatch(patchId, error)
   } finally {
     await cleanupPatchFiles(repositoryId, patchId)
   }
+}
+
+type PatchResult = NonNullable<Awaited<ReturnType<typeof readPatchResult>>>
+
+interface PatchSessionDependencies {
+  readonly waitForResult: typeof waitForPatchResult
+  readonly readResult: typeof readPatchResult
+  readonly cancelAndDrain: typeof cancelAndDrainEveSession
+}
+
+const patchSessionDependencies: PatchSessionDependencies = {
+  waitForResult: waitForPatchResult,
+  readResult: readPatchResult,
+  cancelAndDrain: cancelAndDrainEveSession,
+}
+
+export async function waitForPatchSessionResult(
+  patchId: number,
+  session: EveScanSession,
+  dependencies: PatchSessionDependencies = patchSessionDependencies,
+): Promise<PatchResult> {
+  const settlement = session.settle(async () => undefined)
+  const completion = await Promise.race([
+    settlement.then((outcome) => ({ kind: 'settled' as const, outcome })),
+    dependencies.waitForResult(patchId, PATCH_TIMEOUT_MS).then(
+      () => ({ kind: 'result' as const }),
+      (error: unknown) => ({ kind: 'deadline' as const, error }),
+    ),
+  ])
+  if (completion.kind === 'deadline') {
+    await dependencies.cancelAndDrain(session.sessionId, settlement)
+    throw completion.error
+  }
+  const outcome = completion.kind === 'settled' ? completion.outcome : null
+  let result = await dependencies.readResult(patchId)
+  if (!result && outcome?.status === 'completed') {
+    await dependencies.waitForResult(patchId, 30_000, 500)
+    result = await dependencies.readResult(patchId)
+  }
+  if (!result) {
+    throw new Error(
+      outcome?.failure ??
+        `Eve finished with status "${outcome?.status ?? 'unknown'}" but wrote no patch result.`,
+    )
+  }
+  return result
 }
 
 export async function persistPatchResult(
