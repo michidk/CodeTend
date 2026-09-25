@@ -21,6 +21,7 @@ import {
 import { listAvailableGitHubRepositories } from '@/lib/server/github-repositories.server'
 import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import {
+  removeGitNexusRepository,
   removeScanArtifacts,
   removeScanWorkspace,
 } from '@/lib/server/scan-files.server'
@@ -314,15 +315,23 @@ export const deleteRepository = createServerFn({ method: 'POST' })
       columns: { id: true, eveSessionId: true },
     })
     await db.delete(repositories).where(eq(repositories.id, id))
-    const cleanup = await Promise.allSettled(
-      repositoryScans.flatMap((scan) => [
-        removeGitNexusIndex(`repo-${id}-scan-${scan.id}`),
+    let cleanupFailures = 0
+    try {
+      // Unregister before deleting the checkout because the GitNexus CLI
+      // resolves the registry entry against its repository path.
+      await removeGitNexusIndex(`repo-${id}`)
+    } catch {
+      cleanupFailures += 1
+    }
+    const cleanup = await Promise.allSettled([
+      removeGitNexusRepository(id),
+      ...repositoryScans.flatMap((scan) => [
         removeScanWorkspace(id, scan.id),
         removeScanArtifacts(scan.id),
         ...(scan.eveSessionId ? [removeScanUsage(scan.eveSessionId)] : []),
       ]),
-    )
-    const cleanupFailures = cleanup.filter(
+    ])
+    cleanupFailures += cleanup.filter(
       (result) => result.status === 'rejected',
     ).length
     if (cleanupFailures > 0) {

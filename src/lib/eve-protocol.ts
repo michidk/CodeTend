@@ -108,6 +108,34 @@ const scannerOutcomeSchema = z.object({
   finishedAt: z.string(),
 })
 
+const gitnexusCapabilitySchema = z.object({
+  provider: z.string(),
+  status: z.string(),
+  exactScanLimit: z.number().int().nonnegative().optional(),
+})
+
+export const gitnexusIndexMetadataSchema = z.object({
+  repository: z.string().min(1),
+  commitSha: z.string().min(1),
+  indexedAt: z.string().min(1),
+  refreshMode: z.enum(['built', 'reused', 'refreshed']),
+  cliVersion: z.string().nullable(),
+  schemaVersion: z.number().int().nullable(),
+  stats: z.object({
+    files: z.number().int().nonnegative(),
+    nodes: z.number().int().nonnegative(),
+    edges: z.number().int().nonnegative(),
+    communities: z.number().int().nonnegative(),
+    processes: z.number().int().nonnegative(),
+    embeddings: z.number().int().nonnegative(),
+  }),
+  capabilities: z.object({
+    graph: gitnexusCapabilitySchema.optional(),
+    fts: gitnexusCapabilitySchema.optional(),
+    vectorSearch: gitnexusCapabilitySchema.optional(),
+  }),
+})
+
 const candidateValidationSchema = z.object({
   scannerId: z.string(),
   fingerprint: z.string(),
@@ -230,6 +258,7 @@ export const scanResultSchema = z.object({
   commitSha: z.string(),
   fileCount: z.number().int(),
   gitnexusUsed: z.boolean(),
+  gitnexusIndex: gitnexusIndexMetadataSchema.nullable().default(null),
   knowledge: knowledgeResultSchema,
   securityProfile: z.object({
     profile: securityProfileSchema,
@@ -259,6 +288,7 @@ export const scanCheckpointSchema = scanResultSchema
     commitSha: true,
     fileCount: true,
     gitnexusUsed: true,
+    gitnexusIndex: true,
     knowledge: true,
     securityProfile: true,
     dependencyAudit: true,
@@ -283,6 +313,7 @@ export const patchResultSchema = z.object({
 })
 
 export type PatchRequest = z.infer<typeof patchRequestSchema>
+export type GitNexusIndexMetadata = z.infer<typeof gitnexusIndexMetadataSchema>
 export type PatchResult = z.infer<typeof patchResultSchema>
 export type ScanCheckpoint = z.infer<typeof scanCheckpointSchema>
 export type ScanRequest = z.infer<typeof scanRequestSchema>

@@ -4,6 +4,7 @@ import { executionProfileMarker } from '@/lib/agent-execution'
 import { scannerResultSchema } from '@/lib/findings'
 import type {
   DependencyAuditResult,
+  GitNexusIndexMetadata,
   InvestigationReport,
   KnowledgeResult,
   ScanCheckpoint,
@@ -47,6 +48,7 @@ import {
   extractSubsystemDependencyGraph,
   indexWithGitNexus,
   nowIso,
+  prepareGitNexusRepository,
   readScanCheckpoint,
   readScanRequest,
   resolveDiffTargetFiles,
@@ -87,6 +89,7 @@ interface PreparedScanWorkflowState {
   readonly repoPath: string
   readonly scanners: readonly ScanRequestScanner[]
   readonly gitnexusRepo: string | null
+  readonly gitnexusIndex: GitNexusIndexMetadata | null
   readonly knowledge: KnowledgeResult
   readonly securityProfile: SecurityProfile
   readonly dependencyAudit: DependencyAuditResult
@@ -129,6 +132,7 @@ export default defineWorkflowTool({
       repoPath,
       scanners,
       gitnexusRepo,
+      gitnexusIndex,
       knowledge,
       securityProfile,
     } = prepared
@@ -143,6 +147,7 @@ export default defineWorkflowTool({
       knowledge,
       repoPath,
       gitnexusRepo,
+      gitnexusIndex,
       securityProfile,
       dependencyAudit: prepared.dependencyAudit,
       completed,
@@ -163,6 +168,7 @@ export default defineWorkflowTool({
       knowledge,
       repoPath,
       gitnexusRepo,
+      gitnexusIndex,
       securityProfile,
       dependencyAudit: prepared.dependencyAudit,
       outcomes,
@@ -252,17 +258,30 @@ async function* prepareScanWorkflow(input: {
   }
 
   let gitnexusRepo: string | null = null
+  let gitnexusIndex: GitNexusIndexMetadata | null = null
   if (request.gitnexus) {
     yield {
       phase: 'indexing',
-      detail: 'Building the GitNexus code index',
+      detail: 'Refreshing the GitNexus code index',
       completed,
       total,
       scannerCompleted: 0,
       scannerTotal: scanners.length,
     }
-    const indexed = await indexWithGitNexus(workspace)
-    if (indexed.ok) gitnexusRepo = workspace.name
+    try {
+      const gitnexusWorkspace = await prepareGitNexusRepository(
+        request.repositoryId,
+        workspace,
+      )
+      const indexed = await indexWithGitNexus(gitnexusWorkspace)
+      if (indexed.ok && indexed.index) {
+        gitnexusRepo = indexed.index.repository
+        gitnexusIndex = indexed.index
+      }
+    } catch {
+      // GitNexus is optional enrichment; checkout preparation failures must
+      // not prevent scanners from running against the transient workspace.
+    }
     completed += 1
   }
 
@@ -314,6 +333,7 @@ async function* prepareScanWorkflow(input: {
     repoPath,
     scanners,
     gitnexusRepo,
+    gitnexusIndex,
     knowledge,
     securityProfile,
     dependencyAudit,
@@ -328,6 +348,7 @@ async function* finalizeScanWorkflow(input: {
   readonly knowledge: KnowledgeResult
   readonly repoPath: string
   readonly gitnexusRepo: string | null
+  readonly gitnexusIndex: GitNexusIndexMetadata | null
   readonly securityProfile: SecurityProfile
   readonly dependencyAudit: DependencyAuditResult
   readonly outcomes: ScannerOutcome[]
@@ -437,6 +458,7 @@ async function* finalizeScanWorkflow(input: {
     commitSha: input.workspace.commitSha,
     fileCount: input.workspace.fileCount,
     gitnexusUsed: input.gitnexusRepo !== null,
+    gitnexusIndex: input.gitnexusIndex,
     knowledge: input.knowledge,
     securityProfile: {
       profile: input.securityProfile,
@@ -463,6 +485,7 @@ async function* runScannerBatches(input: {
   readonly knowledge: KnowledgeResult
   readonly repoPath: string
   readonly gitnexusRepo: string | null
+  readonly gitnexusIndex: GitNexusIndexMetadata | null
   readonly securityProfile: SecurityProfile
   readonly dependencyAudit: DependencyAuditResult
   readonly completed: number
@@ -535,6 +558,7 @@ async function* runScannerBatches(input: {
         commitSha: input.workspace.commitSha,
         fileCount: input.workspace.fileCount,
         gitnexusUsed: input.gitnexusRepo !== null,
+        gitnexusIndex: input.gitnexusIndex,
         knowledge: input.knowledge,
         securityProfile: {
           profile: input.securityProfile,

@@ -576,13 +576,33 @@ try {
       priorities: [],
       exclusions: [],
     }
+    const gitnexusIndex = {
+      repository: `repo-${lifecycleRepository.id}`,
+      commitSha,
+      indexedAt: new Date().toISOString(),
+      refreshMode: 'reused' as const,
+      cliVersion: '1.6.12',
+      schemaVersion: 4,
+      stats: {
+        files: 1,
+        nodes: 2,
+        edges: 1,
+        communities: 0,
+        processes: 0,
+        embeddings: 0,
+      },
+      capabilities: {
+        graph: { provider: 'ladybugdb', status: 'available' },
+      },
+    }
     const checkpoint: ScanCheckpoint = {
       version: 1,
       requestFingerprint: 'lifecycle-smoke-request',
       scanId: ingestionScan.id,
       commitSha,
       fileCount: 1,
-      gitnexusUsed: false,
+      gitnexusUsed: true,
+      gitnexusIndex,
       knowledge,
       securityProfile: { profile: securityProfile, generated: false },
       dependencyAudit: {
@@ -602,6 +622,22 @@ try {
       finishedAt: new Date().toISOString(),
     }
     await persistScanResult(ingestionScan.id, repositoryRecord, finalResult)
+    const [persistedGitNexus] = await client<
+      [{ gitnexusUsed: boolean; gitnexusIndex: typeof gitnexusIndex }]
+    >`
+      select
+        gitnexus_used as "gitnexusUsed",
+        gitnexus_index as "gitnexusIndex"
+      from scans
+      where id = ${ingestionScan.id}
+    `
+    if (
+      !persistedGitNexus.gitnexusUsed ||
+      persistedGitNexus.gitnexusIndex.commitSha !== commitSha ||
+      persistedGitNexus.gitnexusIndex.refreshMode !== 'reused'
+    ) {
+      throw new Error('GitNexus index metadata was not persisted')
+    }
     const [ingestionState] = await client<
       [{ id: number; state: string; occurrences: number; events: number }]
     >`

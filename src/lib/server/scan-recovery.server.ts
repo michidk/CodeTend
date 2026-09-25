@@ -5,7 +5,6 @@ import { db } from '@/db'
 import { type Repository, scannerRuns, scans } from '@/db/schema'
 import { DomainError } from '@/lib/domain-errors'
 import { cancelEveScanSession } from '@/lib/server/eve-client.server'
-import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import { waitForResultWithCheckpoints } from '@/lib/server/scan-execution.server'
 import {
   readScanCheckpoint,
@@ -245,14 +244,6 @@ export async function failScan(
 }
 
 export async function cleanupScanFiles(repositoryId: number, scanId: number) {
-  try {
-    await removeGitNexusIndex(`repo-${repositoryId}-scan-${scanId}`)
-  } catch (error) {
-    console.warn(
-      `[CodeTend] failed to remove GitNexus index for scan ${scanId}`,
-      error,
-    )
-  }
   try {
     await Promise.all([
       removeScanWorkspace(repositoryId, scanId),

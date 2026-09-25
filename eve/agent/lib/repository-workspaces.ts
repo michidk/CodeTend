@@ -1,6 +1,12 @@
 import type { PatchRequest, ScanRequest, WorkspaceManifest } from './contract'
 import { resolveGitAuth } from './git-auth'
-import { patchWorkspaceName, workspaceName, workspacesDir } from './paths'
+import {
+  gitnexusRepositoriesDir,
+  gitnexusRepositoryName,
+  patchWorkspaceName,
+  workspaceName,
+  workspacesDir,
+} from './paths'
 import { assertOk, run } from './process'
 
 const IGNORED_DIRECTORIES = new Set([
@@ -181,6 +187,68 @@ export async function cloneRepository(
     files,
     topLevel,
   }
+}
+
+/**
+ * Synchronizes the stable per-repository checkout used by GitNexus to the
+ * exact commit already fetched for this scan. The source checkout remains
+ * disposable, while `.gitnexus` survives hard resets and source cleanup so
+ * GitNexus can reuse its hashes, parse cache, and graph database.
+ */
+export async function prepareGitNexusRepository(
+  repositoryId: number,
+  workspace: WorkspaceManifest,
+): Promise<WorkspaceManifest> {
+  'use step'
+  const { existsSync } = await import('node:fs')
+  const { mkdir, rm } = await import('node:fs/promises')
+  const { join, resolve } = await import('node:path')
+  const name = gitnexusRepositoryName(repositoryId)
+  const root = resolve(gitnexusRepositoriesDir())
+  const hostPath = join(root, name)
+  await mkdir(root, { recursive: true })
+
+  if (!existsSync(join(hostPath, '.git'))) {
+    await rm(hostPath, { recursive: true, force: true })
+    await mkdir(hostPath, { recursive: true })
+    const initialized = await run('git', ['init'], { cwd: hostPath })
+    assertOk(initialized, `git init of persistent GitNexus repository ${name}`)
+  }
+
+  const fetched = await run(
+    'git',
+    [
+      '-c',
+      'protocol.file.allow=always',
+      'fetch',
+      '--no-tags',
+      '--depth',
+      '1',
+      workspace.hostPath,
+      workspace.commitSha,
+    ],
+    { cwd: hostPath, timeoutMs: 10 * 60_000 },
+  )
+  assertOk(fetched, `git fetch of ${workspace.commitSha} for GitNexus`)
+  const checkout = await run(
+    'git',
+    ['checkout', '--detach', '--force', 'FETCH_HEAD'],
+    { cwd: hostPath },
+  )
+  assertOk(checkout, `git checkout of ${workspace.commitSha} for GitNexus`)
+  const cleaned = await run('git', ['clean', '-ffdx', '-e', '.gitnexus/'], {
+    cwd: hostPath,
+  })
+  assertOk(cleaned, `git clean of persistent GitNexus repository ${name}`)
+
+  const head = await run('git', ['rev-parse', 'HEAD'], { cwd: hostPath })
+  assertOk(head, 'git rev-parse of persistent GitNexus repository')
+  if (head.stdout.trim() !== workspace.commitSha) {
+    throw new Error(
+      `Persistent GitNexus checkout resolved ${head.stdout.trim()}, expected ${workspace.commitSha}`,
+    )
+  }
+  return { ...workspace, name, hostPath }
 }
 
 /** Fresh disposable clone pinned to the exact revision a finding came from. */

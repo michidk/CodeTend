@@ -92,7 +92,7 @@ function resolveGitNexusBinary(): string {
   return candidates.find((candidate) => existsSync(candidate)) ?? 'gitnexus'
 }
 
-/** Removes the per-scan registry entry after scanners no longer need it. */
+/** Removes a repository registry entry after the configured repository is deleted. */
 export async function removeGitNexusIndex(name: string): Promise<void> {
   if (!getServerEnv().GITNEXUS_ENABLED) return
   await new Promise<void>((resolvePromise, reject) => {

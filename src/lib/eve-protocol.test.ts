@@ -85,6 +85,55 @@ describe('Eve protocol', () => {
     expect(parsed.exploitabilityAssessments[0]?.package.name).toBe('tar')
   })
 
+  test('preserves GitNexus index metadata and defaults legacy results', () => {
+    const metadata = {
+      repository: 'repo-3',
+      commitSha: 'abc123',
+      indexedAt: '2026-09-25T10:00:00.000Z',
+      refreshMode: 'reused' as const,
+      cliVersion: '1.6.12',
+      schemaVersion: 4,
+      stats: {
+        files: 20,
+        nodes: 300,
+        edges: 500,
+        communities: 8,
+        processes: 14,
+        embeddings: 0,
+      },
+      capabilities: {
+        graph: { provider: 'ladybugdb', status: 'available' },
+      },
+    }
+
+    expect(scanResultSchema.shape.gitnexusIndex.parse(metadata)).toEqual(
+      metadata,
+    )
+    expect(scanResultSchema.shape.gitnexusIndex.parse(undefined)).toBeNull()
+  })
+
+  test('rejects an unknown GitNexus refresh mode', () => {
+    const result = scanResultSchema.shape.gitnexusIndex.safeParse({
+      repository: 'repo-3',
+      commitSha: 'abc123',
+      indexedAt: '2026-09-25T10:00:00.000Z',
+      refreshMode: 'forced',
+      cliVersion: null,
+      schemaVersion: null,
+      stats: {
+        files: 0,
+        nodes: 0,
+        edges: 0,
+        communities: 0,
+        processes: 0,
+        embeddings: 0,
+      },
+      capabilities: {},
+    })
+
+    expect(result.success).toBe(false)
+  })
+
   test('allows review states but not publication in fixer results', () => {
     const base = {
       patchId: 4,

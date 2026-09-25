@@ -151,6 +151,7 @@ async function persistScanCheckpointUnlocked(
       commitSha: checkpoint.commitSha,
       fileCount: checkpoint.fileCount,
       gitnexusUsed: checkpoint.gitnexusUsed,
+      gitnexusIndex: checkpoint.gitnexusIndex,
     })
     .where(and(eq(scans.id, scanId), eq(scans.status, 'running')))
 }
@@ -289,6 +290,7 @@ async function persistScanResultUnlocked(
       commitSha: result.commitSha,
       fileCount: result.fileCount,
       gitnexusUsed: result.gitnexusUsed,
+      gitnexusIndex: result.gitnexusIndex,
       knowledgeRefreshed: knowledgeAuthoritative && result.knowledge.refreshed,
       overallScore,
       grade: gradeForScore(overallScore),

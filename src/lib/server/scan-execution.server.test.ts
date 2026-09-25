@@ -8,6 +8,7 @@ const result: ScanResult = {
   commitSha: 'abcdef0123456789abcdef0123456789abcdef01',
   fileCount: 1,
   gitnexusUsed: false,
+  gitnexusIndex: null,
   knowledge: {
     refreshed: false,
     overview: '',

@@ -1,5 +1,6 @@
 import type {
   DependencyAuditResult,
+  GitNexusIndexMetadata,
   ScanRequest,
   SubsystemDependencyGraph,
   WorkspaceManifest,
@@ -60,6 +61,15 @@ function normalizeTargetPath(path: string): string {
 export interface GitNexusIndexResult {
   readonly ok: boolean
   readonly detail: string
+  readonly index: GitNexusIndexMetadata | null
+}
+
+interface GitNexusMetadataFile {
+  readonly indexedAt?: unknown
+  readonly lastCommit?: unknown
+  readonly stats?: unknown
+  readonly capabilities?: unknown
+  readonly runnerIdentity?: unknown
 }
 
 /**
@@ -82,16 +92,13 @@ export async function indexWithGitNexus(
       '/usr/local/bin/gitnexus',
     ].find((candidate) => candidate && existsSync(candidate)) ?? 'gitnexus'
   try {
+    const { readFile } = await import('node:fs/promises')
+    const { join } = await import('node:path')
+    const metadataPath = join(workspace.hostPath, '.gitnexus', 'gitnexus.json')
+    const before = await readGitNexusMetadata(metadataPath, readFile)
     const result = await run(
       binary,
-      [
-        'analyze',
-        workspace.hostPath,
-        '--index-only',
-        '--name',
-        workspace.name,
-        '--allow-duplicate-name',
-      ],
+      ['analyze', workspace.hostPath, '--index-only', '--name', workspace.name],
       {
         env: {
           GITNEXUS_HOME: gitnexusHome(),
@@ -105,6 +112,15 @@ export async function indexWithGitNexus(
       return {
         ok: false,
         detail: (result.stderr || result.stdout).slice(-1500),
+        index: null,
+      }
+    }
+    const after = await readGitNexusMetadata(metadataPath, readFile)
+    if (!after || after.lastCommit !== workspace.commitSha) {
+      return {
+        ok: false,
+        detail: `GitNexus metadata did not confirm commit ${workspace.commitSha}`,
+        index: null,
       }
     }
     const summary = result.stdout
@@ -112,12 +128,113 @@ export async function indexWithGitNexus(
       .filter((line) => /nodes|indexed/i.test(line))
       .join(' ')
       .trim()
-    return { ok: true, detail: summary || 'indexed' }
+    return {
+      ok: true,
+      detail: summary || 'indexed',
+      index: toGitNexusIndexMetadata(workspace.name, before, after),
+    }
   } catch (error) {
     return {
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
+      index: null,
     }
+  }
+}
+
+async function readGitNexusMetadata(
+  path: string,
+  readFile: (path: string, encoding: 'utf8') => Promise<string>,
+): Promise<GitNexusMetadataFile | null> {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as GitNexusMetadataFile
+  } catch {
+    return null
+  }
+}
+
+function toGitNexusIndexMetadata(
+  repository: string,
+  before: GitNexusMetadataFile | null,
+  after: GitNexusMetadataFile,
+): GitNexusIndexMetadata {
+  if (typeof after.indexedAt !== 'string') {
+    throw new Error('GitNexus metadata is missing indexedAt')
+  }
+  const stats = asRecord(after.stats)
+  const runnerIdentity = asRecord(after.runnerIdentity)
+  return {
+    repository,
+    commitSha: after.lastCommit as string,
+    indexedAt: after.indexedAt,
+    refreshMode:
+      before === null
+        ? 'built'
+        : before.lastCommit === after.lastCommit &&
+            before.indexedAt === after.indexedAt
+          ? 'reused'
+          : 'refreshed',
+    cliVersion:
+      typeof runnerIdentity.cliVersion === 'string'
+        ? runnerIdentity.cliVersion
+        : null,
+    schemaVersion:
+      typeof runnerIdentity.schemaVersion === 'number'
+        ? runnerIdentity.schemaVersion
+        : null,
+    stats: {
+      files: nonnegativeInteger(stats.files),
+      nodes: nonnegativeInteger(stats.nodes),
+      edges: nonnegativeInteger(stats.edges),
+      communities: nonnegativeInteger(stats.communities),
+      processes: nonnegativeInteger(stats.processes),
+      embeddings: nonnegativeInteger(stats.embeddings),
+    },
+    capabilities: gitnexusCapabilities(after.capabilities),
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function nonnegativeInteger(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : 0
+}
+
+function gitnexusCapabilities(
+  value: unknown,
+): GitNexusIndexMetadata['capabilities'] {
+  const capabilities = asRecord(value)
+  return {
+    graph: gitnexusCapability(capabilities.graph),
+    fts: gitnexusCapability(capabilities.fts),
+    vectorSearch: gitnexusCapability(capabilities.vectorSearch),
+  }
+}
+
+function gitnexusCapability(
+  value: unknown,
+): GitNexusIndexMetadata['capabilities']['graph'] {
+  const capability = asRecord(value)
+  if (
+    typeof capability.provider !== 'string' ||
+    typeof capability.status !== 'string'
+  ) {
+    return undefined
+  }
+  return {
+    provider: capability.provider,
+    status: capability.status,
+    ...(typeof capability.exactScanLimit === 'number' &&
+    Number.isInteger(capability.exactScanLimit) &&
+    capability.exactScanLimit >= 0
+      ? { exactScanLimit: capability.exactScanLimit }
+      : {}),
   }
 }
 

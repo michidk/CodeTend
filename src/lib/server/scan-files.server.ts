@@ -31,6 +31,8 @@ export function dataDir(): string {
 }
 
 export const workspacesDir = () => join(dataDir(), 'workspaces')
+export const gitnexusRepositoriesDir = () =>
+  join(dataDir(), 'gitnexus-repositories')
 const requestsDir = () => join(dataDir(), 'requests')
 const resultsDir = () => join(dataDir(), 'results')
 export const gitnexusHome = () => join(dataDir(), 'gitnexus')
@@ -219,6 +221,15 @@ export async function removeScanWorkspace(
   scanId: number,
 ): Promise<void> {
   await rm(join(workspacesDir(), `repo-${repositoryId}-scan-${scanId}`), {
+    recursive: true,
+    force: true,
+  })
+}
+
+export async function removeGitNexusRepository(
+  repositoryId: number,
+): Promise<void> {
+  await rm(join(gitnexusRepositoriesDir(), `repo-${repositoryId}`), {
     recursive: true,
     force: true,
   })

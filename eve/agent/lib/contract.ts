@@ -1,4 +1,5 @@
 import type {
+  GitNexusIndexMetadata,
   PatchRequest,
   PatchResult,
   ScanCheckpoint,
@@ -7,6 +8,7 @@ import type {
 } from '../../../src/lib/eve-protocol'
 
 export type {
+  GitNexusIndexMetadata,
   PatchRequest,
   PatchResult,
   ScanCheckpoint,

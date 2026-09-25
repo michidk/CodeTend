@@ -12,6 +12,8 @@ export function dataDir(): string {
 }
 
 export const workspacesDir = () => `${dataDir()}/workspaces`
+export const gitnexusRepositoriesDir = () =>
+  `${dataDir()}/gitnexus-repositories`
 export const requestsDir = () => `${dataDir()}/requests`
 export const resultsDir = () => `${dataDir()}/results`
 export const gitnexusHome = () => `${dataDir()}/gitnexus`
@@ -26,6 +28,10 @@ export function patchWorkspaceName(
 
 export function workspaceName(repositoryId: number, scanId: number): string {
   return `repo-${repositoryId}-scan-${scanId}`
+}
+
+export function gitnexusRepositoryName(repositoryId: number): string {
+  return `repo-${repositoryId}`
 }
 
 /** Path of a workspace as seen from inside the sandbox. */

@@ -12,6 +12,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type { ReasoningEffort } from '@/lib/agent-execution'
+import type { GitNexusIndexMetadata } from '@/lib/eve-protocol'
 import type {
   AttackPath,
   CodeEvidence,
@@ -285,6 +286,7 @@ export const scans = pgTable(
     progress: jsonb('progress').$type<ScanProgress>(),
     eveSessionId: text('eve_session_id'),
     gitnexusUsed: boolean('gitnexus_used').notNull().default(false),
+    gitnexusIndex: jsonb('gitnexus_index').$type<GitNexusIndexMetadata>(),
     knowledgeRefreshed: boolean('knowledge_refreshed').notNull().default(false),
     overallScore: real('overall_score'),
     grade: text('grade'),
