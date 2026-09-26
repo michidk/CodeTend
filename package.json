@@ -48,7 +48,7 @@
     "clsx": "^2.1.1",
     "cron-parser": "^5.10.1",
     "drizzle-orm": "^0.45.2",
-    "eve": "0.63.0",
+    "eve": "0.67.1",
     "jose": "^6",
     "lucide-react": "^1.46.0",
     "postgres": "^3.4.9",
