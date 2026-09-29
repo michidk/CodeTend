@@ -78,8 +78,9 @@ function assertRepositoryAccess(url: string): void {
 }
 
 /**
- * Dashboard rows: every repository with its latest completed scan, the scan
- * before it (for the delta), the number of open findings and the running scan.
+ * Dashboard rows: every repository with its latest scored scan, the scan
+ * before it (for the delta), its actual latest run, the number of open findings
+ * and the running scan.
  */
 export const getDashboard = createServerFn({ method: 'GET' }).handler(
   async () => {
@@ -93,12 +94,9 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
     if (rows.length === 0) return []
 
     const ids = rows.map((row) => row.id)
-    const [scoredScans, activeCounts, activeScans] = await Promise.all([
+    const [scanHistory, activeCounts, activeScans] = await Promise.all([
       db.query.scans.findMany({
-        where: and(
-          inArray(scans.repositoryId, ids),
-          inArray(scans.status, ['completed', 'partial']),
-        ),
+        where: inArray(scans.repositoryId, ids),
         orderBy: [desc(scans.createdAt)],
         columns: {
           id: true,
@@ -146,8 +144,11 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
     )
 
     return rows.map((repository) => {
-      const history = scoredScans.filter(
+      const repositoryScans = scanHistory.filter(
         (scan) => scan.repositoryId === repository.id,
+      )
+      const history = repositoryScans.filter(
+        (scan) => scan.status === 'completed' || scan.status === 'partial',
       )
       const latest = history[0] ?? null
       const previous = history[1] ?? null
@@ -158,6 +159,7 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
       return {
         ...repository,
         latestScan: latest,
+        latestRun: repositoryScans[0] ?? null,
         scoreDelta: delta,
         activeFindings: openByRepository.get(repository.id) ?? 0,
         runningScan: runningByRepository.get(repository.id) ?? null,

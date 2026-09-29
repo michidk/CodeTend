@@ -15,9 +15,11 @@ const STATUS_CLASSES: Record<ScanStatus, string> = {
 export function ScanStatusBadge({
   status,
   phase,
+  label,
 }: {
   readonly status: ScanStatus
   readonly phase?: string | null
+  readonly label?: string
 }) {
   const active = status === 'queued' || status === 'running'
   return (
@@ -28,7 +30,7 @@ export function ScanStatusBadge({
           aria-hidden="true"
         />
       ) : null}
-      {active && phase ? phase : status}
+      {label ?? (active && phase ? phase : status)}
     </Badge>
   )
 }

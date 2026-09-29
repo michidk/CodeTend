@@ -136,11 +136,14 @@ function RepositoryCard({
               status={row.runningScan.status}
               phase={row.runningScan.phase}
             />
-          ) : latest ? (
-            <ScanStatusBadge status={latest.status} />
-          ) : (
+          ) : row.latestRun && row.latestRun.status !== 'completed' ? (
+            <ScanStatusBadge
+              status={row.latestRun.status}
+              label={`Latest run ${row.latestRun.status}`}
+            />
+          ) : !row.latestRun ? (
             <Badge variant="secondary">not scanned yet</Badge>
-          )}
+          ) : null}
         </div>
 
         <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/70 pt-3 text-xs">
