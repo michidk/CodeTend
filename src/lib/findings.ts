@@ -332,12 +332,12 @@ export const scannerFindingSchema = z.object({
   securityContext: securityContextSchema
     .optional()
     .describe(
-      'Repository-specific exploit context for source-code security findings. Omit outside the Security Hygiene dimension.',
+      'Repository-specific exploit context for source-code security findings. Use for scanners with application or CI security review enabled.',
     ),
   exploitability: exploitabilityAssessmentSchema
     .optional()
     .describe(
-      'Independent post-finding exploitability verdict for Security Hygiene findings. Added by the review pipeline, not by the discovery agent.',
+      'Independent post-finding exploitability verdict for source and CI security findings. Added by the review pipeline, not by the discovery agent.',
     ),
   rootCause: z
     .string()
@@ -396,9 +396,9 @@ export type EnrichedScannerFinding = ScannerFinding & FindingEnrichment
 export const hypothesisVerdictSchema = z.object({
   previousFindingId: z.number().int().positive(),
   verdict: z
-    .enum(['confirmed', 'improved', 'resolved'])
+    .enum(['confirmed', 'improved', 'resolved', 'deferred'])
     .describe(
-      'confirmed: still exists as described; improved: partially addressed but present; resolved: gone from the current code.',
+      'confirmed: still exists as described; improved: partially addressed but present; resolved: gone or disproved by current evidence; deferred: not verified, preserve prior state.',
     ),
   note: z
     .string()
@@ -407,6 +407,9 @@ export const hypothesisVerdictSchema = z.object({
     .describe(
       'What you checked and, for resolved or improved, what changed in the code.',
     ),
+  resolutionReason: z.enum(['fixed', 'false-positive', 'duplicate']).optional(),
+  duplicateOfScannerId: z.string().min(1).max(60).optional(),
+  duplicateOfFingerprint: z.string().min(1).max(120).optional(),
   dispositionStillApplies: z
     .boolean()
     .optional()

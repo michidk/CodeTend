@@ -1,3 +1,4 @@
+import { scannerSecurityReview } from '@/lib/scanners'
 import type {
   InvestigationReport,
   KnowledgeResult,
@@ -40,6 +41,17 @@ export function scannerAgentMessage(input: {
     scanner.prompt,
   ]
 
+  const securityReview = scannerSecurityReview(scanner)
+  if (securityReview) {
+    parts.push(
+      '',
+      '## Security review capability',
+      `Security review is enabled (${securityReview}). Supply classification, securityContext, rootCause, codeEvidence, attackPath, remediationTests and preventiveControls when supported. An independent agent will verify practical exploitability.`,
+      securityReview === 'ci'
+        ? 'For CI evidence, identify the external actor or lower-trust producer as source and the privileged job, credential exposure or release operation as sink. Workflow configuration is source evidence; unknown repository settings remain assumptions.'
+        : 'Identify the attacker-controlled source, relevant controls and vulnerable sink. Do not claim live credentials or deployment from source alone.',
+    )
+  }
   if (siblings.length > 0) {
     parts.push(
       '',
@@ -103,10 +115,10 @@ export function scannerAgentMessage(input: {
       '',
       '## Hypotheses from the previous scan',
       input.previousCommitSha === workspace.commitSha
-        ? 'The repository is at the SAME commit as the previous scan, so every hypothesis is expected to be confirmed unless the previous scan was wrong. Do not resolve a hypothesis because you could not find the code quickly, and do not report the same problem again under a new fingerprint.'
+        ? 'The repository is at the SAME commit as the previous scan, but an unchanged commit does not establish that a prior finding was correct. Do not resolve a hypothesis because you could not find the code quickly, and do not report the same problem again under a new fingerprint.'
         : `The repository moved from ${input.previousCommitSha ?? 'an unknown commit'} to ${workspace.commitSha}; files may have changed, moved or been removed, so locate the code before judging it.`,
-      'Treat this as the first stage of your scan. Inspect the CURRENT code first and treat it as authoritative. When the commit changed and the previous commit is available, use git diff/log to understand relevant changes, but never resolve a finding from commit history alone.',
-      `These ${scanner.hypotheses.length} finding(s) were open after the last scan. Independently verify each against the CURRENT repository and return exactly one verdict per hypothesis in \`hypothesisVerdicts\`: \`confirmed\` when the problem still exists as described, \`improved\` when it is partially addressed but still present, \`resolved\` when you can point at the code that shows the problem is gone (say what changed in the note). For \`confirmed\` and \`improved\` also return an up-to-date finding with the same \`fingerprint\` and \`previousFindingId\`; never report a confirmed hypothesis again under a new fingerprint. A moved file, code you could not find quickly, or a problem you would not have reported yourself is not grounds to resolve. If two hypotheses describe the same root cause, confirm the one whose fingerprint fits best and mark the other \`resolved\` with the note \`duplicate of <fingerprint>\`. A hypothesis without a verdict is carried forward unchanged, so leave none out.`,
+      'Treat this as a bounded first stage of your scan. Reserve at least one third of the investigation budget for new discovery; return deferred verdicts for prechecks you cannot finish. Inspect the CURRENT code first and treat it as authoritative. When the commit changed and the previous commit is available, use git diff/log to understand relevant changes, but never resolve a finding from commit history alone.',
+      `These ${scanner.hypotheses.length} finding(s) were previously tracked. Return exactly one verdict per hypothesis in \`hypothesisVerdicts\`: \`confirmed\` when verified unchanged, \`improved\` when verified partially fixed, \`resolved\` when evidence establishes it is gone, and \`deferred\` when budget, scope or missing evidence prevents verification. Deferred means unchanged state, not confirmed or resolved; explain why in the note and do not return a fresh finding for it. For confirmed and improved, return an updated finding with the same fingerprint and previousFindingId. The output allows 25 findings: reserve room for new discovery and defer excess prechecks rather than claiming verification or exceeding the schema. For resolved, set resolutionReason to fixed, false-positive, or duplicate and cite the evidence. A prior false positive may be corrected on unchanged code when you establish why the original claim was wrong; a difference of preference alone is insufficient. For proven duplicates, keep the oldest previousFindingId, resolve the other with resolutionReason duplicate, and set duplicateOfFingerprint to the surviving fingerprint. This is the explicit exception to the no-merging rule. Missing code or a moved file alone is not grounds to resolve.`,
       "When a hypothesis includes a manual disposition, the operator has already judged it and recorded the context in dispositionReason. Independently check whether that context still holds against the current source and controls, then set dispositionStillApplies and dispositionAssessment. Default to dispositionStillApplies: true. Set it to false only when you can cite a concrete change that contradicts the recorded context (for example the compensating control it names was removed, the code now reaches a new sink, or the reason refers to a file or behaviour that no longer exists). Disagreeing with the operator's judgement, missing context in the reason, or a different severity estimate is not grounds to reopen; state that in dispositionAssessment and keep it suppressed.",
       '',
       '<hypotheses>',
@@ -167,7 +179,7 @@ export function scannerAgentMessage(input: {
     '',
     '## Task',
     scanner.hypotheses.length > 0
-      ? 'First explicitly verify every hypothesis above as a precheck. Only after every existing finding has a verdict, continue with the normal bounded investigation for this dimension and report any distinct new problems you find with clear evidence. Return one combined structured result.'
+      ? 'Start with a bounded hypothesis precheck, explicitly defer anything not verified, then use the reserved discovery budget for distinct new problems with clear evidence. Return one combined structured result.'
       : input.target.kind === 'repository'
         ? 'Conduct a bounded, self-directed investigation of the repository for this dimension and return the structured result.'
         : 'Conduct a bounded, self-directed investigation of the configured target and return the structured result.',

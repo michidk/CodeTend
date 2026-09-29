@@ -1,5 +1,9 @@
 import type { Confidence, Severity } from '@/lib/findings'
-import type { ScannerDefinition } from '@/lib/scanners'
+import {
+  getScanner,
+  type ScannerDefinition,
+  scannerSecurityReview,
+} from '@/lib/scanners'
 
 /**
  * Deterministic scoring. Every scanner starts at 100 and loses a penalty per
@@ -35,6 +39,7 @@ const GRADE_THRESHOLDS: readonly {
 export interface ScorableFinding {
   readonly severity: Severity
   readonly confidence: Confidence
+  readonly exploitability?: { readonly verdict: string }
 }
 
 export function findingPenalty(finding: ScorableFinding): number {
@@ -54,11 +59,16 @@ export function calculateScannerScore(
 }
 
 export interface ScannerScoreInput {
-  readonly scanner: Pick<ScannerDefinition, 'id' | 'weight'>
+  readonly scanner: Pick<
+    ScannerDefinition,
+    'id' | 'weight' | 'kind' | 'securityReview'
+  >
   readonly score: number | null
+  readonly findings?: readonly ScorableFinding[]
 }
 
-/** Weighted mean of the scanner scores that actually produced a result. */
+/** Weighted mean, capped at F for a high-confidence critical open finding.
+ * Unconfirmed security hypotheses do not trigger the cap. */
 export function calculateOverallScore(
   scores: readonly ScannerScoreInput[],
 ): number | null {
@@ -75,7 +85,20 @@ export function calculateOverallScore(
     (total, entry) => total + entry.score * entry.scanner.weight,
     0,
   )
-  return Math.round((weighted / totalWeight) * 10) / 10
+  const average = Math.round((weighted / totalWeight) * 10) / 10
+  const hasCritical = scored.some((entry) =>
+    entry.findings?.some(
+      (finding) =>
+        finding.severity === 'critical' &&
+        finding.confidence === 'high' &&
+        (scannerSecurityReview(entry.scanner) ||
+        (entry.scanner.kind ?? getScanner(entry.scanner.id)?.kind) ===
+          'dependency-audit'
+          ? finding.exploitability?.verdict === 'confirmed'
+          : finding.exploitability?.verdict !== 'not-confirmed'),
+    ),
+  )
+  return hasCritical ? Math.min(39, average) : average
 }
 
 export function gradeForScore(score: number | null): Grade | null {
@@ -86,9 +109,9 @@ export function gradeForScore(score: number | null): Grade | null {
 }
 
 export const GRADE_DESCRIPTIONS: Record<Grade, string> = {
-  A: 'Healthy: little technical debt worth acting on.',
-  B: 'Good: a handful of issues, none urgent.',
+  A: 'Low aggregate debt in the areas investigated.',
+  B: 'Limited aggregate debt in the areas investigated.',
   C: 'Fair: noticeable debt that slows changes down.',
   D: 'Poor: significant debt across several dimensions.',
-  F: 'Critical: the codebase actively resists change.',
+  F: 'Critical finding or substantial aggregate debt; inspect the findings.',
 }

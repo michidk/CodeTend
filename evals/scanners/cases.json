@@ -1,0 +1,153 @@
+[
+  {
+    "id": "domain-owned-port",
+    "scanners": ["architecture", "duplication"],
+    "files": {
+      "domain/users.ts": "export interface Users { save(name: string): Promise<void> }\nexport async function register(users: Users, name: string) { await users.save(name) }\n",
+      "infra/users.ts": "import type { Users } from '../domain/users'\nexport class SqlUsers implements Users { constructor(private db: { insert(name: string): Promise<void> }) {}\nasync save(name: string) { await this.db.insert(name) } }\n",
+      "README.md": "Infrastructure implements domain-owned ports. This small library exports register and SqlUsers; the port isolates database access and permits consumer-provided implementations.\n"
+    },
+    "expected": []
+  },
+  {
+    "id": "historical-migration",
+    "scanners": ["dead-code"],
+    "files": {
+      "migrations/001.sql": "CREATE TABLE users (id integer PRIMARY KEY, legacy_name text);\n",
+      "migrations/002.sql": "ALTER TABLE users RENAME COLUMN legacy_name TO display_name;\n",
+      "README.md": "The external deployment runner applies all SQL files in migrations lexicographically on an empty database, tracking each applied filename. Both migrations remain necessary for fresh installs and upgrades.\n"
+    },
+    "expected": []
+  },
+  {
+    "id": "referenced-unreachable-code",
+    "scanners": ["dead-code", "slop"],
+    "files": {
+      "src/status.ts": "export function status(retries: number) {\n if (retries < 0 && retries > 0) return 'retrying'\n return 'ready'\n}\n",
+      "README.md": "A public library exposing status. No code generation or preprocessing.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "dead-code",
+        "path": "src/status.ts",
+        "minSeverity": "low",
+        "maxSeverity": "medium",
+        "rootCause": "The retrying branch is unreachable because its conjunction is impossible."
+      }
+    ]
+  },
+  {
+    "id": "unchecked-data-contract",
+    "scanners": ["type-safety", "reliability"],
+    "files": {
+      "src/input.ts": "export function parseNames(text: string): string[] {\n const body = JSON.parse(text) as { names: string[] }\n return body.names.map(name => name.trim())\n}\n",
+      "README.md": "A library for importing user-supplied JSON. Input must contain a names array of strings; malformed shapes should produce an explicit validation error.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "type-safety",
+        "path": "src/input.ts",
+        "minSeverity": "medium",
+        "maxSeverity": "high",
+        "rootCause": "JSON is cast to a trusted shape without validating names and its elements."
+      }
+    ]
+  },
+  {
+    "id": "validated-cast",
+    "scanners": ["type-safety", "slop"],
+    "files": {
+      "src/input.ts": "export function parseName(text: string): string {\n const body: unknown = JSON.parse(text)\n if (!body || typeof body !== 'object' || !('name' in body) || typeof body.name !== 'string') throw new Error('Invalid name')\n return body.name.trim()\n}\n",
+      "README.md": "Public JSON import boundary. Runtime validation is necessary because callers supply arbitrary JSON.\n"
+    },
+    "expected": []
+  },
+  {
+    "id": "valid-input-wrong-result",
+    "scanners": ["reliability", "type-safety"],
+    "files": {
+      "src/price.ts": "export function discountedCents(cents: number, percent: number) {\n return Math.round(cents * (1 - percent))\n}\n",
+      "README.md": "Public pricing helper. cents is a nonnegative integer; percent is a number between 0 and 100, e.g. discountedCents(1000, 10) must return 900. Callers validate those ranges.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "reliability",
+        "path": "src/price.ts",
+        "minSeverity": "medium",
+        "maxSeverity": "high",
+        "rootCause": "The formula treats a whole percentage as a fractional discount."
+      }
+    ]
+  },
+  {
+    "id": "stale-build-documentation",
+    "scanners": ["documentation", "dependencies"],
+    "files": {
+      "package.json": "{\"name\":\"fixture\",\"private\":true,\"scripts\":{\"build\":\"node build.mjs\"}}\n",
+      "build.mjs": "import { mkdir, writeFile } from 'node:fs/promises'\nawait mkdir('dist', { recursive: true })\nawait writeFile('dist/index.html', '<h1>Hello</h1>')\n",
+      "README.md": "Build this dependency-free Node project with npm run compile. The build script generates dist/index.html.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "documentation",
+        "path": "README.md",
+        "minSeverity": "low",
+        "maxSeverity": "medium",
+        "rootCause": "The documented compile script does not exist; the working script is build."
+      }
+    ]
+  },
+  {
+    "id": "independent-conventions",
+    "scanners": ["consistency", "duplication"],
+    "files": {
+      "python/client.py": "def fetch_user(user_id):\n    return {'user_id': user_id}\n",
+      "web/client.ts": "export function fetchUser(userId: string) { return { userId } }\n",
+      "README.md": "Two independent example libraries, one Python and one TypeScript. No shared wire protocol or business rules. Each follows its language naming conventions.\n"
+    },
+    "expected": []
+  },
+  {
+    "id": "missing-security-tests",
+    "scanners": ["tests", "security"],
+    "files": {
+      "src/access.ts": "export function canDelete(actorId: string, ownerId: string, role: string) {\n return role === 'admin' || actorId === ownerId\n}\n",
+      "README.md": "A production authorization library. Authenticated actor IDs and roles come from a trusted server session. Owners and admins may delete; others may not. There are currently no automated tests or CI checks.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "tests",
+        "path": "src/access.ts",
+        "minSeverity": "medium",
+        "maxSeverity": "high",
+        "rootCause": "The production permission rule has no regression tests; the rule itself matches policy."
+      }
+    ]
+  },
+  {
+    "id": "ci-untrusted-expression",
+    "scanners": ["ci-security", "security"],
+    "files": {
+      ".github/workflows/label.yml": "name: issue helper\non: [issues]\npermissions:\n  contents: write\njobs:\n  helper:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          GH_TOKEN: ${{ github.token }}\n        run: echo \"${{ github.event.issue.title }}\"\n",
+      "README.md": "Public repository. Any authenticated GitHub user may open an issue; the helper runs in the base repository with the declared token permissions.\n"
+    },
+    "expected": [
+      {
+        "scannerId": "ci-security",
+        "path": ".github/workflows/label.yml",
+        "minSeverity": "high",
+        "maxSeverity": "critical",
+        "rootCause": "An external issue title is interpolated into a shell with a write token available."
+      }
+    ]
+  },
+  {
+    "id": "documented-dummy-credential",
+    "scanners": ["security"],
+    "files": {
+      "fixtures/config.json": "{\"apiKey\":\"example-not-a-real-key\"}\n",
+      "README.md": "The config fixture is inert example data, contains no usable credential, and is never used to contact an endpoint. There is no deployment or production configuration in this repository.\n"
+    },
+    "expected": []
+  }
+]

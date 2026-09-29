@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { SCANNERS } from '@/lib/scanners'
 import {
   CONFIDENCE_FACTOR,
   calculateOverallScore,
@@ -73,5 +74,52 @@ describe('grades', () => {
 
   test('is null without a score', () => {
     expect(gradeForScore(null)).toBeNull()
+  })
+})
+
+describe('critical score cap', () => {
+  function score(
+    exploitability?: { verdict: string },
+    confidence: 'high' | 'medium' = 'high',
+  ) {
+    return calculateOverallScore(
+      SCANNERS.map((scanner) => {
+        const findings =
+          scanner.id === 'security'
+            ? [{ severity: 'critical' as const, confidence, exploitability }]
+            : []
+        return { scanner, findings, score: calculateScannerScore(findings) }
+      }),
+    )
+  }
+  test('a critical finding cannot be diluted by fourteen clean scanners', () => {
+    expect(score({ verdict: 'confirmed' })).toBe(39)
+    expect(gradeForScore(score({ verdict: 'confirmed' }))).toBe('F')
+    expect(score()).toBe(97.6)
+    expect(
+      calculateOverallScore([
+        {
+          scanner: { id: 'reliability', weight: 1 },
+          score: 70,
+          findings: [{ severity: 'critical', confidence: 'high' }],
+        },
+      ]),
+    ).toBe(39)
+  })
+  test('unconfirmed security hypotheses and uncertain findings do not trigger the cap', () => {
+    expect(score({ verdict: 'not-confirmed' })).toBe(97.6)
+    expect(score(undefined, 'medium')).toBeGreaterThan(39)
+  })
+  test('failed scanners do not contribute a cap and resolved findings are excluded by the caller', () => {
+    expect(
+      calculateOverallScore([
+        {
+          scanner: { id: 'failed', weight: 1 },
+          score: null,
+          findings: [{ severity: 'critical', confidence: 'high' }],
+        },
+        { scanner: { id: 'clean', weight: 1 }, score: 100, findings: [] },
+      ]),
+    ).toBe(100)
   })
 })

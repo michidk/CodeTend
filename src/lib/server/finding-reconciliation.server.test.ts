@@ -47,6 +47,7 @@ function persistedFinding(overrides: Partial<Finding> = {}): Finding {
     locations: [...freshFinding.locations],
     classification: null,
     securityContext: null,
+    exploitability: null,
     rootCause: null,
     codeEvidence: null,
     attackPath: null,
@@ -177,5 +178,94 @@ describe('finding transition planning', () => {
       countState: 'resolved',
       includeInResult: false,
     })
+  })
+})
+
+describe('explicit rescan uncertainty and corrections', () => {
+  test('deferral preserves state, evidence, severity and last-seen even with a contradictory fresh finding', () => {
+    const previous = persistedFinding({ state: 'improved', severity: 'low' })
+    const plans = planFindingTransitions(
+      input(
+        [{ ...freshFinding, previousFindingId: 11 }],
+        [
+          {
+            previousFindingId: 11,
+            verdict: 'deferred',
+            note: 'Precheck budget exhausted.',
+          },
+        ],
+      ),
+      [previous],
+    )
+    expect(plans).toHaveLength(1)
+    expect(plans[0]).toMatchObject({
+      state: 'improved',
+      updateLastSeen: false,
+      finding: { severity: 'low' },
+      eventKind: 'carried_forward',
+      note: 'Deferred: Precheck budget exhausted.',
+    })
+  })
+  test('deferral cannot invalidate an operator disposition', () => {
+    const previous = persistedFinding({
+      state: 'resolved',
+      disposition: 'accepted_risk',
+    })
+    expect(
+      planFindingTransitions(
+        input(
+          [freshFinding],
+          [
+            {
+              previousFindingId: 11,
+              verdict: 'deferred',
+              dispositionStillApplies: false,
+            },
+          ],
+        ),
+        [previous],
+      ),
+    ).toEqual([])
+  })
+  test('records the surviving scanner and fingerprint when correcting duplicates', () => {
+    const plans = planFindingTransitions(
+      input(
+        [],
+        [
+          {
+            previousFindingId: 11,
+            verdict: 'resolved',
+            resolutionReason: 'duplicate',
+            duplicateOfScannerId: 'type-safety',
+            duplicateOfFingerprint: 'unchecked-json',
+            note: 'The same missing validation.',
+          },
+        ],
+      ),
+      [persistedFinding()],
+    )
+    expect(plans[0]).toMatchObject({
+      state: 'resolved',
+      note: 'Duplicate of type-safety/unchecked-json. The same missing validation.',
+    })
+  })
+  test('records a false-positive correction separately from a code fix', () => {
+    const plans = planFindingTransitions(
+      input(
+        [],
+        [
+          {
+            previousFindingId: 11,
+            verdict: 'resolved',
+            resolutionReason: 'false-positive',
+            note: 'Upstream validation already rejects the input.',
+          },
+        ],
+      ),
+      [persistedFinding()],
+    )
+    expect(plans[0]?.note).toBe(
+      'Prior false positive corrected: Upstream validation already rejects the input.',
+    )
   })
 })

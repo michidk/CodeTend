@@ -72,7 +72,7 @@ function message(
 }
 
 describe('scannerAgentMessage scan phases', () => {
-  test('runs a per-scanner precheck before normal discovery', () => {
+  test('bounds the precheck and allows honest deferral before discovery', () => {
     const prompt = message()
 
     expect(prompt).toContain('first stage of your scan')
@@ -81,11 +81,9 @@ describe('scannerAgentMessage scan phases', () => {
     expect(prompt).toContain(
       'never resolve a finding from commit history alone',
     )
+    expect(prompt).toContain('Start with a bounded hypothesis precheck')
     expect(prompt).toContain(
-      'First explicitly verify every hypothesis above as a precheck',
-    )
-    expect(prompt).toContain(
-      'Only after every existing finding has a verdict, continue with the normal bounded investigation',
+      'Reserve at least one third of the investigation budget for new discovery',
     )
   })
 })

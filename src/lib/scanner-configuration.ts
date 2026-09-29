@@ -20,6 +20,7 @@ export const customScannerSchema = z.object({
   weight: z.number().min(0.1).max(10),
   prompt: z.string().trim().min(20).max(20_000),
   fixPromptTitle: z.string().trim().min(2).max(120),
+  securityReview: z.enum(['application', 'ci']).optional(),
   fixGuidance: z.string().trim().max(10_000).optional(),
 })
 

@@ -60,7 +60,7 @@ Security · Security Hygiene
 
 Each scanner's `prompt` names what it owns, which neighbouring dimensions own
 the adjacent concerns ("Not yours"), and how to calibrate severity, so the same
-problem is not reported (and scored) by two scanners.
+problem has a stable owner. After security review, a bounded independent duplicate adjudicator inspects candidates sharing file evidence. Only verified same-root-cause pairs are consolidated; invalid references, cycles, conflicting decisions and security downgrades are rejected. Uncertain pairs remain separate. At most eight batches are reviewed; exhaustion or review failures are disclosed in coverage.
 
 ### Adding a scanner
 
@@ -80,7 +80,7 @@ findings, hypothesis verification) lives in
 
 When you add a dimension, revisit the "Not yours" clause of every neighbouring
 scanner that could overlap with it; `src/lib/scanners.test.ts` checks that
-boundary clauses only reference dimensions that exist.
+built-ins include boundary and calibration clauses. The evaluation corpus in `evals/scanners` tests ownership scenarios, false positives, severity and unchanged rescans.
 
 Removing or merging a scanner needs a data migration as well, because findings
 are keyed by `scanner_id`: re-parent the old scanner's rows onto the surviving
@@ -92,7 +92,7 @@ handed back as hypotheses instead of being orphaned.
 [`src/lib/scoring.ts`](../src/lib/scoring.ts): every scanner starts at 100 and
 loses `SEVERITY_PENALTY[severity] × CONFIDENCE_FACTOR[confidence]` per open
 finding (critical 30, high 16, medium 8, low 3; confidence high ×1, medium
-×0.8, low ×0.5). The overall score is the weighted mean of scanner scores;
+×0.8, low ×0.5). The overall score is the weighted mean of scanner scores, capped at 39/F by a high-confidence critical open finding (security and dependency findings require confirmed exploitability);
 grades are A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, else F. The model never proposes
 numbers.
 
@@ -100,9 +100,7 @@ numbers.
 
 Findings are logical problems identified by a scanner-chosen stable
 `fingerprint` (concept + area, never line numbers). On a rescan the open
-findings are handed back to the relevant scanner as hypotheses; it must verify
-each against the current code (`confirmed`, `improved`, `resolved`) and search
-for new issues.
+findings are handed back to the relevant scanner as hypotheses; it verifies them against the current code (`confirmed`, `improved`, `resolved`) or explicitly returns `deferred` when evidence or budget is insufficient, then searches for new issues.
 [`finding-reconciliation.server.ts`](../src/lib/server/finding-reconciliation.server.ts)
 then derives states from *our persisted results* (never Git history):
 
@@ -112,6 +110,7 @@ then derives states from *our persisted results* (never Git history):
 | open finding returned again, same severity | `active` |
 | open finding returned with lower severity or scanner verdict `improved` | `improved` |
 | open finding returned with higher severity, or a resolved finding reappears | `regressed` |
+| scanner explicitly defers verification | prior state and last-seen time preserved |
 | scanner explicitly re-verifies the finding and returns `resolved` | `resolved` |
 | open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
 | operator marks a finding fixed and records what changed | `resolved` without a disposition; a future match becomes `regressed` |
@@ -150,8 +149,7 @@ Exploited Vulnerabilities catalog. An unavailable EPSS or KEV feed is reported
 in the scanner summary but never discards an OSV result.
 
 Raw severity and contextual priority are deliberately separate. Dependency
-priority combines CVSS, EPSS, KEV and fix availability; a KEV entry always
-becomes critical priority. The Security Hygiene discovery agent classifies
+priority combines CVSS, EPSS, KEV and fix availability; a confirmed exploitable KEV match becomes critical priority. The Security Hygiene discovery agent classifies
 source-code findings with CWE/OWASP and records evidenced reachability,
 exposure and data sensitivity. After isolated validation, a second agent
 independently checks each proposed attack path against the source and validation
@@ -163,7 +161,7 @@ all enrichment on each finding occurrence.
 
 ## Security review pipeline
 
-Security Hygiene follows a staged review: durable repository security context,
+Application and CI security scanners declare a `securityReview` capability and follow a staged review: durable repository security context,
 refined by the knowledge agent and operator → scanner-directed investigation →
 safe isolated validation → attack-path and impact analysis → contextual ranking
 → explicit-verdict lifecycle. Operators set a cumulative input-token budget per
@@ -262,3 +260,9 @@ scripts/                   migrate, dev migrations plugin, import-boundary check
 
 `src/routeTree.gen.ts` is generated. Run `bun run generate-routes` instead of
 editing it manually.
+
+### Review persistence and rescan uncertainty
+
+Checkpoints contain durable discovery output for recovery, but publish only scanner progress and summaries. Final security review and duplicate adjudication run before findings, lifecycle transitions, fix prompts and scores are persisted. Exploitability verdicts are stored on both logical findings and occurrences, so recovery and deferred rescans preserve review evidence. Older rows have unknown review evidence until rescanned.
+
+A deferred verdict preserves state, severity, manual disposition and last-seen time, even if an agent contradictorily returns a fresh finding. Rescans reserve at least one third of their investigation budget for new discovery. Resolved verdicts distinguish fixed code, corrected false positives and proven duplicates; duplicate lifecycle notes identify the surviving scanner and fingerprint. Prompt/scoring contract versions are recorded in the scan manifest, and checkpoint fingerprints include scanner definitions and output contracts.

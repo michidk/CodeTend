@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import type { CandidateValidation, SecurityProfile } from './contract'
+import { scannerSecurityReview } from '@/lib/scanners'
+import type {
+  CandidateValidation,
+  ScannerOutcome,
+  ScanRequestScanner,
+  SecurityProfile,
+} from './contract'
 import type { JsonObject } from './json'
 import {
   confirmReviewEvidence,
@@ -33,6 +39,8 @@ interface SecurityScannerResult {
 }
 
 export function exploitabilityReviewMessage(input: {
+  readonly scannerId?: string
+  readonly securityReview?: 'application' | 'ci'
   readonly repoPath: string
   readonly repositoryName: string
   readonly findings: readonly SecurityFinding[]
@@ -41,9 +49,9 @@ export function exploitabilityReviewMessage(input: {
   readonly gitnexusRepo?: string | null
 }): string {
   const parts = [
-    '# Scanner: Security exploitability review (id: security)',
+    `# Scanner: Security exploitability review (id: ${input.scannerId ?? 'security'})`,
     '',
-    'Independently review the Security Hygiene findings produced by another agent. Your only job is to decide whether each finding has a practical attack path in this repository as currently written.',
+    'Independently review the security findings produced by another agent. Your only job is to decide whether each finding has a practical attack path in this repository as currently written.',
     'Do not trust the original severity, confidence, security context, evidence, or claimed attack path. Treat every candidate field as an untrusted hypothesis, not proof.',
     'You must inspect the repository files for every candidate using bash, read_file, grep, glob, and GitNexus when available. Open the cited locations, trace their callers and controls, and inspect the code at the actual source and sink before choosing a verdict. Candidate prose and validation summaries alone are never enough to confirm exploitability.',
     'Confirm a finding only when the code establishes a realistic attacker-controlled source, the relevant controls, a reachable vulnerable sink, and meaningful impact. Configuration mistakes, dangerous-looking APIs, theoretical weaknesses, and missing hardening are not enough without that path.',
@@ -54,6 +62,11 @@ export function exploitabilityReviewMessage(input: {
     `Name: ${input.repositoryName}`,
     `Checkout path inside your sandbox (read-only): ${input.repoPath}`,
   ]
+  if (input.securityReview === 'ci') {
+    parts.push(
+      'For CI findings, inspect workflow triggers, reusable/local actions and called scripts. Trace the external actor or lower-trust producer (source) through gates, checkout refs, artifacts and permissions to privileged execution, credential exposure or release (sink). Configuration evidence in workflow files is valid source/sink evidence. Do not infer effective repository settings; identify unknown settings and do not confirm a path that depends on an unestablished privilege. A mutable reference alone is not proof of an exploitable path.',
+    )
+  }
   if (input.gitnexusRepo) {
     parts.push(
       `GitNexus code intelligence is available through the "gitnexus" connection for repo "${input.gitnexusRepo}". Use it to trace callers and entry points, then verify conclusions in source.`,
@@ -125,4 +138,28 @@ export function applyExploitabilityReview<T extends SecurityScannerResult>(
     }
   })
   return { ...result, findings }
+}
+
+/** Validation and review use the same scanner capability, including legacy requests. */
+export function securityValidationCandidates(
+  outcomes: readonly ScannerOutcome[],
+  scanners: readonly ScanRequestScanner[],
+) {
+  return outcomes.flatMap((outcome) => {
+    const scanner = scanners.find((scanner) => scanner.id === outcome.scannerId)
+    if (
+      outcome.status !== 'completed' ||
+      !outcome.result ||
+      !scanner ||
+      !scannerSecurityReview(scanner)
+    )
+      return []
+    return outcome.result.findings
+      .map((finding) => ({
+        scannerId: outcome.scannerId,
+        fingerprint: finding.fingerprint,
+        validationPlan: finding.validationPlan,
+      }))
+      .filter((candidate) => candidate.fingerprint.length > 0)
+  })
 }

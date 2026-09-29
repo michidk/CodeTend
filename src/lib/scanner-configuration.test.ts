@@ -49,3 +49,13 @@ describe('scanner configuration', () => {
     expect(scanners.some((scanner) => scanner.id === 'broken')).toBe(false)
   })
 })
+
+test('security capabilities survive configuration and older scanner snapshots', () => {
+  const resolved = resolveScannerConfigurations([])
+  expect(
+    resolved.find((scanner) => scanner.id === 'ci-security')?.securityReview,
+  ).toBe('ci')
+  expect(
+    resolved.find((scanner) => scanner.id === 'security')?.securityReview,
+  ).toBe('application')
+})

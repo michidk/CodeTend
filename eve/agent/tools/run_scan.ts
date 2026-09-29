@@ -2,6 +2,7 @@ import { defineWorkflowTool } from 'eve/tools'
 import { z } from 'zod'
 import { executionProfileMarker } from '@/lib/agent-execution'
 import { scannerResultSchema } from '@/lib/findings'
+import { scannerSecurityReview } from '@/lib/scanners'
 import type {
   DependencyAuditResult,
   GitNexusIndexMetadata,
@@ -26,6 +27,14 @@ import {
   dependencyImpactReviewMessage,
   dependencyImpactReviewSchema,
 } from '../lib/dependency-security-review'
+import {
+  applyDuplicateReviews,
+  type DuplicateReview,
+  duplicateReviewBatches,
+  duplicateReviewJsonSchema,
+  duplicateReviewMessage,
+  duplicateReviewSchema,
+} from '../lib/finding-deduplication'
 import type { JsonObject } from '../lib/json'
 import {
   assessKnowledgeStaleness,
@@ -41,6 +50,7 @@ import {
   exploitabilityReviewJsonSchema,
   exploitabilityReviewMessage,
   exploitabilityReviewSchema,
+  securityValidationCandidates,
 } from '../lib/security-review'
 import {
   auditDependencies,
@@ -358,9 +368,10 @@ async function* finalizeScanWorkflow(input: {
 }): AsyncGenerator<Progress, FinalizedScanWorkflowState, void> {
   let completed = input.completed
   let dependencyAudit = input.dependencyAudit
-  const investigation = aggregateInvestigations(input.outcomes)
-  const coverage = aggregateCoverage(input.outcomes, investigation)
-  const candidates = securityValidationCandidates(input.outcomes)
+  const candidates = securityValidationCandidates(
+    input.outcomes,
+    input.scanners,
+  )
 
   yield {
     phase: 'validating',
@@ -377,37 +388,35 @@ async function* finalizeScanWorkflow(input: {
   })
   completed += 1
 
-  const securityOutcomeIndex = input.outcomes.findIndex(
-    (outcome) => outcome.scannerId === 'security',
-  )
-  const securityResult =
-    securityOutcomeIndex >= 0
-      ? asScannerResult(input.outcomes[securityOutcomeIndex]?.result)
-      : null
-  if (securityOutcomeIndex >= 0 && securityResult?.findings?.length) {
-    yield {
-      phase: 'reviewing security exploitability',
-      detail: `${securityResult.findings.length} security findings to review`,
-      completed,
-      total: input.total,
-      scannerCompleted: input.outcomes.length,
-      scannerTotal: input.scanners.length,
+  for (const scanner of input.scanners.filter(scannerSecurityReview)) {
+    const index = input.outcomes.findIndex(
+      (outcome) => outcome.scannerId === scanner.id,
+    )
+    const outcome = input.outcomes[index]
+    const securityResult =
+      outcome?.status === 'completed' ? asScannerResult(outcome.result) : null
+    if (outcome && securityResult?.findings.length) {
+      yield {
+        phase: 'reviewing security exploitability',
+        detail: `${scanner.name}: ${securityResult.findings.length} findings to review`,
+        completed,
+        total: input.total,
+        scannerCompleted: input.outcomes.length,
+        scannerTotal: input.scanners.length,
+      }
+      input.outcomes[index] = await performSourceSecurityReview({
+        outcome,
+        securityResult,
+        scanner,
+        request: input.request,
+        repoPath: input.repoPath,
+        validations: validations.filter((v) => v.scannerId === scanner.id),
+        securityProfile: input.securityProfile,
+        gitnexusRepo: input.gitnexusRepo,
+        workspace: input.workspace,
+        runAgent: input.runReviewAgent,
+      })
     }
-    input.outcomes[securityOutcomeIndex] = await performSourceSecurityReview({
-      outcome: input.outcomes[securityOutcomeIndex] as ScannerOutcome,
-      securityResult,
-      request: input.request,
-      repoPath: input.repoPath,
-      validations,
-      securityProfile: input.securityProfile,
-      gitnexusRepo: input.gitnexusRepo,
-      workspace: input.workspace,
-      runAgent: input.runReviewAgent,
-    })
-    completed += 1
-  } else if (
-    input.request.scanners.some((scanner) => scanner.id === 'security')
-  ) {
     completed += 1
   }
 
@@ -444,6 +453,47 @@ async function* finalizeScanWorkflow(input: {
     })
     completed += 1
   }
+
+  yield {
+    phase: 'adjudicating duplicates',
+    completed,
+    total: input.total,
+    scannerCompleted: input.outcomes.length,
+    scannerTotal: input.scanners.length,
+  }
+  const reviews: DuplicateReview[] = []
+  const duplicateBatches = duplicateReviewBatches(
+    input.outcomes,
+    input.scanners,
+  )
+  let duplicateReviewFailed = !duplicateBatches.complete
+  for (const batch of duplicateBatches.batches) {
+    try {
+      const raw = await input.runReviewAgent(
+        `${executionProfileMarker(input.request.executionProfile)}\n${duplicateReviewMessage(batch, input.repoPath)}`,
+        duplicateReviewJsonSchema,
+      )
+      reviews.push(duplicateReviewSchema.parse(raw))
+    } catch {
+      duplicateReviewFailed = true
+    }
+  }
+  const deduplicated = applyDuplicateReviews(
+    input.outcomes,
+    input.scanners,
+    reviews,
+    input.workspace.files.map((file) => file.path),
+  )
+  input.outcomes.splice(0, input.outcomes.length, ...deduplicated)
+  const investigation = aggregateInvestigations(input.outcomes)
+  const coverage = aggregateCoverage(input.outcomes, investigation)
+  if (duplicateReviewFailed) {
+    coverage.completeness = 'partial'
+    coverage.openQuestions.push(
+      'Some cross-scanner duplicate reviews could not complete; unadjudicated findings were retained.',
+    )
+  }
+  completed += 1
 
   yield {
     phase: 'persisting',
@@ -590,6 +640,7 @@ type ReviewAgent = (
 
 async function performSourceSecurityReview(input: {
   readonly outcome: ScannerOutcome
+  readonly scanner: ScanRequestScanner
   readonly securityResult: NonNullable<ReturnType<typeof asScannerResult>>
   readonly request: ScanRequest
   readonly repoPath: string
@@ -607,6 +658,8 @@ async function performSourceSecurityReview(input: {
           repoPath: input.repoPath,
           repositoryName: input.request.repositoryName,
           findings: input.securityResult.findings,
+          scannerId: input.scanner.id,
+          securityReview: scannerSecurityReview(input.scanner),
           validations: input.validations,
           securityProfile: input.securityProfile,
           gitnexusRepo: input.gitnexusRepo,
@@ -672,12 +725,15 @@ async function performDependencyImpactReview(input: {
 
 function fingerprintScanRequest(request: ScanRequest): string {
   return JSON.stringify({
+    reviewContract: 3,
     repositoryId: request.repositoryId,
     repositoryUrl: request.repositoryUrl,
     branch: request.branch,
     target: request.target,
     maxInputTokens: request.maxInputTokens,
-    scanners: request.scanners.map((scanner) => scanner.id),
+    scanners: request.scanners,
+    executionProfile: request.executionProfile,
+    outputSchema: request.outputSchema,
     dependencyAudit: request.dependencyAudit !== false,
     validation: request.validation,
   })
@@ -685,12 +741,12 @@ function fingerprintScanRequest(request: ScanRequest): string {
 
 function totalScanSteps(request: ScanRequest): number {
   return (
-    5 +
+    6 +
     request.scanners.length +
     (request.dependencyAudit === false ? 0 : 1) +
     (request.dependencyAudit === false ? 0 : 1) +
     (request.gitnexus ? 1 : 0) +
-    (request.scanners.some((scanner) => scanner.id === 'security') ? 1 : 0)
+    request.scanners.filter(scannerSecurityReview).length
   )
 }
 
@@ -719,23 +775,6 @@ function filterScannersForTarget(
             )),
     ),
   }))
-}
-
-function securityValidationCandidates(
-  outcomes: readonly ScannerOutcome[],
-): Parameters<typeof validateCandidates>[0]['candidates'] {
-  return outcomes
-    .filter((outcome) => outcome.scannerId === 'security')
-    .flatMap((outcome) => {
-      const result = asScannerResult(outcome.result)
-      return (result?.findings ?? [])
-        .map((finding) => ({
-          scannerId: outcome.scannerId,
-          fingerprint: finding.fingerprint,
-          validationPlan: finding.validationPlan,
-        }))
-        .filter((candidate) => candidate.fingerprint.length > 0)
-    })
 }
 
 async function refreshKnowledge(input: {

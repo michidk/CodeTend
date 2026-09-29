@@ -197,6 +197,13 @@
       "when": 1790329758854,
       "tag": "0027_persistent_gitnexus_index",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790689465471,
+      "tag": "0028_scanner_review_evidence",
+      "breakpoints": true
     }
   ]
 }

@@ -20,11 +20,16 @@ import {
   type ScannerResult,
 } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
-import { getScanner, type ScannerDefinition } from '@/lib/scanners'
+import {
+  getScanner,
+  type ScannerDefinition,
+  scannerSecurityReview,
+} from '@/lib/scanners'
 import {
   calculateOverallScore,
   calculateScannerScore,
   gradeForScore,
+  type ScannerScoreInput,
 } from '@/lib/scoring'
 import {
   reconcileScannerFindings,
@@ -50,17 +55,16 @@ import { enrichSourceSecurityFinding } from '@/lib/vulnerabilities'
 
 export async function persistScanCheckpoint(
   scanId: number,
-  repository: Repository,
+  _repository: Repository,
   checkpoint: NonNullable<Awaited<ReturnType<typeof readScanCheckpoint>>>,
 ) {
   return withScanPersistenceLock(scanId, () =>
-    persistScanCheckpointUnlocked(scanId, repository, checkpoint),
+    persistScanCheckpointUnlocked(scanId, checkpoint),
   )
 }
 
 async function persistScanCheckpointUnlocked(
   scanId: number,
-  repository: Repository,
   checkpoint: NonNullable<Awaited<ReturnType<typeof readScanCheckpoint>>>,
 ) {
   if (checkpoint.scanId !== scanId) return
@@ -100,43 +104,17 @@ async function persistScanCheckpointUnlocked(
         )
       continue
     }
-    const scannerResult = {
-      ...outcome.result,
-      findings:
-        scanner.id === 'security'
-          ? outcome.result.findings.map(enrichSourceSecurityFinding)
-          : outcome.result.findings,
-    }
-    const reconciled = await reconcileScannerFindings({
-      repositoryId: repository.id,
-      scanId,
-      scannerId: scanner.id,
-      result: scannerResult,
-      target: scan.target,
-    })
-    const openFindings = reconciled.findings.filter((entry) =>
-      OPEN_FINDING_STATES.includes(entry.state),
-    )
-    const score = calculateScannerScore(
-      openFindings.map((entry) => entry.finding),
-    )
+    // Durable checkpoints contain discovery output, before security review and
+    // cross-scanner adjudication. Publish progress only; final results own
+    // finding lifecycle transitions, fix prompts and scores.
     await db
       .update(scannerRuns)
       .set({
-        status: 'completed',
-        score,
-        summary: scannerResult.summary,
-        investigation: scannerResult.investigation,
-        fixPrompt: buildFixPrompt({
-          scanner,
-          repositoryName: repository.name,
-          repositoryUrl: repository.url,
-          branch: repository.branch,
-          commitSha: checkpoint.commitSha,
-          findings: openFindings.map((entry) => entry.finding),
-        }),
+        status: 'running',
+        score: null,
+        summary: outcome.result.summary,
+        investigation: outcome.result.investigation,
         startedAt: new Date(outcome.startedAt),
-        finishedAt: new Date(outcome.finishedAt),
       })
       .where(
         and(
@@ -342,10 +320,7 @@ async function persistScannerOutcomes(input: {
   readonly scannerDefinitions: ReadonlyMap<string, ScannerDefinition>
 }) {
   const countsPerScanner: FindingCounts[] = []
-  const scoreInputs: {
-    scanner: { id: string; weight: number }
-    score: number | null
-  }[] = []
+  const scoreInputs: ScannerScoreInput[] = []
   let failedScanners = 0
 
   const dependencyScanner = input.scannerDefinitions.get('vulnerabilities')
@@ -396,10 +371,9 @@ async function persistScannerOutcomes(input: {
       findings: EnrichedScannerFinding[]
     } = {
       ...outcome.result,
-      findings:
-        scanner.id === 'security'
-          ? outcome.result.findings.map(enrichSourceSecurityFinding)
-          : outcome.result.findings,
+      findings: scannerSecurityReview(scanner)
+        ? outcome.result.findings.map(enrichSourceSecurityFinding)
+        : outcome.result.findings,
     }
     const reconciled = await reconcileScannerFindings({
       repositoryId: input.repository.id,
@@ -416,7 +390,11 @@ async function persistScannerOutcomes(input: {
     const score = calculateScannerScore(
       openFindings.map((entry) => entry.finding),
     )
-    scoreInputs.push({ scanner, score })
+    scoreInputs.push({
+      scanner,
+      score,
+      findings: openFindings.map((entry) => entry.finding),
+    })
 
     const fixPrompt = buildFixPrompt({
       scanner,
@@ -529,10 +507,7 @@ async function persistDependencyAudit(input: {
   readonly finishedAt: Date
 }): Promise<{
   readonly counts: FindingCounts
-  readonly scoreInput: {
-    readonly scanner: { readonly id: string; readonly weight: number }
-    readonly score: number | null
-  }
+  readonly scoreInput: ScannerScoreInput
   readonly failed: boolean
 }> {
   const scanner = input.scanner
@@ -635,7 +610,11 @@ async function persistDependencyAudit(input: {
 
   return {
     counts: reconciled.counts,
-    scoreInput: { scanner, score },
+    scoreInput: {
+      scanner,
+      score,
+      findings: openFindings.map((entry) => entry.finding),
+    },
     failed,
   }
 }

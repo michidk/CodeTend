@@ -204,6 +204,7 @@ export const scanRequestSchema = z.object({
       id: z.string().min(1),
       name: z.string().min(1),
       prompt: z.string(),
+      securityReview: z.enum(['application', 'ci']).optional(),
       executionProfile: agentExecutionProfileSchema,
       hypotheses: z.array(
         z.object({

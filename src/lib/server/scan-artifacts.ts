@@ -77,6 +77,7 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
       rootCause: occurrence.rootCause,
       codeEvidence: occurrence.codeEvidence,
       attackPath: occurrence.attackPath,
+      exploitability: occurrence.exploitability,
       validation: validationByFinding.get(occurrence.findingId) ?? null,
       remediation: occurrence.finding.recommendation,
       remediationTests: occurrence.finding.remediationTests,
@@ -165,7 +166,7 @@ export async function sealScanArtifacts(scanId: number): Promise<void> {
     mode: scan.mode,
     maxInputTokens: scan.maxInputTokens,
     model: scan.model,
-    scannerVersions: { contract: '2' },
+    scannerVersions: { contract: '3', prompts: '3', scoring: '2' },
     artifactHashes,
     createdAt: new Date().toISOString(),
   }

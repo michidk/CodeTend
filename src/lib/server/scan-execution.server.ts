@@ -339,6 +339,7 @@ async function prepareScanExecution(scanId: number, repository: Repository) {
       id: scanner.id,
       name: scanner.name,
       prompt: scanner.prompt,
+      securityReview: scanner.securityReview,
       executionProfile: {
         model: scanner.model ?? scanConfiguration.requestedModel,
         effort: scanner.effort ?? scanConfiguration.requestedEffort,

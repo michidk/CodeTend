@@ -169,6 +169,11 @@ export function planFindingTransitions(
         ? byId.get(fresh.previousFindingId)
         : undefined) ?? byFingerprint.get(fresh.fingerprint)
 
+    // A contradictory fresh result must not turn a deferred precheck into
+    // confirmation, change its severity, or invalidate a manual disposition.
+    if (previous && verdictById.get(previous.id)?.verdict === 'deferred')
+      continue
+
     if (!previous || touched.has(previous.id)) {
       plans.push({
         kind: 'insert',
@@ -254,6 +259,7 @@ export function planFindingTransitions(
     const verdict = verdictById.get(previous.id)
     if (
       previous.disposition !== null &&
+      verdict?.verdict !== 'deferred' &&
       verdict?.dispositionStillApplies === false
     ) {
       touched.add(previous.id)
@@ -279,7 +285,8 @@ export function planFindingTransitions(
     if (!OPEN_FINDING_STATES.includes(previous.state)) continue
 
     if (
-      (verdict?.verdict === 'resolved' || input.authoritative === true) &&
+      (verdict?.verdict === 'resolved' ||
+        (input.authoritative === true && verdict?.verdict !== 'deferred')) &&
       resolutionIsCovered(input, previous, verdict?.verdict === 'resolved')
     ) {
       plans.push({
@@ -293,7 +300,12 @@ export function planFindingTransitions(
         resolvedScan: 'set',
         eventKind: 'resolved',
         note:
-          verdict?.note ??
+          (verdict?.resolutionReason === 'duplicate' &&
+          verdict.duplicateOfFingerprint
+            ? `Duplicate of ${verdict.duplicateOfScannerId ?? input.scannerId}/${verdict.duplicateOfFingerprint}. ${verdict.note ?? ''}`
+            : verdict?.resolutionReason === 'false-positive'
+              ? `Prior false positive corrected: ${verdict.note ?? ''}`
+              : verdict?.note) ??
           'Not reported by a scanner that verified every other hypothesis in a covered target.',
         countState: 'resolved',
         includeInResult: false,
@@ -325,7 +337,7 @@ export function planFindingTransitions(
       previous,
       finding: toScannerFinding(previous),
       fingerprint: previous.fingerprint,
-      state: 'active',
+      state: verdict?.verdict === 'deferred' ? previous.state : 'active',
       updateMode: 'state-only',
       updateLastSeen: false,
       resolvedScan: 'preserve',
@@ -333,8 +345,10 @@ export function planFindingTransitions(
       note:
         verdict?.verdict === 'resolved'
           ? 'Carried forward: the resolved verdict was outside the configured target.'
-          : 'Carried forward: this bounded investigation did not explicitly verify the finding.',
-      countState: 'active',
+          : verdict?.verdict === 'deferred'
+            ? `Deferred: ${verdict.note ?? 'Not verified within this investigation.'}`
+            : 'Carried forward: this bounded investigation did not explicitly verify the finding.',
+      countState: verdict?.verdict === 'deferred' ? previous.state : 'active',
       includeInResult: true,
     })
   }
@@ -448,6 +462,7 @@ function toScannerFinding(finding: Finding): EnrichedScannerFinding {
     locations: finding.locations,
     classification: finding.classification ?? undefined,
     securityContext: finding.securityContext ?? undefined,
+    exploitability: finding.exploitability ?? undefined,
     rootCause: finding.rootCause ?? undefined,
     codeEvidence: finding.codeEvidence ?? undefined,
     attackPath: finding.attackPath ?? undefined,
@@ -465,7 +480,7 @@ function toScannerFinding(finding: Finding): EnrichedScannerFinding {
 function nextStateForMatch(
   previous: Finding,
   fresh: EnrichedScannerFinding,
-  verdict: 'confirmed' | 'improved' | 'resolved' | undefined,
+  verdict: 'confirmed' | 'improved' | 'resolved' | 'deferred' | undefined,
 ): FindingState {
   const previousRank = SEVERITY_ORDER[previous.severity]
   const freshRank = SEVERITY_ORDER[fresh.severity]
@@ -502,6 +517,7 @@ function findingColumns(fresh: EnrichedScannerFinding) {
     locations: fresh.locations,
     classification: fresh.classification ?? null,
     securityContext: fresh.securityContext ?? null,
+    exploitability: fresh.exploitability ?? null,
     rootCause: fresh.rootCause ?? null,
     codeEvidence: fresh.codeEvidence ?? null,
     attackPath: fresh.attackPath ?? null,
@@ -535,6 +551,7 @@ async function recordOccurrenceWithDatabase(
       evidence: [...fresh.evidence],
       classification: fresh.classification ?? null,
       securityContext: fresh.securityContext ?? null,
+      exploitability: fresh.exploitability ?? null,
       rootCause: fresh.rootCause ?? null,
       codeEvidence: fresh.codeEvidence ?? null,
       attackPath: fresh.attackPath ?? null,

@@ -152,3 +152,44 @@ describe('security exploitability review', () => {
     expect(reviewed.findings[0]?.exploitability.verdict).toBe('not-confirmed')
   })
 })
+
+test('CI review uses workflow sources and privileged sinks without assuming repository settings', () => {
+  const message = exploitabilityReviewMessage({
+    scannerId: 'ci-security',
+    securityReview: 'ci',
+    repoPath: '/repo',
+    repositoryName: 'fixture',
+    findings: [],
+    validations: [],
+  })
+  expect(message).toContain('(id: ci-security)')
+  expect(message).toContain('reusable/local actions')
+  expect(message).toContain('Do not infer effective repository settings')
+  const result = applyExploitabilityReview(
+    { findings: [finding] },
+    {
+      assessments: [
+        {
+          fingerprint: finding.fingerprint,
+          verdict: 'confirmed',
+          rationale: 'The issue title reaches a privileged shell.',
+          inspectedEvidence: [
+            {
+              path: '.github/workflows/issue.yml',
+              role: 'source',
+              summary: 'The trigger accepts an external issue title.',
+            },
+            {
+              path: '.github/workflows/issue.yml',
+              role: 'sink',
+              summary:
+                'The title is interpolated in a shell with a write token.',
+            },
+          ],
+        },
+      ],
+    },
+    ['.github/workflows/issue.yml'],
+  )
+  expect(result.findings[0]?.exploitability.verdict).toBe('confirmed')
+})

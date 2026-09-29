@@ -23,6 +23,7 @@
     "lint": "biome lint .",
     "lint:deadcode": "knip",
     "test": "bun test",
+    "eval:scanners": "bun run scripts/evaluate-scanners.ts",
     "test:database": "bun run scripts/database-smoke.ts",
     "verify": "bun run check && bun run test && bun run typecheck && bun run build && bun run eve:typecheck && bun run lint:deadcode",
     "db:generate": "drizzle-kit generate",

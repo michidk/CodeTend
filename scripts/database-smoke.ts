@@ -531,7 +531,7 @@ try {
     `
     await client`
       insert into scanner_runs (scan_id, scanner_id, status, started_at)
-      values (${ingestionScan.id}, 'reliability', 'running', now())
+      values (${ingestionScan.id}, 'ci-security', 'running', now())
     `
     const ingestionFinding = {
       ...finding,
@@ -539,7 +539,7 @@ try {
       title: 'Checkpoint result idempotency',
     }
     const ingestionOutcome = {
-      scannerId: 'reliability',
+      scannerId: 'ci-security',
       status: 'completed' as const,
       result: scannerResult([ingestionFinding]),
       startedAt: new Date().toISOString(),
@@ -614,14 +614,58 @@ try {
       updatedAt: new Date().toISOString(),
     }
     await persistScanCheckpoint(ingestionScan.id, repositoryRecord, checkpoint)
+    const [checkpointState] = await client<[{ count: number }]>`
+      select count(*)::int as count from finding_occurrences where scan_id = ${ingestionScan.id}
+    `
+    if (checkpointState.count !== 0)
+      throw new Error('Unreviewed checkpoint findings were published')
     const finalResult: ScanResult = {
       ...checkpoint,
+      scanners: [
+        {
+          ...ingestionOutcome,
+          result: {
+            ...ingestionOutcome.result,
+            findings: [
+              {
+                ...ingestionFinding,
+                severity: 'critical',
+                confidence: 'high',
+                exploitability: {
+                  verdict: 'confirmed',
+                  rationale:
+                    'Workflow source reaches a privileged execution sink.',
+                },
+              },
+            ],
+          },
+        },
+      ],
       investigation: scannerResult([]).investigation,
       coverage: scannerResult([]).coverage,
       validations: [],
       finishedAt: new Date().toISOString(),
     }
     await persistScanResult(ingestionScan.id, repositoryRecord, finalResult)
+    await persistScanResult(ingestionScan.id, repositoryRecord, finalResult)
+    const [reviewedState] = await client<
+      [{ verdict: string; priority: string; score: number; grade: string }]
+    >`
+      select f.exploitability ->> 'verdict' as verdict, f.priority,
+        s.overall_score as score, s.grade
+      from findings f join scans s on s.id = ${ingestionScan.id}
+      where f.repository_id = ${lifecycleRepository.id} and f.fingerprint = ${ingestionFinding.fingerprint}
+    `
+    if (
+      reviewedState.verdict !== 'confirmed' ||
+      !reviewedState.priority ||
+      reviewedState.score !== 39 ||
+      reviewedState.grade !== 'F'
+    ) {
+      throw new Error(
+        'Reviewed CI evidence, priority enrichment or critical score cap was lost during ingestion',
+      )
+    }
     const [persistedGitNexus] = await client<
       [{ gitnexusUsed: boolean; gitnexusIndex: typeof gitnexusIndex }]
     >`
@@ -650,7 +694,7 @@ try {
           where finding_id = findings.id) as events
       from findings
       where repository_id = ${lifecycleRepository.id}
-        and scanner_id = 'reliability'
+        and scanner_id = 'ci-security'
         and fingerprint = ${ingestionFinding.fingerprint}
     `
     if (

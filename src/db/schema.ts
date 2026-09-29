@@ -25,6 +25,7 @@ import type {
   FindingLocation,
   FindingPriority,
   FindingState,
+  ScannerFinding,
   SecurityContext,
   Severity,
   ValidationCommandResult,
@@ -409,6 +410,10 @@ export const findings = pgTable(
       .default([]),
     classification: jsonb('classification').$type<FindingClassification>(),
     securityContext: jsonb('security_context').$type<SecurityContext>(),
+    exploitability:
+      jsonb('exploitability').$type<
+        NonNullable<ScannerFinding['exploitability']>
+      >(),
     rootCause: text('root_cause'),
     codeEvidence: jsonb('code_evidence').$type<CodeEvidence[]>(),
     attackPath: jsonb('attack_path').$type<AttackPath>(),
@@ -469,6 +474,10 @@ export const findingOccurrences = pgTable(
       .default([]),
     classification: jsonb('classification').$type<FindingClassification>(),
     securityContext: jsonb('security_context').$type<SecurityContext>(),
+    exploitability:
+      jsonb('exploitability').$type<
+        NonNullable<ScannerFinding['exploitability']>
+      >(),
     rootCause: text('root_cause'),
     codeEvidence: jsonb('code_evidence').$type<CodeEvidence[]>(),
     attackPath: jsonb('attack_path').$type<AttackPath>(),

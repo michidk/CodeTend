@@ -57,12 +57,12 @@ agent.
   Consistency / Vibe Debt, AI Slop & Noise, Dependencies & Build Health,
   Vulnerable Dependencies, CI & GitHub Actions Security and Security Hygiene.
   Each scanner's prompt says
-  what it owns and what its neighbours own, so nothing is reported twice.
+  what it owns and what its neighbours own. A bounded independent review consolidates verified cross-scanner duplicates before scoring.
 - 📐 **Numbers the model never touches.** Every scanner starts at 100 and
   loses a fixed penalty per open finding scaled by confidence. Grades A–F
-  follow fixed thresholds. The LLM proposes findings, never scores.
+  follow fixed thresholds. A high-confidence critical open finding caps the overall score at 39/F; security findings require independently confirmed exploitability. The LLM proposes findings, never scores.
 - 🔁 **Findings with a lifecycle.** A finding is a stable fingerprint, not a
-  line number. On every rescan the scanner must re-verify each open finding,
+  line number. On every rescan the scanner verifies open findings within its budget and explicitly defers those it cannot verify,
   and the app derives `new → active → improved → resolved → regressed` from
   its own persisted results. Resolution requires an explicit re-verification
   verdict and is never inferred from absence in a bounded scan.
