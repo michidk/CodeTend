@@ -4,6 +4,7 @@ import {
   executionProfileMarker,
   readExecutionProfileMarker,
   resolveExecutionProfile,
+  willQueueExecution,
 } from '@/lib/agent-execution'
 
 describe('agent execution profiles', () => {
@@ -31,5 +32,11 @@ describe('execution queue capacity', () => {
     expect(availableQueueCapacity(3, 1)).toBe(2)
     expect(availableQueueCapacity(3, 3)).toBe(0)
     expect(availableQueueCapacity(3, 5)).toBe(0)
+  })
+
+  test('reports when new work must wait for an execution slot', () => {
+    expect(willQueueExecution(2, 1, 0)).toBe(false)
+    expect(willQueueExecution(2, 2, 0)).toBe(true)
+    expect(willQueueExecution(2, 1, 1)).toBe(true)
   })
 })

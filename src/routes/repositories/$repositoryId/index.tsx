@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-router'
 import {
   ChevronRight,
+  ListPlus,
   Pencil,
   Play,
   Shield,
@@ -189,8 +190,18 @@ function RepositoryPage() {
               onClick={() => setScanDialogOpen(true)}
               disabled={running !== null}
             >
-              <Play className="size-4" aria-hidden="true" />
-              {running ? 'Scanning…' : 'Scan now'}
+              {!running && detail.scanWillQueue ? (
+                <ListPlus className="size-4" aria-hidden="true" />
+              ) : (
+                <Play className="size-4" aria-hidden="true" />
+              )}
+              {running
+                ? running.status === 'queued'
+                  ? 'Queued…'
+                  : 'Scanning…'
+                : detail.scanWillQueue
+                  ? 'Add to queue'
+                  : 'Scan now'}
             </Button>
             <Button variant="outline" asChild>
               <Link
@@ -480,6 +491,7 @@ function RepositoryPage() {
       </Dialog>
       <ScanDialog
         repositoryId={repository.id}
+        willQueue={detail.scanWillQueue}
         open={scanDialogOpen}
         onOpenChange={setScanDialogOpen}
         onStarted={() => router.invalidate()}

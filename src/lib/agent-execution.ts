@@ -34,6 +34,18 @@ export function availableQueueCapacity(
   return Math.max(0, maximumConcurrency - activeCount)
 }
 
+/** Whether newly submitted work must wait behind the durable FIFO queue. */
+export function willQueueExecution(
+  maximumConcurrency: number,
+  runningCount: number,
+  queuedCount: number,
+): boolean {
+  return (
+    queuedCount > 0 ||
+    availableQueueCapacity(maximumConcurrency, runningCount) === 0
+  )
+}
+
 const PROFILE_PREFIX = '[codetend-execution-profile]'
 
 /** Carries a persisted job profile into Eve's dynamic model resolver. */

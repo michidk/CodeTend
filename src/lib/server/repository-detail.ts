@@ -10,6 +10,7 @@ import {
   scannerRuns,
   scans,
 } from '@/db/schema'
+import { willQueueExecution } from '@/lib/agent-execution'
 import {
   OPEN_FINDING_STATES,
   PRIORITY_ORDER,
@@ -73,24 +74,28 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       where: eq(repositories.id, repositoryId),
     })
     if (!repository) return null
-    const scheduleSettings = await ensureScheduleSettingsRow()
-
-    const history = await db.query.scans.findMany({
-      where: eq(scans.repositoryId, repositoryId),
-      orderBy: [desc(scans.createdAt)],
-      limit: HISTORY_LIMIT,
-      columns: SCAN_HISTORY_COLUMNS,
-      with: {
-        scannerRuns: {
-          columns: {
-            scannerId: true,
-            scannerDefinition: true,
-            score: true,
-            status: true,
+    const [scheduleSettings, history, runningScanCount, queuedScanCount] =
+      await Promise.all([
+        ensureScheduleSettingsRow(),
+        db.query.scans.findMany({
+          where: eq(scans.repositoryId, repositoryId),
+          orderBy: [desc(scans.createdAt)],
+          limit: HISTORY_LIMIT,
+          columns: SCAN_HISTORY_COLUMNS,
+          with: {
+            scannerRuns: {
+              columns: {
+                scannerId: true,
+                scannerDefinition: true,
+                score: true,
+                status: true,
+              },
+            },
           },
-        },
-      },
-    })
+        }),
+        db.$count(scans, eq(scans.status, 'running')),
+        db.$count(scans, eq(scans.status, 'queued')),
+      ])
 
     const latest =
       history.find(
@@ -185,6 +190,11 @@ export const getRepositoryDetail = createServerFn({ method: 'GET' })
       },
       latestScan: latest,
       runningScan: running,
+      scanWillQueue: willQueueExecution(
+        scheduleSettings.scanConcurrency,
+        runningScanCount,
+        queuedScanCount,
+      ),
       scannerRuns: latest?.scannerRuns ?? [],
       scanners: enabledScanners,
       scannerLabels: Object.fromEntries([

@@ -9,6 +9,7 @@ import {
   scans,
   scheduledRepositoryQueue,
 } from '@/db/schema'
+import { willQueueExecution } from '@/lib/agent-execution'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
@@ -142,6 +143,11 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
     const runningByRepository = new Map(
       activeScans.map((scan) => [scan.repositoryId, scan]),
     )
+    const scanWillQueue = willQueueExecution(
+      scheduleSettings.scanConcurrency,
+      activeScans.filter((scan) => scan.status === 'running').length,
+      activeScans.filter((scan) => scan.status === 'queued').length,
+    )
 
     return rows.map((repository) => {
       const repositoryScans = scanHistory.filter(
@@ -163,6 +169,7 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(
         scoreDelta: delta,
         activeFindings: openByRepository.get(repository.id) ?? 0,
         runningScan: runningByRepository.get(repository.id) ?? null,
+        scanWillQueue,
         schedule: {
           enabled: scheduleSettings.enabled && repository.scheduleEnabled,
           mode:

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { FolderGit2, Play } from 'lucide-react'
+import { FolderGit2, ListPlus, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import {
@@ -44,7 +44,11 @@ function DashboardPage() {
       await triggerScan({
         data: { repositoryId: row.id },
       })
-      toast.success(`Scan started for ${row.name}`)
+      toast.success(
+        row.scanWillQueue
+          ? `Scan added to queue for ${row.name}`
+          : `Scan started for ${row.name}`,
+      )
       await router.invalidate()
     } catch (error) {
       toast.error(getErrorMessage(error, 'Could not start the scan'))
@@ -177,8 +181,18 @@ function RepositoryCard({
             onClick={onScanNow}
             disabled={row.runningScan !== null}
           >
-            <Play className="size-4" aria-hidden="true" />
-            {row.runningScan ? 'Scanning…' : 'Scan now'}
+            {!row.runningScan && row.scanWillQueue ? (
+              <ListPlus className="size-4" aria-hidden="true" />
+            ) : (
+              <Play className="size-4" aria-hidden="true" />
+            )}
+            {row.runningScan
+              ? row.runningScan.status === 'queued'
+                ? 'Queued…'
+                : 'Scanning…'
+              : row.scanWillQueue
+                ? 'Add to queue'
+                : 'Scan now'}
           </Button>
           <Button size="sm" variant="outline" asChild>
             <Link

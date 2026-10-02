@@ -23,11 +23,13 @@ import { triggerConfiguredScan } from '@/lib/server/repositories'
 
 export function ScanDialog({
   repositoryId,
+  willQueue,
   open,
   onOpenChange,
   onStarted,
 }: {
   readonly repositoryId: number
+  readonly willQueue: boolean
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onStarted: () => Promise<void>
@@ -81,7 +83,7 @@ export function ScanDialog({
           maxCostUsd: parsedCost,
         },
       })
-      toast.success('Scan started')
+      toast.success(willQueue ? 'Scan added to queue' : 'Scan started')
       onOpenChange(false)
       await onStarted()
     } catch (error) {
@@ -210,7 +212,13 @@ export function ScanDialog({
             Cancel
           </Button>
           <Button onClick={() => void start()} disabled={submitting}>
-            {submitting ? 'Starting…' : 'Start scan'}
+            {submitting
+              ? willQueue
+                ? 'Adding…'
+                : 'Starting…'
+              : willQueue
+                ? 'Add to queue'
+                : 'Start scan'}
           </Button>
         </DialogFooter>
       </DialogContent>
