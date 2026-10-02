@@ -8,7 +8,7 @@
       "esbuild": "^0.28.0"
     },
     "eve": {
-      "undici": "8.10.2"
+      "undici": "8.11.2"
     }
   },
   "scripts": {
@@ -52,7 +52,7 @@
     "clsx": "^2.1.1",
     "cron-parser": "^5.10.1",
     "drizzle-orm": "^0.45.2",
-    "eve": "0.63.0",
+    "eve": "0.70.1",
     "jose": "^6",
     "lucide-react": "^1.46.0",
     "postgres": "^3.4.9",

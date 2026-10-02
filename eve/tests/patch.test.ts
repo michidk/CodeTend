@@ -242,9 +242,29 @@ describe('generated patch boundary', () => {
           join(dataDir, 'requests', `patch-${patchId}.json`),
           JSON.stringify(request),
         )
-        const execution = runFix.execute({ patchId }, { agent } as Parameters<
-          typeof runFix.execute
-        >[1])
+        const context = {
+          agent: () => ({
+            send: async () => ({
+              result: async () => {
+                try {
+                  return {
+                    data: await agent(),
+                    status: 'completed' as const,
+                  }
+                } catch (error) {
+                  return {
+                    error: {
+                      message:
+                        error instanceof Error ? error.message : String(error),
+                    },
+                    status: 'failed' as const,
+                  }
+                }
+              },
+            }),
+          }),
+        } as Parameters<typeof runFix.execute>[1]
+        const execution = runFix.execute({ patchId }, context)
         for await (const _progress of execution) {
           // Exhaust the real workflow generator so its durable steps run.
         }
