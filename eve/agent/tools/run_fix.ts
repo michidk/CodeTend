@@ -109,10 +109,20 @@ export default defineWorkflowTool({
       const workspace = await clonePatchRepository(request)
       const repoPath = sandboxRepoPath(workspace.name)
       yield { phase: 'generating patch' }
-      const output = await ctx.agent('fixer', {
-        outputSchema: fixerOutputSchema,
-        message: `${executionProfileMarker(request.executionProfile)}\n${patchMessage(request, repoPath)}`,
-      })
+      const response = await ctx
+        .agent('fixer')
+        .send(
+          `${executionProfileMarker(request.executionProfile)}\n${patchMessage(request, repoPath)}`,
+          {
+            signal: ctx.abortSignal,
+            outputSchema: fixerOutputSchema,
+          },
+        )
+      const result = await response.result()
+      if (result.status === 'failed') {
+        throw new Error(result.error?.message ?? 'Fixer agent failed.')
+      }
+      const output = result.data
       if (!output || typeof output !== 'object') {
         throw new Error('Fixer returned no structured patch.')
       }

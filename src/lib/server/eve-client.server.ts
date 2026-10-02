@@ -86,9 +86,7 @@ export async function startEvePatchSession(
 export async function cancelEveScanSession(
   sessionId: string,
 ): Promise<'accepted' | 'no_active_turn'> {
-  const result = await getEveClient()
-    .sessions.attach(sessionId)
-    .cancel({ tasks: true })
+  const result = await getEveClient().sessions.attach(sessionId).cancel()
   return result.status
 }
 

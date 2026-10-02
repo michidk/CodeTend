@@ -128,11 +128,19 @@ export default defineWorkflowTool({
 
     const prepared = yield* prepareScanWorkflow({
       scanId,
-      runKnowledgeAgent: (request, message) =>
-        ctx.agent('knowledge', {
-          message: `${executionProfileMarker(request.executionProfile)}\n${message}`,
-          outputSchema: knowledgeOutputSchema,
-        }),
+      runKnowledgeAgent: async (request, message) => {
+        const response = await ctx
+          .agent('knowledge')
+          .send(
+            `${executionProfileMarker(request.executionProfile)}\n${message}`,
+            { signal: ctx.abortSignal, outputSchema: knowledgeOutputSchema },
+          )
+        const result = await response.result()
+        if (result.status === 'failed') {
+          throw new Error(result.error?.message ?? 'Knowledge agent failed.')
+        }
+        return result.data
+      },
     })
     const {
       request,
@@ -162,11 +170,22 @@ export default defineWorkflowTool({
       dependencyAudit: prepared.dependencyAudit,
       completed,
       total,
-      runAgent: (scanner, message) =>
-        ctx.agent('scanner', {
-          message: `${executionProfileMarker(scanner.executionProfile)}\n${message}`,
-          outputSchema: request.outputSchema as JsonObject,
-        }),
+      runAgent: async (scanner, message) => {
+        const response = await ctx
+          .agent('scanner')
+          .send(
+            `${executionProfileMarker(scanner.executionProfile)}\n${message}`,
+            {
+              signal: ctx.abortSignal,
+              outputSchema: request.outputSchema as JsonObject,
+            },
+          )
+        const result = await response.result()
+        if (result.status === 'failed') {
+          throw new Error(result.error?.message ?? 'Scanner agent failed.')
+        }
+        return result.data
+      },
     })
     const outcomes = scannerExecution.outcomes
     completed = scannerExecution.completed
@@ -184,8 +203,17 @@ export default defineWorkflowTool({
       outcomes,
       completed,
       total,
-      runReviewAgent: (message, outputSchema) =>
-        ctx.agent('scanner', { message, outputSchema }),
+      runReviewAgent: async (message, outputSchema) => {
+        const response = await ctx.agent('scanner').send(message, {
+          signal: ctx.abortSignal,
+          outputSchema,
+        })
+        const result = await response.result()
+        if (result.status === 'failed') {
+          throw new Error(result.error?.message ?? 'Review agent failed.')
+        }
+        return result.data
+      },
     })
     completed = finalized.completed
 
