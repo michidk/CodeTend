@@ -6,6 +6,9 @@
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.28.0"
+    },
+    "eve": {
+      "undici": "8.10.2"
     }
   },
   "scripts": {
