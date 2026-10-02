@@ -88,20 +88,31 @@ agent.
 
 ## 🔄 How it works
 
-```text
-schedule / "Scan now"
-        │
-        ▼
- app creates a scan row and hands it to the Eve agent runtime
-        │
-        ▼
- Eve run_scan workflow (durable, resumable)
-        │   fresh shallow clone → optional GitNexus index → OSV dependency audit
-        │   → repository knowledge (refreshed only when grounding files changed)
-        │   → subsystem dependency graph → budgeted file sample
-        │   → parallel scanner subagents (structured output) → isolated validation
-        ▼
- app enriches, prioritizes, reconciles, scores, persists and seals SARIF/Markdown artifacts
+```mermaid
+flowchart TB
+    subgraph INTAKE["1 · CodeTend app — intake"]
+        direction LR
+        TRIGGER["Schedule or Scan now"] --> QUEUE["Create scan and enqueue it"]
+    end
+
+    QUEUE -->|authenticated request| RUN
+
+    subgraph EVE["2 · Eve runtime — clones, sandboxes and model calls"]
+        direction LR
+        RUN["Durable, resumable scan"] --> PREP["Clone and build context<br/>GitNexus · knowledge · dependency graph<br/>budgeted file sample"]
+        PREP --> SCANNERS["15 specialized scanners in parallel<br/>with isolated executable validation"]
+        PREP --> OSV["OSV audit of exact<br/>lockfile versions"]
+        SCANNERS --> BUNDLE["Structured evidence<br/>coverage and cost usage"]
+        OSV --> BUNDLE
+    end
+
+    BUNDLE -->|sealed scan result| PROCESS
+
+    subgraph RESULTS["3 · CodeTend app — results in PostgreSQL"]
+        direction LR
+        PROCESS["Enrich and prioritize<br/>Reconcile duplicates<br/>Score deterministically"]
+        PROCESS --> OUTPUTS["Dashboard and finding lifecycle<br/>Fix prompts · SARIF · Markdown"]
+    end
 ```
 
 The app and the [Eve](https://eve.dev) runtime are separate processes sharing
