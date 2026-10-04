@@ -84,7 +84,7 @@ const config = defineConfig({
         },
       },
     }),
-    nitro({ preset: 'bun' }),
+    nitro({ preset: 'bun', plugins: ['./src/server-plugins/scheduler.ts'] }),
     viteReact(),
   ],
 })
