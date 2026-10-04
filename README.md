@@ -86,42 +86,6 @@ agent.
   Codex and other clients inspect repositories, scans, findings, and knowledge;
   a separate owner-approved scope can start or cancel scans.
 
-## 🔄 How it works
-
-```mermaid
-flowchart TB
-    subgraph INTAKE["1 · CodeTend app — intake"]
-        direction LR
-        TRIGGER["Schedule or Scan now"] --> QUEUE["Create scan and enqueue it"]
-    end
-
-    QUEUE -->|authenticated request| RUN
-
-    subgraph EVE["2 · Eve runtime — clones, sandboxes and model calls"]
-        direction LR
-        RUN["Durable, resumable scan"] --> PREP["Clone and build context<br/>GitNexus · knowledge · dependency graph<br/>budgeted file sample"]
-        PREP --> SCANNERS["15 specialized scanners in parallel<br/>with isolated executable validation"]
-        PREP --> OSV["OSV audit of exact<br/>lockfile versions"]
-        SCANNERS --> BUNDLE["Structured evidence<br/>coverage and cost usage"]
-        OSV --> BUNDLE
-    end
-
-    BUNDLE -->|sealed scan result| PROCESS
-
-    subgraph RESULTS["3 · CodeTend app — results in PostgreSQL"]
-        direction LR
-        PROCESS["Enrich and prioritize<br/>Reconcile duplicates<br/>Score deterministically"]
-        PROCESS --> OUTPUTS["Dashboard and finding lifecycle<br/>Fix prompts · SARIF · Markdown"]
-    end
-```
-
-The app and the [Eve](https://eve.dev) runtime are separate processes sharing
-a data directory and an authenticated HTTP link. The app owns PostgreSQL; Eve
-owns clones, read-only sandboxes and model calls. Scanners get `read_file`,
-`glob`, `grep`, a virtual shell, and optionally
-[GitNexus](https://github.com/abhigyanpatwari/GitNexus) code-intelligence
-tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
-
 ## 🖥️ Using it
 
 <p align="center">
@@ -176,6 +140,42 @@ findings. Use **Settings → AI access (MCP)** to pause access, enable individua
 tools, or revoke a client. See
 [configuration](docs/configuration.md#oauth-protected-mcp) for the proxy and
 security boundary.
+
+## 🔄 How it works
+
+```mermaid
+flowchart TB
+    subgraph INTAKE["1 · CodeTend app — intake"]
+        direction LR
+        TRIGGER["Schedule or Scan now"] --> QUEUE["Create scan and enqueue it"]
+    end
+
+    QUEUE -->|authenticated request| RUN
+
+    subgraph EVE["2 · Eve runtime — clones, sandboxes and model calls"]
+        direction LR
+        RUN["Durable, resumable scan"] --> PREP["Clone and build context<br/>GitNexus · knowledge · dependency graph<br/>budgeted file sample"]
+        PREP --> SCANNERS["15 specialized scanners in parallel<br/>with isolated executable validation"]
+        PREP --> OSV["OSV audit of exact<br/>lockfile versions"]
+        SCANNERS --> BUNDLE["Structured evidence<br/>coverage and cost usage"]
+        OSV --> BUNDLE
+    end
+
+    BUNDLE -->|sealed scan result| PROCESS
+
+    subgraph RESULTS["3 · CodeTend app — results in PostgreSQL"]
+        direction LR
+        PROCESS["Enrich and prioritize<br/>Reconcile duplicates<br/>Score deterministically"]
+        PROCESS --> OUTPUTS["Dashboard and finding lifecycle<br/>Fix prompts · SARIF · Markdown"]
+    end
+```
+
+The app and the [Eve](https://eve.dev) runtime are separate processes sharing
+a data directory and an authenticated HTTP link. The app owns PostgreSQL; Eve
+owns clones, read-only sandboxes and model calls. Scanners get `read_file`,
+`glob`, `grep`, a virtual shell, and optionally
+[GitNexus](https://github.com/abhigyanpatwari/GitNexus) code-intelligence
+tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 
 ## 🧱 Tech stack
 
