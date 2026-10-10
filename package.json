@@ -2,7 +2,7 @@
   "name": "codetend",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.3",
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.28.0"
@@ -52,7 +52,7 @@
     "clsx": "^2.1.1",
     "cron-parser": "^5.10.1",
     "drizzle-orm": "^0.45.2",
-    "eve": "0.71.0",
+    "eve": "0.76.2",
     "jose": "^6",
     "lucide-react": "^1.46.0",
     "postgres": "^3.4.9",
