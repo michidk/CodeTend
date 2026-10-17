@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   isScheduleDispatchReady,
-  selectNextDistributedRepositoryId,
+  compareByLastScan,
 } from '@/lib/scheduled-queue'
 
 describe('scheduled repository queue', () => {
@@ -24,10 +24,15 @@ describe('scheduled repository queue', () => {
     expect(isScheduleDispatchReady(now, 0, now)).toBe(true)
   })
 
-  test('rotates distributed scans through repository ids and wraps', () => {
-    expect(selectNextDistributedRepositoryId([9, 2, 5], null)).toBe(2)
-    expect(selectNextDistributedRepositoryId([9, 2, 5], 2)).toBe(5)
-    expect(selectNextDistributedRepositoryId([9, 2, 5], 9)).toBe(2)
-    expect(selectNextDistributedRepositoryId([], 9)).toBeNull()
+  test('puts never-scanned repositories first, then the stalest', () => {
+    const repos = [
+      { id: 1, lastScanAt: new Date('2026-09-13T00:00:00Z') },
+      { id: 2, lastScanAt: new Date('2026-09-01T00:00:00Z') },
+      { id: 4, lastScanAt: null },
+      { id: 3, lastScanAt: null },
+    ]
+    expect(repos.sort(compareByLastScan).map((repo) => repo.id)).toEqual([
+      3, 4, 2, 1,
+    ])
   })
 })
