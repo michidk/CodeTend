@@ -18,6 +18,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as RepositoriesRepositoryIdIndexRouteImport } from './routes/repositories/$repositoryId/index'
 import { Route as RepositoriesNewIndexRouteImport } from './routes/repositories/new/index'
 import { Route as ScansScanIdIndexRouteImport } from './routes/scans/$scanId/index'
+import { Route as SettingsMcpIndexRouteImport } from './routes/settings/mcp/index'
 import { Route as ApiPatchesPatchIdIndexRouteImport } from './routes/api/patches/$patchId/index'
 import { Route as RepositoriesRepositoryIdEditIndexRouteImport } from './routes/repositories/$repositoryId/edit/index'
 import { Route as RepositoriesRepositoryIdKnowledgeIndexRouteImport } from './routes/repositories/$repositoryId/knowledge/index'
@@ -71,6 +72,11 @@ const ScansScanIdIndexRoute = ScansScanIdIndexRouteImport.update({
   path: '/scans/$scanId/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsMcpIndexRoute = SettingsMcpIndexRouteImport.update({
+  id: '/settings/mcp/',
+  path: '/settings/mcp/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPatchesPatchIdIndexRoute = ApiPatchesPatchIdIndexRouteImport.update({
   id: '/api/patches/$patchId/',
   path: '/api/patches/$patchId/',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new/': typeof RepositoriesNewIndexRoute
   '/scans/$scanId/': typeof ScansScanIdIndexRoute
+  '/settings/mcp/': typeof SettingsMcpIndexRoute
   '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
   '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/repositories/$repositoryId': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new': typeof RepositoriesNewIndexRoute
   '/scans/$scanId': typeof ScansScanIdIndexRoute
+  '/settings/mcp': typeof SettingsMcpIndexRoute
   '/api/patches/$patchId': typeof ApiPatchesPatchIdIndexRoute
   '/repositories/$repositoryId/edit': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new/': typeof RepositoriesNewIndexRoute
   '/scans/$scanId/': typeof ScansScanIdIndexRoute
+  '/settings/mcp/': typeof SettingsMcpIndexRoute
   '/api/patches/$patchId/': typeof ApiPatchesPatchIdIndexRoute
   '/repositories/$repositoryId/edit/': typeof RepositoriesRepositoryIdEditIndexRoute
   '/repositories/$repositoryId/knowledge/': typeof RepositoriesRepositoryIdKnowledgeIndexRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/repositories/$repositoryId/'
     | '/repositories/new/'
     | '/scans/$scanId/'
+    | '/settings/mcp/'
     | '/api/patches/$patchId/'
     | '/repositories/$repositoryId/edit/'
     | '/repositories/$repositoryId/knowledge/'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/repositories/$repositoryId'
     | '/repositories/new'
     | '/scans/$scanId'
+    | '/settings/mcp'
     | '/api/patches/$patchId'
     | '/repositories/$repositoryId/edit'
     | '/repositories/$repositoryId/knowledge'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/repositories/$repositoryId/'
     | '/repositories/new/'
     | '/scans/$scanId/'
+    | '/settings/mcp/'
     | '/api/patches/$patchId/'
     | '/repositories/$repositoryId/edit/'
     | '/repositories/$repositoryId/knowledge/'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   RepositoriesRepositoryIdIndexRoute: typeof RepositoriesRepositoryIdIndexRoute
   RepositoriesNewIndexRoute: typeof RepositoriesNewIndexRoute
   ScansScanIdIndexRoute: typeof ScansScanIdIndexRoute
+  SettingsMcpIndexRoute: typeof SettingsMcpIndexRoute
   ApiPatchesPatchIdIndexRoute: typeof ApiPatchesPatchIdIndexRoute
   RepositoriesRepositoryIdEditIndexRoute: typeof RepositoriesRepositoryIdEditIndexRoute
   RepositoriesRepositoryIdKnowledgeIndexRoute: typeof RepositoriesRepositoryIdKnowledgeIndexRoute
@@ -296,6 +309,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScansScanIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/mcp/': {
+      id: '/settings/mcp/'
+      path: '/settings/mcp'
+      fullPath: '/settings/mcp/'
+      preLoaderRoute: typeof SettingsMcpIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/patches/$patchId/': {
       id: '/api/patches/$patchId/'
       path: '/api/patches/$patchId'
@@ -351,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   RepositoriesRepositoryIdIndexRoute: RepositoriesRepositoryIdIndexRoute,
   RepositoriesNewIndexRoute: RepositoriesNewIndexRoute,
   ScansScanIdIndexRoute: ScansScanIdIndexRoute,
+  SettingsMcpIndexRoute: SettingsMcpIndexRoute,
   ApiPatchesPatchIdIndexRoute: ApiPatchesPatchIdIndexRoute,
   RepositoriesRepositoryIdEditIndexRoute:
     RepositoriesRepositoryIdEditIndexRoute,

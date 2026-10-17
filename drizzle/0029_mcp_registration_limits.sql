@@ -1,0 +1,2 @@
+ALTER TABLE "mcp_audit_events" ADD COLUMN "source_ip" text;--> statement-breakpoint
+CREATE INDEX "mcp_audit_events_registration_source_idx" ON "mcp_audit_events" USING btree ("event","source_ip","created_at");
