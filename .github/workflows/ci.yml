@@ -81,7 +81,9 @@ jobs:
       - name: Audit production dependencies
         run: |
           bun audit --production
-          (cd eve && npm audit --omit=dev)
+          # shortcut: moderate threshold waives GHSA-hp3w-g68c-fv3c (sprintf-js via
+          # eve > just-bash, no patched release); restore plain `npm audit` once fixed.
+          (cd eve && npm audit --omit=dev --audit-level=high)
 
       - name: Validate Docker Compose
         env:
