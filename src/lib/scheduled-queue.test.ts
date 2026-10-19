@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  isScheduleDispatchReady,
   compareByLastScan,
+  isScheduleDispatchReady,
 } from '@/lib/scheduled-queue'
 
 describe('scheduled repository queue', () => {
