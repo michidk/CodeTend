@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { mcpToolNameSchema } from '@/lib/mcp/catalog'
 import {
   loadMcpAdminState,
+  loadMcpAuditPage,
   revokeMcpClient,
   saveMcpPolicy,
 } from '@/lib/server/mcp/settings.server'
@@ -25,3 +26,7 @@ export const revokeMcpClientConnection = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await revokeMcpClient(data.clientId)
   })
+
+export const getMcpAuditPage = createServerFn({ method: 'GET' })
+  .validator(z.object({ page: z.number().int().min(0).max(10_000) }))
+  .handler(({ data }) => loadMcpAuditPage(data.page))

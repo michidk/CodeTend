@@ -8,17 +8,14 @@ export function isScheduleDispatchReady(
   return lastDispatchedAt.getTime() + cooldownMinutes * 60_000 <= now.getTime()
 }
 
-/** Round-robin selection for repositories inheriting the distributed mode. */
-export function selectNextDistributedRepositoryId(
-  repositoryIds: readonly number[],
-  lastRepositoryId: number | null,
-): number | null {
-  const sortedIds = [...repositoryIds].sort((left, right) => left - right)
-  const firstRepositoryId = sortedIds[0]
-  if (firstRepositoryId === undefined) return null
-  if (lastRepositoryId === null) return firstRepositoryId
+/** Orders never-scanned repositories first, then the longest-unscanned. */
+export function compareByLastScan(
+  left: { id: number; lastScanAt: Date | null },
+  right: { id: number; lastScanAt: Date | null },
+): number {
+  if (!left.lastScanAt !== !right.lastScanAt) return left.lastScanAt ? 1 : -1
   return (
-    sortedIds.find((repositoryId) => repositoryId > lastRepositoryId) ??
-    firstRepositoryId
+    (left.lastScanAt?.getTime() ?? 0) - (right.lastScanAt?.getTime() ?? 0) ||
+    left.id - right.id
   )
 }

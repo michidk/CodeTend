@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only'
 
 import { createHash } from 'node:crypto'
-import { and, eq, gt, isNull } from 'drizzle-orm'
+import { and, count, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { getDb } from '@/db'
 import {
   mcpAuditEvents,
@@ -9,6 +9,26 @@ import {
   oauthClients,
   oauthTokens,
 } from '@/db/schema'
+
+// Bounds how many clients an MCP-enabled instance retains and how quickly a
+// single source can register new ones, so a public, unauthenticated
+// registration endpoint cannot grow the database without limit.
+export const MAX_ACTIVE_OAUTH_CLIENTS = 50
+export const MAX_REGISTRATIONS_PER_SOURCE = 5
+export const REGISTRATION_WINDOW_MS = 60 * 60 * 1_000
+export const STALE_CLIENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000
+
+export type ClientRegistrationOutcome =
+  | 'registered'
+  | 'rate_limited'
+  | 'capacity_reached'
+
+export type RegistrationAdmission = {
+  sourceIp: string
+  maxActiveClients?: number
+  maxRegistrationsPerSource?: number
+  registrationWindowMs?: number
+}
 
 export type StoredOAuthClient = {
   id: string
@@ -45,10 +65,15 @@ export type OAuthAuditEvent = {
   outcome: 'success' | 'failure' | 'denied'
   clientId?: string
   toolName?: string
+  sourceIp?: string
 }
 
 export interface OAuthStore {
-  createClient(client: Omit<StoredOAuthClient, 'revokedAt'>): Promise<void>
+  registerClient(
+    client: Omit<StoredOAuthClient, 'revokedAt'>,
+    admission: RegistrationAdmission,
+  ): Promise<ClientRegistrationOutcome>
+  pruneStaleClients(now?: Date): Promise<{ deletedClients: number }>
   getClient(id: string): Promise<StoredOAuthClient | null>
   saveAuthorizationCode(code: StoredAuthorizationCode): Promise<void>
   getAuthorizationCode(rawCode: string): Promise<StoredAuthorizationCode | null>
@@ -74,12 +99,105 @@ export function hashOAuthSecret(value: string) {
 }
 
 export class DrizzleOAuthStore implements OAuthStore {
-  async createClient(client: Omit<StoredOAuthClient, 'revokedAt'>) {
-    await getDb().insert(oauthClients).values({
-      id: client.id,
-      name: client.name,
-      redirectUris: client.redirectUris,
+  async registerClient(
+    client: Omit<StoredOAuthClient, 'revokedAt'>,
+    admission: RegistrationAdmission,
+  ): Promise<ClientRegistrationOutcome> {
+    const maxActiveClients =
+      admission.maxActiveClients ?? MAX_ACTIVE_OAUTH_CLIENTS
+    const maxRegistrationsPerSource =
+      admission.maxRegistrationsPerSource ?? MAX_REGISTRATIONS_PER_SOURCE
+    const registrationWindowMs =
+      admission.registrationWindowMs ?? REGISTRATION_WINDOW_MS
+
+    return getDb().transaction(async (transaction) => {
+      // Serializes concurrent registrations so the capacity and throttle
+      // checks below are atomic with the insert they gate.
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtext('codetend-oauth-client-registration'))`,
+      )
+
+      const since = new Date(Date.now() - registrationWindowMs)
+      const [recent] = await transaction
+        .select({ value: count() })
+        .from(mcpAuditEvents)
+        .where(
+          and(
+            eq(mcpAuditEvents.event, 'client_registered'),
+            eq(mcpAuditEvents.outcome, 'success'),
+            eq(mcpAuditEvents.sourceIp, admission.sourceIp),
+            gt(mcpAuditEvents.createdAt, since),
+          ),
+        )
+      if ((recent?.value ?? 0) >= maxRegistrationsPerSource) {
+        return 'rate_limited'
+      }
+
+      const [active] = await transaction
+        .select({ value: count() })
+        .from(oauthClients)
+        .where(isNull(oauthClients.revokedAt))
+      if ((active?.value ?? 0) >= maxActiveClients) {
+        return 'capacity_reached'
+      }
+
+      await transaction.insert(oauthClients).values({
+        id: client.id,
+        name: client.name,
+        redirectUris: client.redirectUris,
+      })
+      await transaction.insert(mcpAuditEvents).values({
+        event: 'client_registered',
+        outcome: 'success',
+        clientId: client.id,
+        sourceIp: admission.sourceIp,
+      })
+      return 'registered'
     })
+  }
+
+  async pruneStaleClients(now = new Date()) {
+    const db = getDb()
+    const retentionCutoff = new Date(now.getTime() - STALE_CLIENT_RETENTION_MS)
+
+    // Clients that were revoked long ago, or that never completed
+    // authorization (no token was ever issued) and are old enough that the
+    // registering party is unlikely to return, are pruned along with their
+    // audit trail so an unauthenticated registration flood cannot retain rows
+    // indefinitely.
+    const revokedStale = await db
+      .select({ id: oauthClients.id })
+      .from(oauthClients)
+      .where(lt(oauthClients.revokedAt, retentionCutoff))
+
+    const neverAuthorizedStale = await db
+      .select({ id: oauthClients.id })
+      .from(oauthClients)
+      .leftJoin(oauthTokens, eq(oauthTokens.clientId, oauthClients.id))
+      .where(
+        and(
+          isNull(oauthClients.revokedAt),
+          isNull(oauthTokens.clientId),
+          lt(oauthClients.createdAt, retentionCutoff),
+        ),
+      )
+
+    const staleIds = [
+      ...new Set(
+        [...revokedStale, ...neverAuthorizedStale].map((client) => client.id),
+      ),
+    ]
+    if (staleIds.length === 0) return { deletedClients: 0 }
+
+    await db.transaction(async (transaction) => {
+      await transaction
+        .delete(oauthClients)
+        .where(inArray(oauthClients.id, staleIds))
+      await transaction
+        .delete(mcpAuditEvents)
+        .where(inArray(mcpAuditEvents.clientId, staleIds))
+    })
+    return { deletedClients: staleIds.length }
   }
 
   async getClient(id: string) {

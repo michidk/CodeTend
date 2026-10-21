@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { and, asc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, isNull, lte, max } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   findingPatches,
@@ -12,8 +12,8 @@ import {
 import { getServerEnv } from '@/lib/env.server'
 import { computeNextDistributedScanAt, computeNextScanAt } from '@/lib/schedule'
 import {
+  compareByLastScan,
   isScheduleDispatchReady,
-  selectNextDistributedRepositoryId,
 } from '@/lib/scheduled-queue'
 import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
 import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
@@ -98,6 +98,22 @@ export function ensureScheduler(): void {
     )
 }
 
+/** Latest scan creation time per repository; absent when never scanned. */
+async function loadLastScanTimes(): Promise<Map<number, Date>> {
+  const rows = await db
+    .select({
+      repositoryId: scans.repositoryId,
+      lastScanAt: max(scans.createdAt),
+    })
+    .from(scans)
+    .groupBy(scans.repositoryId)
+  return new Map(
+    rows.flatMap((row) =>
+      row.lastScanAt ? [[row.repositoryId, row.lastScanAt] as const] : [],
+    ),
+  )
+}
+
 async function tick(state: Pick<SchedulerState, 'ticking'>) {
   if (state.ticking) return
   state.ticking = true
@@ -115,15 +131,22 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
           ),
         )
         .orderBy(asc(repositories.createdAt), asc(repositories.id))
-      const repositoryIdsToQueue =
-        settings.mode === 'distributed'
-          ? [
-              selectNextDistributedRepositoryId(
-                repositoryIds.map((row) => row.repositoryId),
-                settings.lastDistributedRepositoryId,
-              ),
-            ].filter((id): id is number => id !== null)
-          : repositoryIds.map((row) => row.repositoryId)
+      let repositoryIdsToQueue = repositoryIds.map((row) => row.repositoryId)
+      if (settings.mode === 'distributed') {
+        const lastScans = await loadLastScanTimes()
+        const alreadyQueued = new Set(
+          (
+            await db
+              .select({ id: scheduledRepositoryQueue.repositoryId })
+              .from(scheduledRepositoryQueue)
+          ).map((row) => row.id),
+        )
+        const stalest = repositoryIdsToQueue
+          .filter((id) => !alreadyQueued.has(id))
+          .map((id) => ({ id, lastScanAt: lastScans.get(id) ?? null }))
+          .sort(compareByLastScan)[0]
+        repositoryIdsToQueue = stalest ? [stalest.id] : []
+      }
       if (repositoryIdsToQueue.length > 0) {
         await db
           .insert(scheduledRepositoryQueue)
@@ -139,10 +162,6 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
             settings.mode === 'distributed'
               ? computeNextDistributedScanAt(settings.scansPerDay, now)
               : computeNextScanAt(settings.cronExpression, now),
-          lastDistributedRepositoryId:
-            settings.mode === 'distributed' && repositoryIdsToQueue.length > 0
-              ? repositoryIdsToQueue[0]
-              : settings.lastDistributedRepositoryId,
           updatedAt: now,
         })
         .where(lte(scanScheduleSettings.nextRunAt, now))
@@ -229,6 +248,19 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         asc(scheduledRepositoryQueue.id),
       )
     if (queue.length === 0) return
+    const lastScans = await loadLastScanTimes()
+    queue.sort((left, right) =>
+      compareByLastScan(
+        {
+          id: left.repositoryId,
+          lastScanAt: lastScans.get(left.repositoryId) ?? null,
+        },
+        {
+          id: right.repositoryId,
+          lastScanAt: lastScans.get(right.repositoryId) ?? null,
+        },
+      ),
+    )
 
     const activeScans = await db.query.scans.findMany({
       where: inArray(scans.status, ['queued', 'running']),

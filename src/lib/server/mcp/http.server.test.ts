@@ -21,8 +21,12 @@ class MemoryOAuthStore implements OAuthStore {
   tokens = new Map<string, StoredOAuthToken>()
   audits: OAuthAuditEvent[] = []
 
-  async createClient(client: Omit<StoredOAuthClient, 'revokedAt'>) {
+  async registerClient(client: Omit<StoredOAuthClient, 'revokedAt'>) {
     this.clients.set(client.id, { ...client, revokedAt: null })
+    return 'registered' as const
+  }
+  async pruneStaleClients() {
+    return { deletedClients: 0 }
   }
   async getClient(id: string) {
     return this.clients.get(id) ?? null
@@ -213,7 +217,8 @@ describe('remote MCP OAuth HTTP flow', () => {
     const consentBody = await consent?.text()
     expect(consentBody).toContain('Codex')
     expect(consentBody).toContain('Manage findings and scans')
-    expect(consentBody).toContain('name="scope_codetend_write" checked')
+    expect(consentBody).toContain('name="scope_codetend_write"')
+    expect(consentBody).not.toContain('name="scope_codetend_write" checked')
 
     const approved = await handle(
       new Request(authorize, {

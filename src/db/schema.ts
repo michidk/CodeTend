@@ -716,9 +716,19 @@ export const mcpAuditEvents = pgTable(
     outcome: text('outcome').notNull(),
     clientId: text('client_id'),
     toolName: text('tool_name'),
+    // Only populated for registration events, to bound how many clients a
+    // single requester can register without identifying ordinary API callers.
+    sourceIp: text('source_ip'),
     createdAt,
   },
-  (table) => [index('mcp_audit_events_created_at_idx').on(table.createdAt)],
+  (table) => [
+    index('mcp_audit_events_created_at_idx').on(table.createdAt),
+    index('mcp_audit_events_registration_source_idx').on(
+      table.event,
+      table.sourceIp,
+      table.createdAt,
+    ),
+  ],
 )
 
 /** Singleton owner policy controlling MCP availability and tool discovery. */
