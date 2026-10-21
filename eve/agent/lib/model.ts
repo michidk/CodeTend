@@ -113,9 +113,10 @@ export function modelSettingsMiddleware(
 
 /**
  * Removes `response.in_progress` events from a Responses API SSE stream.
- * OmniRoute emits them as keepalives with only `id` and `status`, which the AI
- * SDK's chunk schema rejects, failing the whole step. The SDK takes response
- * metadata from `response.created`, so nothing it uses is lost.
+ * Some OpenAI-compatible gateways emit them as keepalives with only `id` and
+ * `status`, which the AI SDK's chunk schema rejects, failing the whole step.
+ * The SDK takes response metadata from `response.created`, so nothing it uses
+ * is lost.
  */
 export function dropProgressEvents(
   body: ReadableStream<Uint8Array>,

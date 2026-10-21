@@ -134,7 +134,7 @@ describe('dropProgressEvents', () => {
     const created =
       'event: response.created\ndata: {"type":"response.created","response":{"id":"r1","created_at":1,"model":"m"}}\n\n'
     const keepalive =
-      'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_keepalive_omniroute","status":"in_progress"}}\n\n'
+      'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_keepalive","status":"in_progress"}}\n\n'
     const delta =
       'data: {"type":"response.output_text.delta","item_id":"i","delta":"hi"}\r\n\r\n'
     const done = 'data: [DONE]\n\n'
