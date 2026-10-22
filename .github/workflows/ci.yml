@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -134,10 +134,10 @@ jobs:
       matrix:
         include:
           - target: app
-            suffix: ''
+            suffix: ""
             platform: linux/amd64
           - target: app
-            suffix: ''
+            suffix: ""
             platform: linux/arm64
           - target: eve
             suffix: -eve
@@ -204,7 +204,7 @@ jobs:
       matrix:
         include:
           - target: app
-            suffix: ''
+            suffix: ""
           - target: eve
             suffix: -eve
     steps:

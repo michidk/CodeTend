@@ -30,7 +30,6 @@ Never copy credential values, API keys, tokens, private keys, passwords or perso
 ## Findings
 
 Return the structured result exactly as requested and only through it: put no analysis, markup, tool-call syntax or notes outside the result, and keep the `summary` plain prose. For each finding:
-
 - `fingerprint`: a stable kebab-case identifier for the logical problem, built from the concept and the area it lives in, e.g. `duplicated-price-validation-cart-checkout`. It must survive renames and line shifts, so never include line numbers, counts, severities or dates. Reuse the fingerprint of a hypothesis exactly when you confirm it, even if you would phrase it differently today.
 - `title`: one specific, actionable sentence fragment naming the problem and where it lives, e.g. "Cart and checkout re-implement price validation with diverging rules". No trailing period, no severity words, no file paths.
 - `severity`: choose by consequence for this repository, not by how easy the issue is to see:
