@@ -204,7 +204,7 @@ hodor:
   existingSecretSecretKey: SECRET
   image:
     repository: ghcr.io/michidk/hodor
-    tag: ""
+    tag: "@sha256:a3df75a6d24d4de620e3b48489b3dfa3d57e9c09ad52c812bf3bac49f3b45cde"
     digest: ""
     pullPolicy: IfNotPresent
   title: "CodeTend Login"
