@@ -102,21 +102,21 @@ Findings are logical problems identified by a scanner-chosen stable
 `fingerprint` (concept + area, never line numbers). On a rescan the open
 findings are handed back to the relevant scanner as hypotheses; it verifies them against the current code (`confirmed`, `improved`, `resolved`) or explicitly returns `deferred` when evidence or budget is insufficient, then searches for new issues.
 [`finding-reconciliation.server.ts`](../src/lib/server/finding-reconciliation.server.ts)
-then derives states from *our persisted results* (never Git history):
+then derives states from _our persisted results_ (never Git history):
 
-| Situation | State |
-| --- | --- |
-| fingerprint not seen before | `new` |
-| open finding returned again, same severity | `active` |
-| open finding returned with lower severity or scanner verdict `improved` | `improved` |
-| open finding returned with higher severity, or a resolved finding reappears | `regressed` |
-| scanner explicitly defers verification | prior state and last-seen time preserved |
-| scanner explicitly re-verifies the finding and returns `resolved` | `resolved` |
-| open finding not mentioned at all by a scanner that did not verify the rest | `active` (carried forward, never silently resolved) |
-| operator marks a finding fixed and records what changed | `resolved` without a disposition; a future match becomes `regressed` |
-| operator marks a finding false positive or accepted risk | `resolved` with a durable manual disposition; future matches stay suppressed |
-| scanner cites a concrete change that contradicts the recorded disposition context | `regressed`; the disposition is cleared |
-| operator reopens a manually triaged finding | `active`; the next scan resumes normal reconciliation |
+| Situation                                                                         | State                                                                        |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| fingerprint not seen before                                                       | `new`                                                                        |
+| open finding returned again, same severity                                        | `active`                                                                     |
+| open finding returned with lower severity or scanner verdict `improved`           | `improved`                                                                   |
+| open finding returned with higher severity, or a resolved finding reappears       | `regressed`                                                                  |
+| scanner explicitly defers verification                                            | prior state and last-seen time preserved                                     |
+| scanner explicitly re-verifies the finding and returns `resolved`                 | `resolved`                                                                   |
+| open finding not mentioned at all by a scanner that did not verify the rest       | `active` (carried forward, never silently resolved)                          |
+| operator marks a finding fixed and records what changed                           | `resolved` without a disposition; a future match becomes `regressed`         |
+| operator marks a finding false positive or accepted risk                          | `resolved` with a durable manual disposition; future matches stay suppressed |
+| scanner cites a concrete change that contradicts the recorded disposition context | `regressed`; the disposition is cleared                                      |
+| operator reopens a manually triaged finding                                       | `active`; the next scan resumes normal reconciliation                        |
 
 Every observation is stored as a `finding_occurrences` row, which powers the
 "active findings over time" chart. Every state change is additionally appended

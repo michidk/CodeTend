@@ -49,7 +49,6 @@ security. Their structured findings become deterministic scores and grades,
 every finding is tracked across scans, and each dimension produces one
 aggregated fix prompt you paste into Claude Code, Codex or another coding
 agent.
-
 - 🧭 **Fifteen dimensions, one registry.** Architecture & Modularity,
   Duplication & Abstraction, Dead & Obsolete Code, Complexity &
   Maintainability, Tests & Testability, Reliability & Error Handling,
@@ -179,16 +178,16 @@ tools over MCP. Details in [docs/architecture.md](docs/architecture.md).
 
 ## 🧱 Tech stack
 
-| Layer | Choice |
-| --- | --- |
-| App | Bun, TanStack Start + Router, React 19, shadcn/ui (Base UI), Tailwind v4 |
-| Persistence | PostgreSQL + Drizzle with committed migrations |
-| Agent runtime | [Eve](https://eve.dev): durable workflow tools, declared subagents, just-bash sandbox, MCP connections, structured outputs |
-| Models | Any OpenAI-compatible endpoint; Claude and others through a gateway such as OpenRouter |
-| Vulnerability data | Google OSV Scanner, FIRST EPSS, CISA KEV, local CVSS 2.0–4.0 |
-| Code intelligence | GitNexus over MCP, optional |
-| Tooling | Vite, Biome, Knip, `bun test`, import-boundary check |
-| Deployment | Docker Compose; multi-arch images on GHCR |
+| Layer              | Choice                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| App                | Bun, TanStack Start + Router, React 19, shadcn/ui (Base UI), Tailwind v4                                                   |
+| Persistence        | PostgreSQL + Drizzle with committed migrations                                                                             |
+| Agent runtime      | [Eve](https://eve.dev): durable workflow tools, declared subagents, just-bash sandbox, MCP connections, structured outputs |
+| Models             | Any OpenAI-compatible endpoint; Claude and others through a gateway such as OpenRouter                                     |
+| Vulnerability data | Google OSV Scanner, FIRST EPSS, CISA KEV, local CVSS 2.0–4.0                                                               |
+| Code intelligence  | GitNexus over MCP, optional                                                                                                |
+| Tooling            | Vite, Biome, Knip, `bun test`, import-boundary check                                                                       |
+| Deployment         | Docker Compose; multi-arch images on GHCR                                                                                  |
 
 ## 🚀 Quick start
 
@@ -229,22 +228,22 @@ serves the production build instead.
 <details>
 <summary><b>All available commands</b></summary>
 
-| Command | Purpose |
-| --- | --- |
-| `bun run dev` | App with automatic migrations |
-| `bun run preview:serve` | Production build + Eve for a stable shared preview |
-| `bun run check` | Biome formatting/lint and import boundaries |
-| `bun run test` | Unit tests for scoring, pricing, vulnerabilities, artifacts |
-| `bun run test:database` | Migrated-schema and active-scan constraint smoke test |
-| `bun run typecheck` | Type-check the app |
-| `bun run eve:typecheck` | Type-check the Eve agent |
-| `bun run lint:deadcode` | Find unused code and dependencies with Knip |
-| `bun run build` | Build production assets |
-| `bun run verify` | Fast local gate: formatting, tests, types, build and dead-code checks |
-| `bun run eve:build` / `bun run eve:start` | Compile and serve the Eve agent |
-| `bun run db:generate` | Generate a migration after editing `src/db/schema.ts` |
-| `bun run db:migrate` | Apply committed migrations |
-| `bun run scripts/cli.ts add <name> <url> [branch]` | Scripting helper |
+| Command                                            | Purpose                                                               |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| `bun run dev`                                      | App with automatic migrations                                         |
+| `bun run preview:serve`                            | Production build + Eve for a stable shared preview                    |
+| `bun run check`                                    | Biome formatting/lint and import boundaries                           |
+| `bun run test`                                     | Unit tests for scoring, pricing, vulnerabilities, artifacts           |
+| `bun run test:database`                            | Migrated-schema and active-scan constraint smoke test                 |
+| `bun run typecheck`                                | Type-check the app                                                    |
+| `bun run eve:typecheck`                            | Type-check the Eve agent                                              |
+| `bun run lint:deadcode`                            | Find unused code and dependencies with Knip                           |
+| `bun run build`                                    | Build production assets                                               |
+| `bun run verify`                                   | Fast local gate: formatting, tests, types, build and dead-code checks |
+| `bun run eve:build` / `bun run eve:start`          | Compile and serve the Eve agent                                       |
+| `bun run db:generate`                              | Generate a migration after editing `src/db/schema.ts`                 |
+| `bun run db:migrate`                               | Apply committed migrations                                            |
+| `bun run scripts/cli.ts add <name> <url> [branch]` | Scripting helper                                                      |
 
 </details>
 
@@ -256,12 +255,12 @@ database, or route-generation behavior.
 
 ## 📚 Documentation
 
-| Guide | What is inside |
-| --- | --- |
-| [Architecture](docs/architecture.md) | Scan flow, scanners, scoring, finding lifecycle, vulnerability enrichment, patches, knowledge, cost tracking |
-| [Configuration reference](docs/configuration.md) | Every environment variable and its default |
-| [Operations](docs/OPERATIONS.md) | Deployment shape, validation boundary, health, backup, monitoring |
-| [Data handling](PRIVACY.md) | What is processed, sent to providers and retained |
+| Guide                                            | What is inside                                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| [Architecture](docs/architecture.md)             | Scan flow, scanners, scoring, finding lifecycle, vulnerability enrichment, patches, knowledge, cost tracking |
+| [Configuration reference](docs/configuration.md) | Every environment variable and its default                                                                   |
+| [Operations](docs/OPERATIONS.md)                 | Deployment shape, validation boundary, health, backup, monitoring                                            |
+| [Data handling](PRIVACY.md)                      | What is processed, sent to providers and retained                                                            |
 
 ## 🚧 Limitations
 

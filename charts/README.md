@@ -15,12 +15,12 @@ a second claim, so the Deployment runs one replica with `Recreate`.
 
 ## Required values
 
-| Value | Purpose |
-| --- | --- |
-| `secrets.existingSecret` | Secret with `EVE_PASSWORD`, `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` |
-| `hodor.existingSecret` | Secret with Hodor's `PASSWORD` and session `SECRET` |
-| `hodor.image.tag` or `hodor.image.digest` | Pinned Hodor image |
-| `postgresql.existingSecret` or `postgresql.external.host` + `postgresql.auth.password` | Database access |
+| Value                                                                                  | Purpose                                                                       |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `secrets.existingSecret`                                                               | Secret with `EVE_PASSWORD`, `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` |
+| `hodor.existingSecret`                                                                 | Secret with Hodor's `PASSWORD` and session `SECRET`                           |
+| `hodor.image.tag` or `hodor.image.digest`                                              | Pinned Hodor image                                                            |
+| `postgresql.existingSecret` or `postgresql.external.host` + `postgresql.auth.password` | Database access                                                               |
 
 `github.appAuth.existingSecret` is optional; it enables private-repository
 clones through a GitHub App whose installation tokens CodeTend mints itself

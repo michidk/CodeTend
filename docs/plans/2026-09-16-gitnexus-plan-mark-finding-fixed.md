@@ -55,24 +55,212 @@ implementation_context:
       canonicalization: "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records"
       value: "0a9c85780067d9afcd0764f307b60891e3cee927ee11eaeb5ec7826d10fd82cd"
     cited_path_manifest:
-      - { path: "README.md", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450", index_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450", worktree_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450", untracked_digest: "absent" }
-      - { path: "docs/architecture.md", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938", index_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938", worktree_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938", untracked_digest: "absent" }
-      - { path: "package.json", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", index_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", worktree_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", untracked_digest: "absent" }
-      - { path: "src/components/health/finding-history.tsx", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb", index_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb", worktree_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb", untracked_digest: "absent" }
-      - { path: "src/components/health/finding-triage-controls.tsx", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3", index_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3", worktree_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3", untracked_digest: "absent" }
-      - { path: "src/lib/findings.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019", index_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019", worktree_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019", untracked_digest: "absent" }
-      - { path: "src/lib/mcp/catalog.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10", index_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10", worktree_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10", untracked_digest: "absent" }
-      - { path: "src/lib/server/finding-triage.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d", index_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d", worktree_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d", untracked_digest: "absent" }
-      - { path: "src/lib/server/mcp/tools.server.test.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3", index_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3", worktree_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3", untracked_digest: "absent" }
-      - { path: "src/lib/server/mcp/tools.server.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537", index_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537", worktree_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537", untracked_digest: "absent" }
+      - {
+          path: "README.md",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450",
+          index_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450",
+          worktree_digest: "sha256:a4b0cb9d52b07c8056eaae4de0bec164fdf279b0d56d2efbe5fde5da1af5f450",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "docs/architecture.md",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938",
+          index_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938",
+          worktree_digest: "sha256:f46c7700f358dc7b60670440c410b64cf5b620aa92667acb2b1491f04614a938",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "package.json",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          index_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          worktree_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/components/health/finding-history.tsx",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb",
+          index_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb",
+          worktree_digest: "sha256:8de21e305feae2ec97ee281d555b75d1455fc988b7cd235da4d590f32ea68deb",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/components/health/finding-triage-controls.tsx",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3",
+          index_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3",
+          worktree_digest: "sha256:9edcb9839a6c4fa02666b97fbf96ed163c91b59b18d480fe254bb1cc429744c3",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/findings.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019",
+          index_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019",
+          worktree_digest: "sha256:e16090a8a4050fcc5496f24ae513bcf11b1f6389d30a4e3c8d89b503fb4e5019",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/mcp/catalog.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10",
+          index_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10",
+          worktree_digest: "sha256:f35149256fdb80d51e41981986bf73e1b29d8128bfef537e596948749c8e2e10",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/server/finding-triage.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d",
+          index_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d",
+          worktree_digest: "sha256:36475a64c115c664ce4461781324daab9480e4d94435745910d635d5ff0fb14d",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/server/mcp/tools.server.test.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3",
+          index_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3",
+          worktree_digest: "sha256:512c994f3ff04bda423410b4746ca54e34b91e396e8342bc750030803e9e36b3",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/server/mcp/tools.server.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537",
+          index_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537",
+          worktree_digest: "sha256:651dc944abab091c1ff37f3c8821ddffc456d6f1d4623d63c4f2eee0f66e5537",
+          untracked_digest: "absent",
+        }
   files_to_modify:
-    - { file: "src/lib/server/finding-triage.ts", symbols: ["markFindingFixed"], intended_change: "Add validated operator resolution transaction and server function." }
-    - { file: "src/components/health/finding-triage-controls.tsx", symbols: ["FindingTriageControls"], intended_change: "Add fixed action and confirmation dialog." }
-    - { file: "src/lib/mcp/catalog.ts", symbols: ["MCP_TOOL_CATALOG"], intended_change: "Catalog mark_finding_fixed under write scope." }
-    - { file: "src/lib/server/mcp/tools.server.ts", symbols: ["McpLoaders", "createCodeTendMcpServer"], intended_change: "Implement and register the MCP tool." }
-    - { file: "src/lib/server/mcp/tools.server.test.ts", symbols: ["fakeLoaders", "CodeTend MCP tools"], intended_change: "Cover discovery, invocation, output, and validation." }
-    - { file: "README.md", symbols: [], intended_change: "Document fixed action and MCP capability." }
-    - { file: "docs/architecture.md", symbols: [], intended_change: "Document operator-reported resolution semantics." }
+    - {
+        file: "src/lib/server/finding-triage.ts",
+        symbols: ["markFindingFixed"],
+        intended_change: "Add validated operator resolution transaction and server function.",
+      }
+    - {
+        file: "src/components/health/finding-triage-controls.tsx",
+        symbols: ["FindingTriageControls"],
+        intended_change: "Add fixed action and confirmation dialog.",
+      }
+    - {
+        file: "src/lib/mcp/catalog.ts",
+        symbols: ["MCP_TOOL_CATALOG"],
+        intended_change: "Catalog mark_finding_fixed under write scope.",
+      }
+    - {
+        file: "src/lib/server/mcp/tools.server.ts",
+        symbols: ["McpLoaders", "createCodeTendMcpServer"],
+        intended_change: "Implement and register the MCP tool.",
+      }
+    - {
+        file: "src/lib/server/mcp/tools.server.test.ts",
+        symbols: ["fakeLoaders", "CodeTend MCP tools"],
+        intended_change: "Cover discovery, invocation, output, and validation.",
+      }
+    - {
+        file: "README.md",
+        symbols: [],
+        intended_change: "Document fixed action and MCP capability.",
+      }
+    - {
+        file: "docs/architecture.md",
+        symbols: [],
+        intended_change: "Document operator-reported resolution semantics.",
+      }
   tests:
     - file: "src/lib/server/mcp/tools.server.test.ts"
       scenarios:

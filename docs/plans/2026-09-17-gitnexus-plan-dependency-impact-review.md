@@ -66,17 +66,17 @@ Require CodeTend's scanner agent to inspect each OSV dependency candidate in rep
 
 ## 10. Files Expected to Change
 
-| File | Symbols | Reason |
-| ---- | ------- | ------ |
-| `src/lib/eve-protocol.ts` | `dependencyAuditResultSchema` | Persist validated dependency impact assessments. |
-| `eve/agent/lib/dependency-security-review.ts` | new review schemas/helpers | Extract candidates, prompt the agent, and validate evidence. |
-| `eve/agent/tools/run_scan.ts` | `execute`, `totalScanSteps` | Run and persist the dependency review phase. |
-| `eve/tests/dependency-security-review.test.ts` | new tests | Pin review behavior and fail-closed evidence handling. |
-| `src/lib/eve-protocol.test.ts` | protocol tests | Preserve backward compatibility. |
-| `src/lib/server/scan-result-ingestion.server.ts` | `persistDependencyAudit` | Forward assessments into enrichment. |
-| `src/lib/server/vulnerability-enrichment.server.ts` | `enrichDependencyAudit` | Join agent assessments to parsed matches. |
-| `src/lib/vulnerabilities.ts` | `dependencyFindingsFromMatches`, `deriveDependencyPriority` | Gate contextual priority on confirmed impact and attach evidence. |
-| `src/lib/vulnerabilities.test.ts` | dependency priority tests | Cover confirmed and unconfirmed applicability. |
+| File                                                | Symbols                                                     | Reason                                                            |
+| --------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| `src/lib/eve-protocol.ts`                           | `dependencyAuditResultSchema`                               | Persist validated dependency impact assessments.                  |
+| `eve/agent/lib/dependency-security-review.ts`       | new review schemas/helpers                                  | Extract candidates, prompt the agent, and validate evidence.      |
+| `eve/agent/tools/run_scan.ts`                       | `execute`, `totalScanSteps`                                 | Run and persist the dependency review phase.                      |
+| `eve/tests/dependency-security-review.test.ts`      | new tests                                                   | Pin review behavior and fail-closed evidence handling.            |
+| `src/lib/eve-protocol.test.ts`                      | protocol tests                                              | Preserve backward compatibility.                                  |
+| `src/lib/server/scan-result-ingestion.server.ts`    | `persistDependencyAudit`                                    | Forward assessments into enrichment.                              |
+| `src/lib/server/vulnerability-enrichment.server.ts` | `enrichDependencyAudit`                                     | Join agent assessments to parsed matches.                         |
+| `src/lib/vulnerabilities.ts`                        | `dependencyFindingsFromMatches`, `deriveDependencyPriority` | Gate contextual priority on confirmed impact and attach evidence. |
+| `src/lib/vulnerabilities.test.ts`                   | dependency priority tests                                   | Cover confirmed and unconfirmed applicability.                    |
 
 ## 11. Reusable Implementation Context
 
@@ -98,23 +98,194 @@ implementation_context:
       canonicalization: "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records"
       value: "0a9c85780067d9afcd0764f307b60891e3cee927ee11eaeb5ec7826d10fd82cd"
     cited_path_manifest:
-      - { path: "eve/agent/lib/security-review.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6", index_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6", worktree_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6", untracked_digest: "absent" }
-      - { path: "eve/agent/tools/run_scan.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9", index_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9", worktree_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9", untracked_digest: "absent" }
-      - { path: "eve/tests/security-review.test.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606", index_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606", worktree_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606", untracked_digest: "absent" }
-      - { path: "package.json", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", index_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", worktree_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457", untracked_digest: "absent" }
-      - { path: "src/lib/eve-protocol.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24", index_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24", worktree_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24", untracked_digest: "absent" }
-      - { path: "src/lib/server/scan-result-ingestion.server.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729", index_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729", worktree_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729", untracked_digest: "absent" }
-      - { path: "src/lib/server/vulnerability-enrichment.server.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759", index_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759", worktree_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759", untracked_digest: "absent" }
-      - { path: "src/lib/vulnerabilities.test.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9", index_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9", worktree_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9", untracked_digest: "absent" }
-      - { path: "src/lib/vulnerabilities.ts", object_kind: { head: "regular", index: "regular", worktree: "regular", untracked: "absent" }, state: "clean", rename_from: null, rename_to: null, head_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721", index_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721", worktree_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721", untracked_digest: "absent" }
+      - {
+          path: "eve/agent/lib/security-review.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6",
+          index_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6",
+          worktree_digest: "sha256:b1fa661dea5b538c25d09d792b90923c52e07ff5e6f9a66cae1c51c302c6cbd6",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "eve/agent/tools/run_scan.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9",
+          index_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9",
+          worktree_digest: "sha256:3c8702b6da74e940e4fd3b9b111afeb6e5d4b8dc108142953cb04c4f07073eb9",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "eve/tests/security-review.test.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606",
+          index_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606",
+          worktree_digest: "sha256:f2d442646741fd6c4c32f8968643b07182a8e144267ed088f8b86d01ae30b606",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "package.json",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          index_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          worktree_digest: "sha256:9934429cfd2b8fa71796be3368409b8e2d1d839cf2e6041dbd0bfaaa8a95e457",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/eve-protocol.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24",
+          index_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24",
+          worktree_digest: "sha256:d8fae1024cc17178b0ae7d1edf2cf67d9d502bd66095499eaef184e288cc1f24",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/server/scan-result-ingestion.server.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729",
+          index_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729",
+          worktree_digest: "sha256:a931784967e6125c9e6a1d2801a3624649fefa2767db408aab252fc719f3f729",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/server/vulnerability-enrichment.server.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759",
+          index_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759",
+          worktree_digest: "sha256:97a8b54d2967f05328dcd5941b7d773ccbc599d37d6c62c56ff45b5649a20759",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/vulnerabilities.test.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9",
+          index_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9",
+          worktree_digest: "sha256:598ccc79b1ac098cb0302e252ab6f33d752bd5e6b2a86defed7907769dade1b9",
+          untracked_digest: "absent",
+        }
+      - {
+          path: "src/lib/vulnerabilities.ts",
+          object_kind:
+            {
+              head: "regular",
+              index: "regular",
+              worktree: "regular",
+              untracked: "absent",
+            },
+          state: "clean",
+          rename_from: null,
+          rename_to: null,
+          head_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721",
+          index_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721",
+          worktree_digest: "sha256:04afacb89b488476b761be70dbb2bdff0c1ede8ce76b160926576d746bc76721",
+          untracked_digest: "absent",
+        }
   primary_symbols:
-    - { symbol: "run_scan.execute", file: "eve/agent/tools/run_scan.ts", lines: "300-369", role: "Runs repository-aware exploitability reviews and emits the durable result." }
-    - { symbol: "dependencyFindingsFromMatches", file: "src/lib/vulnerabilities.ts", lines: "177-299", role: "Constructs and contextually scores dependency findings." }
-    - { symbol: "dependencyAuditResultSchema", file: "src/lib/eve-protocol.ts", lines: "70-75", role: "Durable Eve-to-app dependency audit contract." }
+    - {
+        symbol: "run_scan.execute",
+        file: "eve/agent/tools/run_scan.ts",
+        lines: "300-369",
+        role: "Runs repository-aware exploitability reviews and emits the durable result.",
+      }
+    - {
+        symbol: "dependencyFindingsFromMatches",
+        file: "src/lib/vulnerabilities.ts",
+        lines: "177-299",
+        role: "Constructs and contextually scores dependency findings.",
+      }
+    - {
+        symbol: "dependencyAuditResultSchema",
+        file: "src/lib/eve-protocol.ts",
+        lines: "70-75",
+        role: "Durable Eve-to-app dependency audit contract.",
+      }
   related_symbols:
-    - { symbol: "exploitabilityReviewMessage/applyExploitabilityReview", relationship: "architectural pattern", relevance: "Existing fail-closed, source-and-sink-evidence review flow." }
-    - { symbol: "enrichDependencyAudit", relationship: "CALLS dependencyFindingsFromMatches", relevance: "Joins OSV matches to threat intelligence and new assessments." }
-    - { symbol: "persistDependencyAudit", relationship: "CALLS enrichDependencyAudit", relevance: "Passes the durable audit payload into enrichment." }
+    - {
+        symbol: "exploitabilityReviewMessage/applyExploitabilityReview",
+        relationship: "architectural pattern",
+        relevance: "Existing fail-closed, source-and-sink-evidence review flow.",
+      }
+    - {
+        symbol: "enrichDependencyAudit",
+        relationship: "CALLS dependencyFindingsFromMatches",
+        relevance: "Joins OSV matches to threat intelligence and new assessments.",
+      }
+    - {
+        symbol: "persistDependencyAudit",
+        relationship: "CALLS enrichDependencyAudit",
+        relevance: "Passes the durable audit payload into enrichment.",
+      }
   execution_path:
     - "OSV emits exact locked package/advisory matches."
     - "Eve extracts compact candidates after repository knowledge and security context are available."
@@ -123,22 +294,62 @@ implementation_context:
     - "Server enrichment joins assessments to OSV matches, then scores priority only after confirmed practical exploitability."
   pdg_constraints:
     - description: "Priority is defined once per OSV match and flows directly into the returned finding."
-      affected_statements: ["src/lib/vulnerabilities.ts:216-222", "src/lib/vulnerabilities.ts:294-296"]
+      affected_statements:
+        [
+          "src/lib/vulnerabilities.ts:216-222",
+          "src/lib/vulnerabilities.ts:294-296",
+        ]
       implementation_consequence: "Resolve and validate the matching assessment before calling deriveDependencyPriority."
   architectural_patterns:
     - pattern: "Independent fail-closed exploitability review"
       example_location: "eve/agent/lib/security-review.ts:50-149"
       usage_guidance: "Treat candidate prose as untrusted, require repository-present source and sink evidence, and default omissions/errors to not-confirmed."
   files_to_modify:
-    - { file: "src/lib/eve-protocol.ts", symbols: ["dependencyAuditResultSchema"], intended_change: "Add defaulted impact assessment records." }
-    - { file: "eve/agent/lib/dependency-security-review.ts", symbols: ["new review helpers"], intended_change: "Extract candidates, prompt review, and validate evidence." }
-    - { file: "eve/agent/tools/run_scan.ts", symbols: ["execute", "totalScanSteps"], intended_change: "Run dependency impact review and persist results." }
-    - { file: "src/lib/server/scan-result-ingestion.server.ts", symbols: ["persistDependencyAudit"], intended_change: "Forward assessments." }
-    - { file: "src/lib/server/vulnerability-enrichment.server.ts", symbols: ["enrichDependencyAudit"], intended_change: "Join assessments to matches." }
-    - { file: "src/lib/vulnerabilities.ts", symbols: ["dependencyFindingsFromMatches", "deriveDependencyPriority"], intended_change: "Gate priority and attach assessment evidence." }
-    - { file: "eve/tests/dependency-security-review.test.ts", symbols: ["new tests"], intended_change: "Test review behavior." }
-    - { file: "src/lib/eve-protocol.test.ts", symbols: ["protocol tests"], intended_change: "Test compatibility." }
-    - { file: "src/lib/vulnerabilities.test.ts", symbols: ["dependency tests"], intended_change: "Test contextual scoring." }
+    - {
+        file: "src/lib/eve-protocol.ts",
+        symbols: ["dependencyAuditResultSchema"],
+        intended_change: "Add defaulted impact assessment records.",
+      }
+    - {
+        file: "eve/agent/lib/dependency-security-review.ts",
+        symbols: ["new review helpers"],
+        intended_change: "Extract candidates, prompt review, and validate evidence.",
+      }
+    - {
+        file: "eve/agent/tools/run_scan.ts",
+        symbols: ["execute", "totalScanSteps"],
+        intended_change: "Run dependency impact review and persist results.",
+      }
+    - {
+        file: "src/lib/server/scan-result-ingestion.server.ts",
+        symbols: ["persistDependencyAudit"],
+        intended_change: "Forward assessments.",
+      }
+    - {
+        file: "src/lib/server/vulnerability-enrichment.server.ts",
+        symbols: ["enrichDependencyAudit"],
+        intended_change: "Join assessments to matches.",
+      }
+    - {
+        file: "src/lib/vulnerabilities.ts",
+        symbols: ["dependencyFindingsFromMatches", "deriveDependencyPriority"],
+        intended_change: "Gate priority and attach assessment evidence.",
+      }
+    - {
+        file: "eve/tests/dependency-security-review.test.ts",
+        symbols: ["new tests"],
+        intended_change: "Test review behavior.",
+      }
+    - {
+        file: "src/lib/eve-protocol.test.ts",
+        symbols: ["protocol tests"],
+        intended_change: "Test compatibility.",
+      }
+    - {
+        file: "src/lib/vulnerabilities.test.ts",
+        symbols: ["dependency tests"],
+        intended_change: "Test contextual scoring.",
+      }
   tests:
     - file: "eve/tests/dependency-security-review.test.ts"
       scenarios:
@@ -147,9 +358,17 @@ implementation_context:
         - "Runtime attacker source reaches vulnerable package behavior -> valid source and sink evidence -> confirmed."
         - "Invented or missing evidence path -> attempted confirmation -> not-confirmed."
     - file: "src/lib/eve-protocol.test.ts"
-      scenarios: ["Legacy audit without assessments -> parse -> empty default", "New audit assessment -> parse -> preserved"]
+      scenarios:
+        [
+          "Legacy audit without assessments -> parse -> empty default",
+          "New audit assessment -> parse -> preserved",
+        ]
     - file: "src/lib/vulnerabilities.test.ts"
-      scenarios: ["Unconfirmed critical OSV match -> score -> low priority with severity retained", "Confirmed critical match -> score -> threat-driven priority retained"]
+      scenarios:
+        [
+          "Unconfirmed critical OSV match -> score -> low priority with severity retained",
+          "Confirmed critical match -> score -> threat-driven priority retained",
+        ]
   verification_commands:
     - "bun test"
     - "bun run typecheck"
