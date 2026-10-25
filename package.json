@@ -2,7 +2,7 @@
   "name": "codetend",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.28.0"
