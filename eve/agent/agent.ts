@@ -14,7 +14,7 @@ export default defineAgent({
   model: dynamicScannerModel(),
   defaultTools: false,
   limits: {
-    maxInputTokensPerSession: false,
+    sessionUsage: () => false,
     sessionTimeoutMs: 2 * 24 * 60 * 60 * 1_000,
   },
 })

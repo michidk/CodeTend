@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai'
-import { defineDynamic } from 'eve'
+import { defineDynamic, type SessionUsageLimit } from 'eve'
 import {
   type AgentExecutionProfile,
   readExecutionProfileMarker,
@@ -234,7 +234,12 @@ const configuredSessionLimit = Number.parseInt(
  * whole scan waiting for an operator to approve more budget. Cost is bounded
  * by the app's per-scan and daily USD caps instead.
  */
-export const MAX_INPUT_TOKENS_PER_SESSION: number | false =
+const maxInputTokensPerSession =
   Number.isFinite(configuredSessionLimit) && configuredSessionLimit >= 10_000
     ? configuredSessionLimit
     : false
+
+/** Continue grants another window with the same configured input-token budget. */
+export const sessionUsageLimit: SessionUsageLimit = ({ window }) =>
+  maxInputTokensPerSession !== false &&
+  window.inputTokens >= maxInputTokensPerSession
