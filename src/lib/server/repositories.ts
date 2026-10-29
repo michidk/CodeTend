@@ -234,22 +234,24 @@ export const getAvailableRepositories = createServerFn({
   }
 })
 
+export async function insertRepository(data: RepositoryInput) {
+  assertRepositoryAccess(data.url)
+  const [row] = await db
+    .insert(repositories)
+    .values({
+      ...data,
+      nextScheduledScanAt:
+        data.scheduleEnabled && data.scheduleCronExpression
+          ? computeNextScanAt(data.scheduleCronExpression, new Date())
+          : null,
+    })
+    .returning()
+  return expectReturnedRow(row, 'Repository')
+}
+
 export const createRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema)
-  .handler(async ({ data }) => {
-    assertRepositoryAccess(data.url)
-    const [row] = await db
-      .insert(repositories)
-      .values({
-        ...data,
-        nextScheduledScanAt:
-          data.scheduleEnabled && data.scheduleCronExpression
-            ? computeNextScanAt(data.scheduleCronExpression, new Date())
-            : null,
-      })
-      .returning()
-    return expectReturnedRow(row, 'Repository')
-  })
+  .handler(({ data }) => insertRepository(data))
 
 export const updateRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema.safeExtend({ id: positiveId }))

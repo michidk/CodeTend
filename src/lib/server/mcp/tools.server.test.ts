@@ -59,6 +59,13 @@ function fakeLoaders(): McpLoaders {
       findingCount: 2,
       prompt: '# Fix findings',
     }),
+    registerRepository: async ({ url, name, branch, scheduleEnabled }) => ({
+      repositoryId: 3,
+      name: name ?? 'octo/demo',
+      url,
+      branch,
+      scheduleEnabled,
+    }),
     triggerScan: async () => ({ scanId: 42 }),
     cancelScan: async () => ({ scanId: 42 }),
     markFindingFixed: async (findingId) => ({
@@ -144,6 +151,29 @@ describe('CodeTend MCP tools', () => {
         state: 'resolved',
         disposition: 'false_positive',
       },
+    })
+  })
+
+  test('registers a repository with defaults through the write scope', async () => {
+    const readOnly = await call(handlers(fakeLoaders()), 'tools/list', {})
+    expect(
+      readOnly.result.tools.map((tool: { name: string }) => tool.name),
+    ).not.toContain('register_repository')
+
+    const registered = await call(
+      handlers(fakeLoaders(), { scopes: ['codetend:read', 'codetend:write'] }),
+      'tools/call',
+      {
+        name: 'register_repository',
+        arguments: { url: 'https://github.com/octo/demo' },
+      },
+    )
+    expect(registered.result.structuredContent).toEqual({
+      repositoryId: 3,
+      name: 'octo/demo',
+      url: 'https://github.com/octo/demo',
+      branch: 'main',
+      scheduleEnabled: true,
     })
   })
 

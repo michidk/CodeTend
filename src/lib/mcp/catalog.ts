@@ -17,7 +17,7 @@ export const MCP_SCOPE_DETAILS: Record<
   'codetend:write': {
     label: 'Manage findings and scans',
     description:
-      'Mark findings as fixed, triage them as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
+      'Register repositories, mark findings as fixed, triage them as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
   },
 }
 
@@ -69,6 +69,13 @@ export const MCP_TOOL_CATALOG = [
     scope: 'codetend:read',
   },
   {
+    name: 'register_repository',
+    title: 'Register repository',
+    description: 'Start tracking a Git repository.',
+    group: 'Manage repositories',
+    scope: 'codetend:write',
+  },
+  {
     name: 'trigger_scan',
     title: 'Trigger scan',
     description: 'Queue a default scan for a tracked repository.',
@@ -115,7 +122,7 @@ export const MCP_TOOL_CATALOG = [
   name: string
   title: string
   description: string
-  group: 'Read' | 'Control scans' | 'Manage findings'
+  group: 'Read' | 'Manage repositories' | 'Control scans' | 'Manage findings'
   scope: McpScope
 }>
 
