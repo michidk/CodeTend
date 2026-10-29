@@ -11,9 +11,7 @@ import {
 } from '@/db/schema'
 import { willQueueExecution } from '@/lib/agent-execution'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
-import { getServerEnv } from '@/lib/env.server'
 import { OPEN_FINDING_STATES } from '@/lib/findings'
-import { validateRepositoryLocation } from '@/lib/repository-access'
 import { computeNextScanAt, isValidCronExpression } from '@/lib/schedule'
 import {
   MAX_SCAN_INPUT_TOKEN_BUDGET,
@@ -21,6 +19,10 @@ import {
 } from '@/lib/security-scans'
 import { listAvailableGitHubRepositories } from '@/lib/server/github-repositories.server'
 import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
+import {
+  assertRepositoryAccess,
+  insertRepository,
+} from '@/lib/server/repository-write.server'
 import {
   removeGitNexusRepository,
   removeScanArtifacts,
@@ -67,16 +69,6 @@ const repositoryInputSchema = z
   )
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>
-
-function assertRepositoryAccess(url: string): void {
-  const env = getServerEnv()
-  const error = validateRepositoryLocation(url, {
-    allowedHosts: env.TECDEBT_ALLOWED_GIT_HOSTS.split(','),
-    allowLocal: env.TECDEBT_ALLOW_LOCAL_REPOSITORIES,
-    allowInsecureHttp: env.TECDEBT_ALLOW_INSECURE_GIT,
-  })
-  if (error) throw new DomainError('validation', error)
-}
 
 /**
  * Dashboard rows: every repository with its latest scored scan, the scan
@@ -236,20 +228,7 @@ export const getAvailableRepositories = createServerFn({
 
 export const createRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema)
-  .handler(async ({ data }) => {
-    assertRepositoryAccess(data.url)
-    const [row] = await db
-      .insert(repositories)
-      .values({
-        ...data,
-        nextScheduledScanAt:
-          data.scheduleEnabled && data.scheduleCronExpression
-            ? computeNextScanAt(data.scheduleCronExpression, new Date())
-            : null,
-      })
-      .returning()
-    return expectReturnedRow(row, 'Repository')
-  })
+  .handler(({ data }) => insertRepository(data))
 
 export const updateRepository = createServerFn({ method: 'POST' })
   .validator(repositoryInputSchema.safeExtend({ id: positiveId }))
