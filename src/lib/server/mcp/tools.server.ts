@@ -40,6 +40,7 @@ import {
   updateFindingAsFixed,
   updateFindingDisposition,
 } from '@/lib/server/finding-triage'
+import { insertRepository } from '@/lib/server/repositories'
 import {
   requestScanCancellation,
   startScan,
@@ -62,6 +63,13 @@ const writeAnnotations = {
 } as const
 
 const scanMutationOutput = z.object({ scanId: z.number().int().positive() })
+const registerRepositoryOutput = z.object({
+  repositoryId: z.number().int().positive(),
+  name: z.string(),
+  url: z.string(),
+  branch: z.string(),
+  scheduleEnabled: z.boolean(),
+})
 const fixPromptOutput = z.object({
   repositoryId: z.number().int().positive(),
   scannerId: z.string(),
@@ -94,6 +102,12 @@ export type McpLoaders = {
     repositoryId: number,
     scannerId: string,
   ): Promise<z.infer<typeof fixPromptOutput>>
+  registerRepository(input: {
+    url: string
+    name?: string
+    branch: string
+    scheduleEnabled: boolean
+  }): Promise<z.infer<typeof registerRepositoryOutput>>
   triggerScan(repositoryId: number): Promise<z.infer<typeof scanMutationOutput>>
   cancelScan(scanId: number): Promise<z.infer<typeof scanMutationOutput>>
   markFindingFixed(
@@ -287,6 +301,39 @@ const defaultLoaders: McpLoaders = {
           priorityScore: finding.priorityScore ?? undefined,
         })),
       }),
+    }
+  },
+
+  async registerRepository({ url, name, branch, scheduleEnabled }) {
+    // shortcut: exact-URL duplicate check only, so https:// and git@ forms of one repo both pass
+    const existing = await db.query.repositories.findFirst({
+      where: eq(repositories.url, url),
+      columns: { id: true },
+    })
+    if (existing)
+      throw new Error(`Repository is already registered (id ${existing.id})`)
+    const repository = await insertRepository({
+      url,
+      name:
+        name ??
+        (url
+          .replace(/\.git$/, '')
+          .replace(/\/+$/, '')
+          .split(/[/:]/)
+          .filter(Boolean)
+          .slice(-2)
+          .join('/') ||
+          url),
+      branch,
+      scheduleEnabled,
+      scheduleCronExpression: null,
+    })
+    return {
+      repositoryId: repository.id,
+      name: repository.name,
+      url: repository.url,
+      branch: repository.branch,
+      scheduleEnabled: repository.scheduleEnabled,
     }
   },
 
@@ -505,6 +552,28 @@ export function createCodeTendMcpServer(
       ({ repositoryId, scannerId }) =>
         result(fixPromptOutput, () =>
           loaders.generateFixPrompt(repositoryId, scannerId),
+        ),
+    )
+
+  if (allowed('register_repository'))
+    server.registerTool(
+      'register_repository',
+      {
+        title: 'Register repository',
+        description:
+          'Start tracking a Git repository (the host must be allowed by the instance). Does not scan it. With scheduleEnabled true, the instance schedule will scan it automatically and consume AI budget.',
+        inputSchema: z.object({
+          url: z.string().trim().min(1).max(500),
+          name: z.string().trim().min(1).max(200).optional(),
+          branch: z.string().trim().min(1).max(200).default('main'),
+          scheduleEnabled: z.boolean().default(true),
+        }),
+        outputSchema: registerRepositoryOutput,
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        result(registerRepositoryOutput, () =>
+          loaders.registerRepository(input),
         ),
     )
 
