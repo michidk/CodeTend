@@ -40,7 +40,7 @@ import {
   updateFindingAsFixed,
   updateFindingDisposition,
 } from '@/lib/server/finding-triage'
-import { insertRepository } from '@/lib/server/repositories'
+import { insertRepository } from '@/lib/server/repository-write.server'
 import {
   requestScanCancellation,
   startScan,
