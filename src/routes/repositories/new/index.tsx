@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Link as LinkIcon } from 'lucide-react'
-import { useState } from 'react'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { Link as LinkIcon, RefreshCw } from 'lucide-react'
+import { useState, useTransition } from 'react'
 import { Page, PageHeader } from '@/components/page-layout'
 import { RepositoryForm } from '@/components/repository-form'
 import { RouteError } from '@/components/route-error'
@@ -28,7 +28,9 @@ export const Route = createFileRoute('/repositories/new/')({
 
 function NewRepositoryPage() {
   const { available, schedule } = Route.useLoaderData()
+  const router = useRouter()
   const [addByUrl, setAddByUrl] = useState(false)
+  const [rescanning, startRescan] = useTransition()
 
   return (
     <Page width="form">
@@ -42,10 +44,27 @@ function NewRepositoryPage() {
         size="compact"
         actions={
           !addByUrl ? (
-            <Button variant="outline" onClick={() => setAddByUrl(true)}>
-              <LinkIcon className="size-4" aria-hidden="true" />
-              Add by URL
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                disabled={rescanning}
+                onClick={() =>
+                  startRescan(async () => {
+                    await router.invalidate({ sync: true })
+                  })
+                }
+              >
+                <RefreshCw
+                  className={`size-4 ${rescanning ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                {rescanning ? 'Rescanning…' : 'Rescan'}
+              </Button>
+              <Button variant="outline" onClick={() => setAddByUrl(true)}>
+                <LinkIcon className="size-4" aria-hidden="true" />
+                Add by URL
+              </Button>
+            </>
           ) : undefined
         }
       />
