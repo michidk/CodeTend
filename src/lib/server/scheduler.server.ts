@@ -1,6 +1,16 @@
 import '@tanstack/react-start/server-only'
 
-import { and, asc, eq, inArray, isNotNull, isNull, lte, max } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  max,
+  sql,
+} from 'drizzle-orm'
 import { db } from '@/db'
 import {
   findingPatches,
@@ -98,20 +108,17 @@ export function ensureScheduler(): void {
     )
 }
 
-/** Latest scan creation time per repository; absent when never scanned. */
-async function loadLastScanTimes(): Promise<Map<number, Date>> {
+/** Rating availability and latest attempt time for scheduling priority. */
+async function loadScanPriorities() {
   const rows = await db
     .select({
       repositoryId: scans.repositoryId,
       lastScanAt: max(scans.createdAt),
+      hasRating: sql<boolean>`bool_or(${scans.overallScore} is not null and ${scans.status} in ('completed', 'partial'))`,
     })
     .from(scans)
     .groupBy(scans.repositoryId)
-  return new Map(
-    rows.flatMap((row) =>
-      row.lastScanAt ? [[row.repositoryId, row.lastScanAt] as const] : [],
-    ),
-  )
+  return new Map(rows.map((row) => [row.repositoryId, row]))
 }
 
 async function tick(state: Pick<SchedulerState, 'ticking'>) {
@@ -133,7 +140,7 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         .orderBy(asc(repositories.createdAt), asc(repositories.id))
       let repositoryIdsToQueue = repositoryIds.map((row) => row.repositoryId)
       if (settings.mode === 'distributed') {
-        const lastScans = await loadLastScanTimes()
+        const lastScans = await loadScanPriorities()
         const alreadyQueued = new Set(
           (
             await db
@@ -143,7 +150,11 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         )
         const stalest = repositoryIdsToQueue
           .filter((id) => !alreadyQueued.has(id))
-          .map((id) => ({ id, lastScanAt: lastScans.get(id) ?? null }))
+          .map((id) => ({
+            id,
+            hasRating: lastScans.get(id)?.hasRating ?? false,
+            lastScanAt: lastScans.get(id)?.lastScanAt ?? null,
+          }))
           .sort(compareByLastScan)[0]
         repositoryIdsToQueue = stalest ? [stalest.id] : []
       }
@@ -248,16 +259,18 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         asc(scheduledRepositoryQueue.id),
       )
     if (queue.length === 0) return
-    const lastScans = await loadLastScanTimes()
+    const lastScans = await loadScanPriorities()
     queue.sort((left, right) =>
       compareByLastScan(
         {
           id: left.repositoryId,
-          lastScanAt: lastScans.get(left.repositoryId) ?? null,
+          hasRating: lastScans.get(left.repositoryId)?.hasRating ?? false,
+          lastScanAt: lastScans.get(left.repositoryId)?.lastScanAt ?? null,
         },
         {
           id: right.repositoryId,
-          lastScanAt: lastScans.get(right.repositoryId) ?? null,
+          hasRating: lastScans.get(right.repositoryId)?.hasRating ?? false,
+          lastScanAt: lastScans.get(right.repositoryId)?.lastScanAt ?? null,
         },
       ),
     )

@@ -24,15 +24,27 @@ describe('scheduled repository queue', () => {
     expect(isScheduleDispatchReady(now, 0, now)).toBe(true)
   })
 
-  test('puts never-scanned repositories first, then the stalest', () => {
+  test('orders unrated repositories by oldest attempt, with unattempted first', () => {
     const repos = [
-      { id: 1, lastScanAt: new Date('2026-09-13T00:00:00Z') },
-      { id: 2, lastScanAt: new Date('2026-09-01T00:00:00Z') },
-      { id: 4, lastScanAt: null },
-      { id: 3, lastScanAt: null },
+      { id: 1, hasRating: false, lastScanAt: new Date('2026-09-13T00:00:00Z') },
+      { id: 2, hasRating: false, lastScanAt: new Date('2026-09-01T00:00:00Z') },
+      { id: 4, hasRating: false, lastScanAt: null },
+      { id: 3, hasRating: false, lastScanAt: null },
     ]
     expect(repos.sort(compareByLastScan).map((repo) => repo.id)).toEqual([
       3, 4, 2, 1,
     ])
   })
+})
+
+test('prioritizes missing ratings over older rated repositories', () => {
+  const repos = [
+    { id: 1, hasRating: true, lastScanAt: new Date('2026-08-01T00:00:00Z') },
+    { id: 2, hasRating: false, lastScanAt: new Date('2026-09-13T00:00:00Z') },
+    { id: 3, hasRating: false, lastScanAt: new Date('2026-09-12T00:00:00Z') },
+    { id: 4, hasRating: true, lastScanAt: new Date('2026-07-01T00:00:00Z') },
+  ]
+  expect(repos.sort(compareByLastScan).map((repo) => repo.id)).toEqual([
+    3, 2, 4, 1,
+  ])
 })
