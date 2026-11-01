@@ -1,16 +1,11 @@
 import { z } from 'zod'
 
-export const MCP_SCOPE_VALUES = ['codetend:read', 'codetend:write'] as const
-
-export type McpScope = (typeof MCP_SCOPE_VALUES)[number]
-
 export const MCP_TOOL_CATALOG = [
   {
     name: 'list_repositories',
     title: 'List repositories',
     description: 'List repositories tracked by CodeTend.',
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'get_repository',
@@ -18,7 +13,6 @@ export const MCP_TOOL_CATALOG = [
     description:
       'Inspect a repository, its recent scans, knowledge, and findings.',
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'list_scans',
@@ -26,14 +20,12 @@ export const MCP_TOOL_CATALOG = [
     description:
       'List recent scans, optionally filtered by repository and status.',
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'get_scan',
     title: 'Get scan details',
     description: 'Inspect one scan, its scanner runs, and bounded findings.',
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'get_finding',
@@ -41,7 +33,6 @@ export const MCP_TOOL_CATALOG = [
     description:
       'Inspect one finding with evidence, history, validation, and patches.',
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'generate_fix_prompt',
@@ -49,28 +40,24 @@ export const MCP_TOOL_CATALOG = [
     description:
       "Generate a coding-agent prompt from a scanner's current open findings.",
     group: 'Read',
-    scope: 'codetend:read',
   },
   {
     name: 'register_repository',
     title: 'Register repository',
     description: 'Start tracking a Git repository.',
     group: 'Manage repositories',
-    scope: 'codetend:write',
   },
   {
     name: 'trigger_scan',
     title: 'Trigger scan',
     description: 'Queue a default scan for a tracked repository.',
     group: 'Control scans',
-    scope: 'codetend:write',
   },
   {
     name: 'cancel_scan',
     title: 'Cancel scan',
     description: 'Request cancellation of a queued or running scan.',
     group: 'Control scans',
-    scope: 'codetend:write',
   },
   {
     name: 'mark_finding_fixed',
@@ -78,35 +65,30 @@ export const MCP_TOOL_CATALOG = [
     description:
       'Resolve a finding as operator-reported fixed with required context.',
     group: 'Manage findings',
-    scope: 'codetend:write',
   },
   {
     name: 'mark_finding_false_positive',
     title: 'Mark finding false positive',
     description: 'Resolve a finding as a false positive with optional context.',
     group: 'Manage findings',
-    scope: 'codetend:write',
   },
   {
     name: 'accept_finding_risk',
     title: 'Accept finding risk',
     description: 'Resolve a finding as an accepted risk with required context.',
     group: 'Manage findings',
-    scope: 'codetend:write',
   },
   {
     name: 'reopen_finding',
     title: 'Reopen finding',
     description: 'Remove a manual disposition and return a finding to active.',
     group: 'Manage findings',
-    scope: 'codetend:write',
   },
 ] as const satisfies ReadonlyArray<{
   name: string
   title: string
   description: string
   group: 'Read' | 'Manage repositories' | 'Control scans' | 'Manage findings'
-  scope: McpScope
 }>
 
 export type McpToolName = (typeof MCP_TOOL_CATALOG)[number]['name']

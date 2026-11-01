@@ -1,28 +1,37 @@
 import { describe, expect, test } from 'bun:test'
 import { resolveMcpConfig } from './config.server'
 import { createMcpHttpHandler, handlesMcpHttpPath } from './http.server'
-import type { McpAuditEvent } from './settings.server'
+import type { McpLoaders } from './tools.server'
 
 const config = resolveMcpConfig({
   MCP_ALLOWED_HOSTS: 'codetend.internal',
   MCP_ALLOWED_ORIGINS: 'https://client.internal',
 })
 
-const protocol = {
-  async fetch() {
-    return Response.json({ ok: true })
-  },
-}
+const loaders = {
+  listRepositories: async () => ({
+    repositories: [],
+    total: 0,
+    offset: 0,
+    limit: 25,
+    hasMore: false,
+  }),
+} as unknown as McpLoaders
 
 function request(host: string, headers: Record<string, string> = {}) {
   return new Request('http://upstream/api/mcp', {
     method: 'POST',
-    headers: { Host: host, 'Content-Type': 'application/json', ...headers },
+    headers: {
+      Host: host,
+      Accept: 'application/json, text/event-stream',
+      'Content-Type': 'application/json',
+      ...headers,
+    },
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
-      params: { name: 'list_repositories' },
+      params: { name: 'list_repositories', arguments: {} },
     }),
   })
 }
@@ -44,12 +53,11 @@ describe('stateless MCP HTTP endpoint', () => {
   })
 
   test('serves requests without credentials from allowed hosts', async () => {
-    const audits: McpAuditEvent[] = []
-    const handle = createMcpHttpHandler(
-      config,
-      async (event) => void audits.push(event),
-      protocol,
-    )
+    const audits: unknown[] = []
+    const handle = createMcpHttpHandler(config, {
+      audit: async (event) => void audits.push(event),
+      loaders,
+    })
     for (const host of ['localhost:3000', '127.0.0.1', 'codetend.internal']) {
       const response = await handle(request(host))
       expect(response?.status).toBe(200)
@@ -85,16 +93,13 @@ describe('stateless MCP HTTP endpoint', () => {
   })
 
   test('owner policy pauses the endpoint', async () => {
-    const handle = createMcpHttpHandler(
-      config,
-      undefined,
-      protocol,
-      async () => ({ enabled: false, disabledTools: [] }),
-    )
+    const handle = createMcpHttpHandler(config, {
+      policy: async () => ({ enabled: false, disabledTools: [] }),
+    })
     expect((await handle(request('localhost')))?.status).toBe(503)
   })
 })
 
 function handlerFor() {
-  return createMcpHttpHandler(config, undefined, protocol)
+  return createMcpHttpHandler(config, { loaders })
 }

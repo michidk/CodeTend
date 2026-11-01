@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { createMcpHandler } from '@modelcontextprotocol/server'
-import {
-  createCodeTendMcpServer,
-  type McpLoaders,
-  type McpToolAccess,
-} from './tools.server'
+import { MCP_TOOL_CATALOG, MCP_TOOL_NAMES } from '@/lib/mcp/catalog'
+import { createCodeTendMcpServer, type McpLoaders } from './tools.server'
 
-function handlers(loaders: McpLoaders, access?: McpToolAccess) {
-  return createMcpHandler(() => createCodeTendMcpServer(loaders, access))
+function handlers(
+  loaders: McpLoaders,
+  policy?: Parameters<typeof createCodeTendMcpServer>[1],
+) {
+  return createMcpHandler(() => createCodeTendMcpServer(loaders, policy))
 }
 
 async function call(
@@ -92,23 +92,22 @@ function fakeLoaders(): McpLoaders {
 }
 
 describe('CodeTend MCP tools', () => {
-  test('a read token only discovers bounded read tools', async () => {
+  test('discovers every tool, with read tools annotated read-only', async () => {
     const message = await call(handlers(fakeLoaders()), 'tools/list', {})
     expect(
-      message.result.tools.map((tool: { name: string }) => tool.name),
-    ).toEqual([
-      'list_repositories',
-      'get_repository',
-      'list_scans',
-      'get_scan',
-      'get_finding',
-      'generate_fix_prompt',
-    ])
+      message.result.tools.map((tool: { name: string }) => tool.name).sort(),
+    ).toEqual([...MCP_TOOL_NAMES].sort())
     expect(
-      message.result.tools.every(
-        (tool: { annotations: { readOnlyHint: boolean } }) =>
-          tool.annotations.readOnlyHint,
-      ),
+      message.result.tools
+        .filter((tool: { name: string }) =>
+          MCP_TOOL_CATALOG.some(
+            (entry) => entry.name === tool.name && entry.group === 'Read',
+          ),
+        )
+        .every(
+          (tool: { annotations: { readOnlyHint: boolean } }) =>
+            tool.annotations.readOnlyHint,
+        ),
     ).toBe(true)
 
     const repositoryTool = message.result.tools.find(
@@ -118,10 +117,8 @@ describe('CodeTend MCP tools', () => {
     expect(repositoryTool.outputSchema.additionalProperties).toBe(false)
   })
 
-  test('write tools require their scope and preserve structured output', async () => {
-    const handler = handlers(fakeLoaders(), {
-      scopes: ['codetend:read', 'codetend:write'],
-    })
+  test('write tools preserve structured output', async () => {
+    const handler = handlers(fakeLoaders())
     const listed = await call(handler, 'tools/list', {})
     expect(
       listed.result.tools.map((tool: { name: string }) => tool.name),
@@ -154,20 +151,11 @@ describe('CodeTend MCP tools', () => {
     })
   })
 
-  test('registers a repository with defaults through the write scope', async () => {
-    const readOnly = await call(handlers(fakeLoaders()), 'tools/list', {})
-    expect(
-      readOnly.result.tools.map((tool: { name: string }) => tool.name),
-    ).not.toContain('register_repository')
-
-    const registered = await call(
-      handlers(fakeLoaders(), { scopes: ['codetend:read', 'codetend:write'] }),
-      'tools/call',
-      {
-        name: 'register_repository',
-        arguments: { url: 'https://github.com/octo/demo' },
-      },
-    )
+  test('registers a repository with defaults', async () => {
+    const registered = await call(handlers(fakeLoaders()), 'tools/call', {
+      name: 'register_repository',
+      arguments: { url: 'https://github.com/octo/demo' },
+    })
     expect(registered.result.structuredContent).toEqual({
       repositoryId: 3,
       name: 'octo/demo',
@@ -178,22 +166,16 @@ describe('CodeTend MCP tools', () => {
   })
 
   test('marking a finding fixed requires meaningful context', async () => {
-    const message = await call(
-      handlers(fakeLoaders(), {
-        scopes: ['codetend:read', 'codetend:write'],
-      }),
-      'tools/call',
-      {
-        name: 'mark_finding_fixed',
-        arguments: { findingId: 8, note: 'ok' },
-      },
-    )
+    const message = await call(handlers(fakeLoaders()), 'tools/call', {
+      name: 'mark_finding_fixed',
+      arguments: { findingId: 8, note: 'ok' },
+    })
 
     expect(message.result.isError).toBe(true)
     expect(message.result.content[0]?.text).toContain('note')
   })
 
-  test('generates a bounded fix prompt through a read token', async () => {
+  test('generates a bounded fix prompt ', async () => {
     const generated = await call(handlers(fakeLoaders()), 'tools/call', {
       name: 'generate_fix_prompt',
       arguments: { repositoryId: 7, scannerId: 'architecture' },
@@ -206,14 +188,35 @@ describe('CodeTend MCP tools', () => {
     })
   })
 
-  test('owner policy can hide an otherwise scoped tool', async () => {
+  test('owner policy hides disabled tools and audits calls', async () => {
+    const audits: unknown[] = []
+    const all = Object.keys(
+      Object.fromEntries(
+        (
+          await call(handlers(fakeLoaders()), 'tools/list', {})
+        ).result.tools.map((tool: { name: string }) => [tool.name, 1]),
+      ),
+    )
     const handler = handlers(fakeLoaders(), {
-      scopes: ['codetend:read', 'codetend:write'],
-      enabledTools: ['list_repositories'],
+      disabledTools: new Set(
+        all.filter((name) => name !== 'list_repositories'),
+      ),
+      audit: async (event) => void audits.push(event),
     })
     const listed = await call(handler, 'tools/list', {})
     expect(
       listed.result.tools.map((tool: { name: string }) => tool.name),
     ).toEqual(['list_repositories'])
+    await call(handler, 'tools/call', {
+      name: 'list_repositories',
+      arguments: {},
+    })
+    expect(audits).toEqual([
+      {
+        event: 'tool_called',
+        toolName: 'list_repositories',
+        outcome: 'success',
+      },
+    ])
   })
 })

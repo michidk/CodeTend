@@ -16,12 +16,6 @@ import {
 import { OPEN_FINDING_STATES } from '@/lib/findings'
 import { buildFixPrompt } from '@/lib/fix-prompt'
 import {
-  MCP_TOOL_CATALOG,
-  MCP_TOOL_NAMES,
-  type McpScope,
-  type McpToolName,
-} from '@/lib/mcp/catalog'
-import {
   type FindingMutationOutput,
   type FindingOutput,
   findingMutationOutputSchema,
@@ -47,6 +41,7 @@ import {
 } from '@/lib/server/scan-pipeline.server'
 import { listGlobalScanners } from '@/lib/server/scanner-settings'
 import { ensureScheduler } from '@/lib/server/scheduler.server'
+import { applyToolPolicy } from './tool-policy.server'
 
 const readOnlyAnnotations = {
   readOnlyHint: true,
@@ -425,263 +420,231 @@ async function result(schema: z.ZodType, operation: () => Promise<unknown>) {
   }
 }
 
-export type McpToolAccess = {
-  scopes?: readonly McpScope[]
-  enabledTools?: readonly McpToolName[]
-}
-
 export function createCodeTendMcpServer(
   loaders: McpLoaders = defaultLoaders,
-  access: McpToolAccess = {},
+  policy: Parameters<typeof applyToolPolicy>[1] = { disabledTools: new Set() },
 ) {
-  const scopes = new Set<McpScope>(access.scopes ?? ['codetend:read'])
-  const enabledTools = new Set<McpToolName>(
-    access.enabledTools ?? MCP_TOOL_NAMES,
-  )
-  const allowed = (name: McpToolName) => {
-    const tool = MCP_TOOL_CATALOG.find((candidate) => candidate.name === name)
-    return Boolean(tool && enabledTools.has(name) && scopes.has(tool.scope))
-  }
   const server = new McpServer(
     { name: 'codetend', version: '1.0.0' },
     {
       instructions:
-        'Scoped access to CodeTend repository health. Read tools are bounded and return current persisted scan data. Use list tools before detail tools when an ID is unknown. Starting a scan can consume configured AI budget; only call trigger_scan when the user explicitly asks. Never present a scanner finding as proven beyond its recorded confidence and evidence.',
+        'Access to CodeTend repository health. Read tools are bounded and return current persisted scan data. Use list tools before detail tools when an ID is unknown. Starting a scan can consume configured AI budget; only call trigger_scan when the user explicitly asks. Never present a scanner finding as proven beyond its recorded confidence and evidence.',
     },
   )
+  applyToolPolicy(server, policy)
 
-  if (allowed('list_repositories'))
-    server.registerTool(
-      'list_repositories',
-      {
-        title: 'List repositories',
-        description:
-          'List tracked repositories newest first, with their latest scan.',
-        inputSchema: z.object({
-          offset: z.int().min(0).default(0),
-          limit: z.int().min(1).max(100).default(25),
-        }),
-        outputSchema: repositoryListOutputSchema,
-        annotations: readOnlyAnnotations,
-      },
-      (input) =>
-        result(repositoryListOutputSchema, () =>
-          loaders.listRepositories(input),
-        ),
-    )
+  server.registerTool(
+    'list_repositories',
+    {
+      title: 'List repositories',
+      description:
+        'List tracked repositories newest first, with their latest scan.',
+      inputSchema: z.object({
+        offset: z.int().min(0).default(0),
+        limit: z.int().min(1).max(100).default(25),
+      }),
+      outputSchema: repositoryListOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      result(repositoryListOutputSchema, () => loaders.listRepositories(input)),
+  )
 
-  if (allowed('get_repository'))
-    server.registerTool(
-      'get_repository',
-      {
-        title: 'Get repository health',
-        description:
-          'Get one repository with up to 20 recent scans, 100 recent findings, and its knowledge overview.',
-        inputSchema: z.object({ repositoryId: z.int().positive() }),
-        outputSchema: repositoryOutputSchema,
-        annotations: readOnlyAnnotations,
-      },
-      ({ repositoryId }) =>
-        result(repositoryOutputSchema, () =>
-          loaders.getRepository(repositoryId),
-        ),
-    )
+  server.registerTool(
+    'get_repository',
+    {
+      title: 'Get repository health',
+      description:
+        'Get one repository with up to 20 recent scans, 100 recent findings, and its knowledge overview.',
+      inputSchema: z.object({ repositoryId: z.int().positive() }),
+      outputSchema: repositoryOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    ({ repositoryId }) =>
+      result(repositoryOutputSchema, () => loaders.getRepository(repositoryId)),
+  )
 
-  if (allowed('list_scans'))
-    server.registerTool(
-      'list_scans',
-      {
-        title: 'List scans',
-        description:
-          'List recent scans, optionally filtered by repository and status.',
-        inputSchema: z.object({
-          repositoryId: z.int().positive().optional(),
-          status: z.enum(SCAN_STATUS_VALUES).optional(),
-          offset: z.int().min(0).default(0),
-          limit: z.int().min(1).max(100).default(25),
-        }),
-        outputSchema: scanListOutputSchema,
-        annotations: readOnlyAnnotations,
-      },
-      (input) => result(scanListOutputSchema, () => loaders.listScans(input)),
-    )
+  server.registerTool(
+    'list_scans',
+    {
+      title: 'List scans',
+      description:
+        'List recent scans, optionally filtered by repository and status.',
+      inputSchema: z.object({
+        repositoryId: z.int().positive().optional(),
+        status: z.enum(SCAN_STATUS_VALUES).optional(),
+        offset: z.int().min(0).default(0),
+        limit: z.int().min(1).max(100).default(25),
+      }),
+      outputSchema: scanListOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => result(scanListOutputSchema, () => loaders.listScans(input)),
+  )
 
-  if (allowed('get_scan'))
-    server.registerTool(
-      'get_scan',
-      {
-        title: 'Get scan details',
-        description:
-          'Get one scan with scanner runs and up to 200 occurrences.',
-        inputSchema: z.object({ scanId: z.int().positive() }),
-        outputSchema: scanOutputSchema,
-        annotations: readOnlyAnnotations,
-      },
-      ({ scanId }) => result(scanOutputSchema, () => loaders.getScan(scanId)),
-    )
+  server.registerTool(
+    'get_scan',
+    {
+      title: 'Get scan details',
+      description: 'Get one scan with scanner runs and up to 200 occurrences.',
+      inputSchema: z.object({ scanId: z.int().positive() }),
+      outputSchema: scanOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    ({ scanId }) => result(scanOutputSchema, () => loaders.getScan(scanId)),
+  )
 
-  if (allowed('get_finding'))
-    server.registerTool(
-      'get_finding',
-      {
-        title: 'Get finding details',
-        description:
-          'Get a finding with its evidence and bounded occurrence, validation, patch, and event history.',
-        inputSchema: z.object({ findingId: z.int().positive() }),
-        outputSchema: findingOutputSchema,
-        annotations: readOnlyAnnotations,
-      },
-      ({ findingId }) =>
-        result(findingOutputSchema, () => loaders.getFinding(findingId)),
-    )
+  server.registerTool(
+    'get_finding',
+    {
+      title: 'Get finding details',
+      description:
+        'Get a finding with its evidence and bounded occurrence, validation, patch, and event history.',
+      inputSchema: z.object({ findingId: z.int().positive() }),
+      outputSchema: findingOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    ({ findingId }) =>
+      result(findingOutputSchema, () => loaders.getFinding(findingId)),
+  )
 
-  if (allowed('generate_fix_prompt'))
-    server.registerTool(
-      'generate_fix_prompt',
-      {
-        title: 'Generate fix prompt',
-        description:
-          'Generate a coding-agent prompt from the current open findings for one repository scanner.',
-        inputSchema: z.object({
-          repositoryId: z.int().positive(),
-          scannerId: z.string().trim().min(1).max(60),
-        }),
-        outputSchema: fixPromptOutput,
-        annotations: readOnlyAnnotations,
-      },
-      ({ repositoryId, scannerId }) =>
-        result(fixPromptOutput, () =>
-          loaders.generateFixPrompt(repositoryId, scannerId),
-        ),
-    )
+  server.registerTool(
+    'generate_fix_prompt',
+    {
+      title: 'Generate fix prompt',
+      description:
+        'Generate a coding-agent prompt from the current open findings for one repository scanner.',
+      inputSchema: z.object({
+        repositoryId: z.int().positive(),
+        scannerId: z.string().trim().min(1).max(60),
+      }),
+      outputSchema: fixPromptOutput,
+      annotations: readOnlyAnnotations,
+    },
+    ({ repositoryId, scannerId }) =>
+      result(fixPromptOutput, () =>
+        loaders.generateFixPrompt(repositoryId, scannerId),
+      ),
+  )
 
-  if (allowed('register_repository'))
-    server.registerTool(
-      'register_repository',
-      {
-        title: 'Register repository',
-        description:
-          'Start tracking a Git repository (the host must be allowed by the instance). Does not scan it. With scheduleEnabled true, the instance schedule will scan it automatically and consume AI budget.',
-        inputSchema: z.object({
-          url: z.string().trim().min(1).max(500),
-          name: z.string().trim().min(1).max(200).optional(),
-          branch: z.string().trim().min(1).max(200).default('main'),
-          scheduleEnabled: z.boolean().default(true),
-        }),
-        outputSchema: registerRepositoryOutput,
-        annotations: writeAnnotations,
-      },
-      (input) =>
-        result(registerRepositoryOutput, () =>
-          loaders.registerRepository(input),
-        ),
-    )
+  server.registerTool(
+    'register_repository',
+    {
+      title: 'Register repository',
+      description:
+        'Start tracking a Git repository (the host must be allowed by the instance). Does not scan it. With scheduleEnabled true, the instance schedule will scan it automatically and consume AI budget.',
+      inputSchema: z.object({
+        url: z.string().trim().min(1).max(500),
+        name: z.string().trim().min(1).max(200).optional(),
+        branch: z.string().trim().min(1).max(200).default('main'),
+        scheduleEnabled: z.boolean().default(true),
+      }),
+      outputSchema: registerRepositoryOutput,
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      result(registerRepositoryOutput, () => loaders.registerRepository(input)),
+  )
 
-  if (allowed('trigger_scan'))
-    server.registerTool(
-      'trigger_scan',
-      {
-        title: 'Trigger scan',
-        description:
-          'Queue a default manual scan. This can consume the instance AI budget.',
-        inputSchema: z.object({ repositoryId: z.int().positive() }),
-        outputSchema: scanMutationOutput,
-        annotations: writeAnnotations,
-      },
-      ({ repositoryId }) =>
-        result(scanMutationOutput, () => loaders.triggerScan(repositoryId)),
-    )
+  server.registerTool(
+    'trigger_scan',
+    {
+      title: 'Trigger scan',
+      description:
+        'Queue a default manual scan. This can consume the instance AI budget.',
+      inputSchema: z.object({ repositoryId: z.int().positive() }),
+      outputSchema: scanMutationOutput,
+      annotations: writeAnnotations,
+    },
+    ({ repositoryId }) =>
+      result(scanMutationOutput, () => loaders.triggerScan(repositoryId)),
+  )
 
-  if (allowed('cancel_scan'))
-    server.registerTool(
-      'cancel_scan',
-      {
-        title: 'Cancel scan',
-        description: 'Request cancellation of a queued or running scan.',
-        inputSchema: z.object({ scanId: z.int().positive() }),
-        outputSchema: scanMutationOutput,
-        annotations: { ...writeAnnotations, idempotentHint: true },
-      },
-      ({ scanId }) =>
-        result(scanMutationOutput, () => loaders.cancelScan(scanId)),
-    )
+  server.registerTool(
+    'cancel_scan',
+    {
+      title: 'Cancel scan',
+      description: 'Request cancellation of a queued or running scan.',
+      inputSchema: z.object({ scanId: z.int().positive() }),
+      outputSchema: scanMutationOutput,
+      annotations: { ...writeAnnotations, idempotentHint: true },
+    },
+    ({ scanId }) =>
+      result(scanMutationOutput, () => loaders.cancelScan(scanId)),
+  )
 
-  if (allowed('mark_finding_false_positive'))
-    server.registerTool(
-      'mark_finding_false_positive',
-      {
-        title: 'Mark finding false positive',
-        description:
-          'Resolve a finding as a false positive and record optional operator context.',
-        inputSchema: z.object({
-          findingId: z.int().positive(),
-          note: z.string().trim().max(2_000).default(''),
-        }),
-        outputSchema: findingMutationOutputSchema,
-        annotations: writeAnnotations,
-      },
-      ({ findingId, note }) =>
-        result(findingMutationOutputSchema, () =>
-          loaders.markFindingFalsePositive(findingId, note),
-        ),
-    )
+  server.registerTool(
+    'mark_finding_false_positive',
+    {
+      title: 'Mark finding false positive',
+      description:
+        'Resolve a finding as a false positive and record optional operator context.',
+      inputSchema: z.object({
+        findingId: z.int().positive(),
+        note: z.string().trim().max(2_000).default(''),
+      }),
+      outputSchema: findingMutationOutputSchema,
+      annotations: writeAnnotations,
+    },
+    ({ findingId, note }) =>
+      result(findingMutationOutputSchema, () =>
+        loaders.markFindingFalsePositive(findingId, note),
+      ),
+  )
 
-  if (allowed('mark_finding_fixed'))
-    server.registerTool(
-      'mark_finding_fixed',
-      {
-        title: 'Mark finding fixed',
-        description:
-          'Resolve a finding as fixed based on an operator-reported code or configuration change. A later scan can regress it if rediscovered.',
-        inputSchema: z.object({
-          findingId: z.int().positive(),
-          note: z.string().trim().min(5).max(2_000),
-        }),
-        outputSchema: findingMutationOutputSchema,
-        annotations: writeAnnotations,
-      },
-      ({ findingId, note }) =>
-        result(findingMutationOutputSchema, () =>
-          loaders.markFindingFixed(findingId, note),
-        ),
-    )
+  server.registerTool(
+    'mark_finding_fixed',
+    {
+      title: 'Mark finding fixed',
+      description:
+        'Resolve a finding as fixed based on an operator-reported code or configuration change. A later scan can regress it if rediscovered.',
+      inputSchema: z.object({
+        findingId: z.int().positive(),
+        note: z.string().trim().min(5).max(2_000),
+      }),
+      outputSchema: findingMutationOutputSchema,
+      annotations: writeAnnotations,
+    },
+    ({ findingId, note }) =>
+      result(findingMutationOutputSchema, () =>
+        loaders.markFindingFixed(findingId, note),
+      ),
+  )
 
-  if (allowed('accept_finding_risk'))
-    server.registerTool(
-      'accept_finding_risk',
-      {
-        title: 'Accept finding risk',
-        description:
-          'Resolve a finding as an accepted risk and record why it is acceptable.',
-        inputSchema: z.object({
-          findingId: z.int().positive(),
-          note: z.string().trim().min(5).max(2_000),
-        }),
-        outputSchema: findingMutationOutputSchema,
-        annotations: writeAnnotations,
-      },
-      ({ findingId, note }) =>
-        result(findingMutationOutputSchema, () =>
-          loaders.acceptFindingRisk(findingId, note),
-        ),
-    )
+  server.registerTool(
+    'accept_finding_risk',
+    {
+      title: 'Accept finding risk',
+      description:
+        'Resolve a finding as an accepted risk and record why it is acceptable.',
+      inputSchema: z.object({
+        findingId: z.int().positive(),
+        note: z.string().trim().min(5).max(2_000),
+      }),
+      outputSchema: findingMutationOutputSchema,
+      annotations: writeAnnotations,
+    },
+    ({ findingId, note }) =>
+      result(findingMutationOutputSchema, () =>
+        loaders.acceptFindingRisk(findingId, note),
+      ),
+  )
 
-  if (allowed('reopen_finding'))
-    server.registerTool(
-      'reopen_finding',
-      {
-        title: 'Reopen finding',
-        description:
-          'Remove a false-positive or accepted-risk disposition and return the finding to active.',
-        inputSchema: z.object({ findingId: z.int().positive() }),
-        outputSchema: findingMutationOutputSchema,
-        annotations: writeAnnotations,
-      },
-      ({ findingId }) =>
-        result(findingMutationOutputSchema, () =>
-          loaders.reopenFinding(findingId),
-        ),
-    )
+  server.registerTool(
+    'reopen_finding',
+    {
+      title: 'Reopen finding',
+      description:
+        'Remove a false-positive or accepted-risk disposition and return the finding to active.',
+      inputSchema: z.object({ findingId: z.int().positive() }),
+      outputSchema: findingMutationOutputSchema,
+      annotations: writeAnnotations,
+    },
+    ({ findingId }) =>
+      result(findingMutationOutputSchema, () =>
+        loaders.reopenFinding(findingId),
+      ),
+  )
 
   return server
 }

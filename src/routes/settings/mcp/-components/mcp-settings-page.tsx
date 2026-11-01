@@ -185,16 +185,7 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
           {groups.map(({ group, tools }) => (
             <Card key={group}>
               <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>{group}</CardTitle>
-                  <Badge
-                    variant={
-                      tools[0]?.scope.endsWith(':read') ? 'default' : 'outline'
-                    }
-                  >
-                    {tools[0]?.scope.endsWith(':read') ? 'read' : 'write'}
-                  </Badge>
-                </div>
+                <CardTitle>{group}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="divide-y divide-border">
