@@ -12,18 +12,20 @@ import { workspacesDir } from '../lib/paths'
  */
 export const environment = JustBashSandbox.environment({
   autoInstall: false,
-  filesystem: ({ defaultFilesystem, justBash }) => {
-    const filesystem = new justBash.MountableFs({ base: defaultFilesystem })
-    filesystem.mount(
-      '/workspace/repos',
-      new justBash.OverlayFs({
-        root: workspacesDir(),
-        mountPoint: '/',
-        readOnly: true,
-        maxFileReadSize: 4 * 1024 * 1024,
-      }),
-    )
-    return filesystem
+  experimental: {
+    filesystem: ({ defaultFilesystem, justBash }) => {
+      const filesystem = new justBash.MountableFs({ base: defaultFilesystem })
+      filesystem.mount(
+        '/workspace/repos',
+        new justBash.OverlayFs({
+          root: workspacesDir(),
+          mountPoint: '/',
+          readOnly: true,
+          maxFileReadSize: 4 * 1024 * 1024,
+        }),
+      )
+      return filesystem
+    },
   },
 })
 
