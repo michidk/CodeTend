@@ -40,7 +40,7 @@ const serverSchema = {
   SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
   GITNEXUS_ENABLED: booleanString.default(false),
   GITNEXUS_MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3907),
-  HODOR_SECRET: optionalString,
+  MCP_ALLOWED_HOSTS: optionalString,
   MCP_ALLOWED_ORIGINS: optionalString,
 }
 
@@ -96,7 +96,7 @@ export function parseServerEnv(runtimeEnvironment: RuntimeEnvironment) {
       SCHEDULER_INTERVAL_SECONDS: runtimeEnvironment.SCHEDULER_INTERVAL_SECONDS,
       GITNEXUS_ENABLED: runtimeEnvironment.GITNEXUS_ENABLED,
       GITNEXUS_MCP_PORT: runtimeEnvironment.GITNEXUS_MCP_PORT,
-      HODOR_SECRET: runtimeEnvironment.HODOR_SECRET,
+      MCP_ALLOWED_HOSTS: runtimeEnvironment.MCP_ALLOWED_HOSTS,
       MCP_ALLOWED_ORIGINS: runtimeEnvironment.MCP_ALLOWED_ORIGINS,
     },
     emptyStringAsUndefined: true,

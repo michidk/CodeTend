@@ -1,22 +1,15 @@
 import '@tanstack/react-start/server-only'
 
 import { getRequest } from '@tanstack/react-start/server'
-import { and, count, desc, eq, gt, isNull } from 'drizzle-orm'
+import { count, desc, eq } from 'drizzle-orm'
 import { getDb } from '@/db'
-import {
-  mcpAuditEvents,
-  mcpSettings,
-  oauthClients,
-  oauthTokens,
-} from '@/db/schema'
+import { mcpAuditEvents, mcpSettings } from '@/db/schema'
 import {
   MCP_TOOL_CATALOG,
   MCP_TOOL_NAMES,
   type McpToolName,
-  scopesForEnabledTools,
 } from '@/lib/mcp/catalog'
-import { getMcpConfig } from './config.server'
-import { DrizzleOAuthStore } from './oauth-store.server'
+import { getMcpEndpoint } from './config.server'
 
 export type McpPolicy = {
   enabled: boolean
@@ -66,24 +59,14 @@ export async function saveMcpPolicy(policy: McpPolicy) {
   }
 }
 
-export async function revokeMcpClient(clientId: string) {
-  await getDb().transaction(async (transaction) => {
-    const [client] = await transaction
-      .update(oauthClients)
-      .set({ revokedAt: new Date(), updatedAt: new Date() })
-      .where(eq(oauthClients.id, clientId))
-      .returning({ id: oauthClients.id })
-    if (!client) throw new Error('The MCP client was not found')
-    await transaction
-      .update(oauthTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(oauthTokens.clientId, clientId))
-    await transaction.insert(mcpAuditEvents).values({
-      event: 'client_revoked',
-      outcome: 'success',
-      clientId,
-    })
-  })
+export type McpAuditEvent = {
+  event: string
+  outcome: string
+  toolName?: string
+}
+
+export async function recordMcpAudit(event: McpAuditEvent) {
+  await getDb().insert(mcpAuditEvents).values(event)
 }
 
 export const MCP_AUDIT_PAGE_SIZE = 25
@@ -92,7 +75,6 @@ function serializeAuditEvent(event: {
   id: number
   event: string
   outcome: string
-  clientId: string | null
   toolName: string | null
   createdAt: Date
 }) {
@@ -121,77 +103,15 @@ export async function loadMcpAuditPage(page = 0) {
   }
 }
 
-// Runs on every admin page load, which is the owner-controlled point where
-// stale registrations are safe to reclaim without a background scheduler.
-export async function pruneStaleMcpClients() {
-  return new DrizzleOAuthStore().pruneStaleClients()
-}
-
 export async function loadMcpAdminState() {
-  const db = getDb()
-  await pruneStaleMcpClients()
-
-  const [policy, clientRows, activeTokenRows, audit] = await Promise.all([
+  const [policy, audit] = await Promise.all([
     loadMcpPolicy(),
-    db.select().from(oauthClients).orderBy(desc(oauthClients.createdAt)),
-    // Only active tokens are loaded, so this stays bounded by the
-    // registered-client cap instead of the full historical token table.
-    db
-      .select({ clientId: oauthTokens.clientId, scopes: oauthTokens.scopes })
-      .from(oauthTokens)
-      .where(
-        and(
-          isNull(oauthTokens.revokedAt),
-          gt(oauthTokens.accessTokenExpiresAt, new Date()),
-        ),
-      ),
     loadMcpAuditPage(0),
   ])
-
-  const activeByClient = new Map<
-    string,
-    { count: number; scopes: Set<string> }
-  >()
-  for (const token of activeTokenRows) {
-    const entry = activeByClient.get(token.clientId) ?? {
-      count: 0,
-      scopes: new Set<string>(),
-    }
-    entry.count += 1
-    for (const scope of token.scopes) entry.scopes.add(scope)
-    activeByClient.set(token.clientId, entry)
-  }
-
-  let endpoint: string | null = null
-  let configurationError: string | null = null
-  try {
-    endpoint = getMcpConfig(getRequest()).serverUrl.toString()
-  } catch (error) {
-    configurationError =
-      error instanceof Error ? error.message : 'The MCP environment is invalid'
-  }
-
-  const clients = clientRows.map((client) => {
-    const active = activeByClient.get(client.id)
-    return {
-      id: client.id,
-      name: client.name,
-      redirectUris: client.redirectUris,
-      revokedAt: client.revokedAt?.toISOString() ?? null,
-      createdAt: client.createdAt.toISOString(),
-      activeTokenCount: active?.count ?? 0,
-      scopes: active ? [...active.scopes] : [],
-    }
-  })
-
   return {
-    configured: endpoint !== null,
-    endpoint,
-    configurationError,
+    endpoint: getMcpEndpoint(getRequest()).toString(),
     policy,
-    supportedScopes: scopesForEnabledTools(policy.disabledTools),
     tools: MCP_TOOL_CATALOG.map((tool) => ({ ...tool })),
-    clients,
     audit,
   }
 }

@@ -115,24 +115,16 @@ Secret reference for DATABASE_URL, shared by the app container and the migration
   {{- end }}
 {{- end }}
 
-{{/* Machine-facing MCP paths that must pass around Hodor's login form. */}}
+{{/* Extra unauthenticated machine endpoints that bypass Hodor's login form. */}}
 {{- define "codetend.hodorBypassPaths" -}}
-{{- $paths := .Values.hodor.bypassPaths | default list -}}
-{{- if .Values.mcp.enabled -}}
-{{- $paths = concat $paths (list
-  "/api/mcp"
-  "/.well-known/oauth-protected-resource/api/mcp"
-  "/.well-known/oauth-authorization-server"
-  "/oauth/register"
-  "/oauth/token"
-  "/oauth/revoke") -}}
-{{- end -}}
-{{- join "," (uniq $paths) -}}
+{{- join "," (uniq (.Values.hodor.bypassPaths | default list)) -}}
 {{- end -}}
 
-{{/* MCP validates the original public host instead of the upstream address. */}}
-{{- define "codetend.hodorPreserveHost" -}}
-{{- or .Values.hodor.preserveHost .Values.mcp.enabled | ternary "true" "false" -}}
+{{/* Host names the MCP Service is reached by; anything else gets a 403. */}}
+{{- define "codetend.mcpAllowedHosts" -}}
+{{- $name := printf "%s-mcp" (include "codetend.fullname" .) -}}
+{{- $hosts := concat (list $name (printf "%s.%s" $name .Release.Namespace) (printf "%s.%s.svc" $name .Release.Namespace) (printf "%s.%s.svc.cluster.local" $name .Release.Namespace)) (.Values.mcp.allowedHosts | default list) -}}
+{{- join "," (uniq $hosts) -}}
 {{- end -}}
 
 {{/*

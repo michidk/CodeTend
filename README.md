@@ -81,9 +81,9 @@ agent.
   concurrency limits.
 - 🔒 **Yours, end to end.** PostgreSQL you run, any OpenAI-compatible model
   endpoint you choose, your own login gate in front, no telemetry.
-- 🤖 **Ask your coding agent.** An optional OAuth-protected MCP endpoint lets
-  Codex and other clients inspect repositories, scans, findings, and knowledge;
-  a separate owner-approved scope can start or cancel scans.
+- 🤖 **Ask your coding agent.** An optional stateless MCP endpoint (private
+  network only, no login) lets Codex and other clients inspect repositories,
+  scans, findings, and knowledge; write tools can be switched off.
 
 ## 🖥️ Using it
 
@@ -122,23 +122,22 @@ agent.
 
 ### MCP clients
 
-When the Helm deployment enables `mcp.enabled`, CodeTend serves MCP on its own
-origin and uses the existing Hodor owner session for OAuth consent. Add it to
-Codex with:
+CodeTend serves stateless Streamable HTTP MCP (protocol 2026-07-28) at
+`/api/mcp`. It has **no authentication of its own**: keep it on loopback, behind
+a firewall or on a private VPN (Helm: `mcp.enabled` with `mcp.allowedCidrs` /
+`mcp.allowedNamespaces`), and Host/Origin headers are validated against an
+allowlist. Add it to Codex with:
 
 ```bash
-codex mcp add codetend --url https://codetend.example.com/api/mcp
-codex mcp login codetend
+codex mcp add codetend --url http://127.0.0.1:3000/api/mcp
 ```
 
-The read scope can inspect repositories, scans and findings and generate a
-current coding-agent fix prompt for a repository scanner. The separately
-granted write scope can register repositories, start or cancel scans, mark findings as fixed, mark
-them as false positives or accepted risks, and reopen manually triaged
-findings. Use **Settings → AI access (MCP)** to pause access, enable individual
-tools, or revoke a client. See
-[configuration](docs/configuration.md#oauth-protected-mcp) for the proxy and
-security boundary.
+Read tools can inspect repositories, scans and findings and generate a current
+coding-agent fix prompt for a repository scanner. Write tools can register
+repositories, start or cancel scans, mark findings as fixed, mark them as false
+positives or accepted risks, and reopen manually triaged findings. Use
+**Settings → AI access (MCP)** to pause access or disable individual tools. See
+[configuration](docs/configuration.md#mcp) for the security boundary.
 
 ## 🔄 How it works
 
