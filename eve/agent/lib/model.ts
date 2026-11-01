@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai'
-import { defineDynamic, type SessionUsageLimit } from 'eve'
+import type { SessionUsageLimit } from 'eve'
+import { defineDynamic } from 'eve/models'
 import {
   type AgentExecutionProfile,
   readExecutionProfileMarker,
@@ -187,26 +188,23 @@ export function scannerModel(configured?: AgentExecutionProfile) {
 
 /** Selects the persisted job profile from the current root/subagent prompt. */
 export function dynamicScannerModel() {
-  return defineDynamic({
-    events: {
-      'step.started': (_event, ctx) => {
-        const profile = ctx.messages
-          .map((message) =>
-            typeof message.content === 'string'
-              ? message.content
-              : JSON.stringify(message.content),
-          )
-          .map(readExecutionProfileMarker)
-          .find((candidate) => candidate !== null) ?? {
-          model: process.env.TECDEBT_MODEL?.trim() || DEFAULT_MODEL,
-          effort: 'medium',
-        }
-        return {
-          model: scannerModel(profile),
-          modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
-        }
-      },
-    },
+  return defineDynamic(async (ctx) => {
+    const messages = await ctx.messages()
+    const profile = messages
+      .map((message) =>
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content),
+      )
+      .map(readExecutionProfileMarker)
+      .find((candidate) => candidate !== null) ?? {
+      model: process.env.TECDEBT_MODEL?.trim() || DEFAULT_MODEL,
+      effort: 'medium',
+    }
+    return {
+      model: scannerModel(profile),
+      modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
+    }
   })
 }
 
