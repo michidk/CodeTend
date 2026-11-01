@@ -2,24 +2,7 @@ import { z } from 'zod'
 
 export const MCP_SCOPE_VALUES = ['codetend:read', 'codetend:write'] as const
 
-export const mcpScopeSchema = z.enum(MCP_SCOPE_VALUES)
-export type McpScope = z.infer<typeof mcpScopeSchema>
-
-export const MCP_SCOPE_DETAILS: Record<
-  McpScope,
-  { label: string; description: string }
-> = {
-  'codetend:read': {
-    label: 'Read code health',
-    description:
-      'Inspect repositories, scans, findings, and repository knowledge.',
-  },
-  'codetend:write': {
-    label: 'Manage findings and scans',
-    description:
-      'Register repositories, mark findings as fixed, triage them as false positives or accepted risks, reopen findings, and start or cancel repository scans.',
-  },
-}
+export type McpScope = (typeof MCP_SCOPE_VALUES)[number]
 
 export const MCP_TOOL_CATALOG = [
   {
@@ -132,14 +115,3 @@ export const MCP_TOOL_NAMES = MCP_TOOL_CATALOG.map((tool) => tool.name) as [
   ...McpToolName[],
 ]
 export const mcpToolNameSchema = z.enum(MCP_TOOL_NAMES)
-
-export function scopesForEnabledTools(disabledTools: readonly string[]) {
-  const disabled = new Set(disabledTools)
-  return MCP_SCOPE_VALUES.filter(
-    (scope) =>
-      scope === 'codetend:read' ||
-      MCP_TOOL_CATALOG.some(
-        (tool) => tool.scope === scope && !disabled.has(tool.name),
-      ),
-  )
-}

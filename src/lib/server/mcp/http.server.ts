@@ -2,25 +2,21 @@ import '@tanstack/react-start/server-only'
 
 import {
   createMcpHandler,
-  getOAuthProtectedResourceMetadataUrl,
   hostHeaderValidationResponse,
-  requireBearerAuth,
+  originValidationResponse,
 } from '@modelcontextprotocol/server'
 import {
+  MCP_SCOPE_VALUES,
   MCP_TOOL_CATALOG,
   type McpToolName,
-  mcpScopeSchema,
-  scopesForEnabledTools,
 } from '@/lib/mcp/catalog'
-import { createLocalTokenVerifier } from './auth.server'
-import { getMcpConfig, MCP_READ_SCOPE, type McpConfig } from './config.server'
+import { getMcpConfig, type McpConfig } from './config.server'
 import {
-  createOAuthHttpHandler,
-  MCP_OWNER_BRIDGE_PATH,
-  oauthPublicPaths,
-} from './oauth-http.server'
-import { DrizzleOAuthStore, type OAuthStore } from './oauth-store.server'
-import { loadMcpPolicy, type McpPolicy } from './settings.server'
+  loadMcpPolicy,
+  type McpAuditEvent,
+  type McpPolicy,
+  recordMcpAudit,
+} from './settings.server'
 import { createCodeTendMcpServer } from './tools.server'
 
 const MCP_PATH = '/api/mcp'
@@ -30,15 +26,14 @@ const defaultPolicyLoader = async (): Promise<McpPolicy> => ({
 })
 
 export function handlesMcpHttpPath(pathname: string) {
-  return (
-    pathname === MCP_PATH ||
-    pathname === MCP_OWNER_BRIDGE_PATH ||
-    oauthPublicPaths().includes(pathname)
-  )
+  return pathname === MCP_PATH
 }
 
+// Stateless: a fresh server per request. The SDK serves protocol 2026-07-28
+// natively and answers 2025-era clients through its stateless fallback. There
+// is no per-client identity, so the owner's tool policy is the only gate.
 function createProtocolHandler(policyLoader: () => Promise<McpPolicy>) {
-  return createMcpHandler(async ({ authInfo }) => {
+  return createMcpHandler(async () => {
     const policy = await policyLoader()
     const disabled = new Set<string>(policy.disabledTools)
     const enabledTools = policy.enabled
@@ -46,69 +41,15 @@ function createProtocolHandler(policyLoader: () => Promise<McpPolicy>) {
           disabled.has(tool.name) ? [] : [tool.name as McpToolName],
         )
       : []
-    const scopes = (authInfo?.scopes ?? []).flatMap((scope) => {
-      const parsed = mcpScopeSchema.safeParse(scope)
-      return parsed.success ? [parsed.data] : []
+    return createCodeTendMcpServer(undefined, {
+      scopes: MCP_SCOPE_VALUES,
+      enabledTools,
     })
-    return createCodeTendMcpServer(undefined, { scopes, enabledTools })
   })
 }
 
 type ProtocolHandler = {
-  fetch(request: Request, options: Record<string, unknown>): Promise<Response>
-}
-
-function corsOrigin(request: Request, config: McpConfig) {
-  const origin = request.headers.get('origin')
-  if (!origin) return null
-  const allowed = new Set([config.issuer.origin, ...config.allowedOrigins])
-  return allowed.has(origin) ? origin : false
-}
-
-function withMcpCors(response: Response, origin: string | null) {
-  if (!origin) return response
-  const headers = new Headers(response.headers)
-  headers.set('Access-Control-Allow-Origin', origin)
-  headers.append('Vary', 'Origin')
-  headers.set(
-    'Access-Control-Expose-Headers',
-    'WWW-Authenticate, MCP-Protocol-Version',
-  )
-  return new Response(response.body, { status: response.status, headers })
-}
-
-// requireBearerAuth advertises exactly the scopes it enforces, and read alone is
-// enough to call the endpoint. Clients that take the challenge's `scope` as the
-// set to request — ChatGPT does — would therefore never ask for write or delete,
-// leaving the owner no way to grant them. Advertise everything currently enabled
-// and let the consent screen decide what is actually granted.
-function advertiseGrantableScopes(
-  response: Response,
-  grantable: readonly string[],
-) {
-  const challenge = response.headers.get('WWW-Authenticate')
-  if (!challenge || grantable.length === 0) return response
-  const headers = new Headers(response.headers)
-  headers.set(
-    'WWW-Authenticate',
-    challenge.replace(/scope="[^"]*"/, `scope="${grantable.join(' ')}"`),
-  )
-  return new Response(response.body, { status: response.status, headers })
-}
-
-function mcpPreflight(origin: string) {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': origin,
-      Vary: 'Origin',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers':
-        'Authorization, Content-Type, MCP-Protocol-Version, MCP-Method, MCP-Name',
-      'Access-Control-Expose-Headers': 'WWW-Authenticate, MCP-Protocol-Version',
-      'Access-Control-Max-Age': '86400',
-    },
-  })
+  fetch(request: Request, options?: Record<string, unknown>): Promise<Response>
 }
 
 async function calledToolName(request: Request) {
@@ -127,11 +68,11 @@ async function calledToolName(request: Request) {
 }
 
 async function recordToolAudit(
-  store: OAuthStore,
-  event: Parameters<OAuthStore['audit']>[0],
+  audit: (event: McpAuditEvent) => Promise<void>,
+  event: McpAuditEvent,
 ) {
   try {
-    await store.audit(event)
+    await audit(event)
   } catch {
     console.error('[CodeTend] failed to persist an MCP tool audit event')
   }
@@ -139,112 +80,66 @@ async function recordToolAudit(
 
 export function createMcpHttpHandler(
   config: McpConfig,
-  store: OAuthStore,
+  audit: (event: McpAuditEvent) => Promise<void> = async () => {},
   protocolHandler?: ProtocolHandler,
   policyLoader: () => Promise<McpPolicy> = defaultPolicyLoader,
 ) {
-  const oauthHandler = createOAuthHttpHandler(config, store, policyLoader)
   const protocol = protocolHandler ?? createProtocolHandler(policyLoader)
-  const authGate = requireBearerAuth({
-    verifier: createLocalTokenVerifier(config, store),
-    requiredScopes: [MCP_READ_SCOPE],
-    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(config.serverUrl),
-  })
 
   return async (request: Request): Promise<Response | null> => {
-    const pathname = new URL(request.url).pathname
-    if (pathname !== MCP_PATH) {
-      if (oauthPublicPaths().includes(pathname)) {
-        const rejectedHost = hostHeaderValidationResponse(
-          request,
-          config.allowedHostnames,
-        )
-        if (rejectedHost) return rejectedHost
-      }
-      return oauthHandler(request)
-    }
+    if (new URL(request.url).pathname !== MCP_PATH) return null
 
-    const rejectedHost = hostHeaderValidationResponse(
-      request,
-      config.allowedHostnames,
-    )
-    if (rejectedHost) return rejectedHost
-
-    const origin = corsOrigin(request, config)
-    if (origin === false)
-      return new Response('Forbidden origin', { status: 403 })
-    if (request.method === 'OPTIONS')
-      return mcpPreflight(origin ?? config.issuer.origin)
+    // DNS-rebinding defence; there is no CORS because browsers are not a
+    // supported MCP client, so an allowed Origin still gets no CORS headers.
+    const rejected =
+      hostHeaderValidationResponse(request, config.allowedHostnames) ??
+      originValidationResponse(request, config.allowedOrigins)
+    if (rejected) return rejected
 
     const policy = await policyLoader()
     if (!policy.enabled) {
-      return withMcpCors(
-        Response.json(
-          {
-            error: 'mcp_disabled',
-            error_description: 'MCP is paused by the owner',
-          },
-          { status: 503 },
-        ),
-        origin,
-      )
-    }
-
-    const auth = await authGate(request)
-    if (auth instanceof Response) {
-      return withMcpCors(
-        advertiseGrantableScopes(
-          auth,
-          scopesForEnabledTools(policy.disabledTools),
-        ),
-        origin,
+      return Response.json(
+        {
+          error: 'mcp_disabled',
+          error_description: 'MCP is paused by the owner',
+        },
+        { status: 503 },
       )
     }
 
     const toolName = await calledToolName(request)
+    const outcome = (ok: boolean) =>
+      toolName
+        ? recordToolAudit(audit, {
+            event: 'tool_called',
+            outcome: ok ? 'success' : 'failure',
+            toolName,
+          })
+        : undefined
     try {
-      const response = await protocol.fetch(request, { authInfo: auth })
-      if (toolName) {
-        await recordToolAudit(store, {
-          event: 'tool_called',
-          outcome: response.ok ? 'success' : 'failure',
-          clientId: auth.clientId,
-          toolName,
-        })
-      }
-      return withMcpCors(response, origin)
+      const response = await protocol.fetch(request)
+      await outcome(response.ok)
+      return response
     } catch (error) {
-      if (toolName) {
-        await recordToolAudit(store, {
-          event: 'tool_called',
-          outcome: 'failure',
-          clientId: auth.clientId,
-          toolName,
-        })
-      }
+      await outcome(false)
       throw error
     }
   }
 }
 
-const liveStore = new DrizzleOAuthStore()
 const liveProtocolHandler = createProtocolHandler(loadMcpPolicy)
 
 export async function handleMcpHttpRequest(
   request: Request,
 ): Promise<Response | null> {
   try {
-    const pathname = new URL(request.url).pathname
-    if (!handlesMcpHttpPath(pathname)) return null
-
-    const config = getMcpConfig(request)
-    const handler = createMcpHttpHandler(
-      config,
-      liveStore,
+    if (!handlesMcpHttpPath(new URL(request.url).pathname)) return null
+    return await createMcpHttpHandler(
+      getMcpConfig(),
+      recordMcpAudit,
       liveProtocolHandler,
       loadMcpPolicy,
-    )
-    return await handler(request)
+    )(request)
   } catch (error) {
     console.error('[CodeTend] MCP request failed', error)
     return Response.json(

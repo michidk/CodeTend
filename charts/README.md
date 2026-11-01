@@ -47,20 +47,26 @@ Executable finding validation needs Docker inside the Eve container and is
 disabled in this chart; findings that would need it are recorded as
 `unavailable`. GitNexus code intelligence is likewise off.
 
-## OAuth-protected MCP
+## MCP
 
-Set `mcp.enabled=true` to expose CodeTend's first-party MCP endpoint at
-`https://<host>/api/mcp`. The chart reuses the Hodor session secret for a
-derived OAuth signing key, preserves the public Host header, and bypasses the
-login form only for MCP protocol/discovery/token paths. Owner consent remains
-behind Hodor at `/oauth/authorize`.
+MCP is stateless Streamable HTTP with **no authentication**, so the chart never
+routes it through the Ingress or Hodor. Set `mcp.enabled=true` to create a
+private `<release>-mcp` ClusterIP Service plus a NetworkPolicy rule admitting
+only `mcp.allowedCidrs` (for example a VPN range) and `mcp.allowedNamespaces`;
+at least one is required and `networkPolicy.enabled` must stay on. Those sources
+reach the app port directly, which has no login, so list only trusted ranges.
+The app additionally rejects any Host/Origin outside `localhost`, the Service
+names, `mcp.allowedHosts` and `mcp.allowedOrigins`.
 
 ```yaml
 mcp:
   enabled: true
-  allowedOrigins: [] # add browser clients only; native clients omit Origin
+  allowedCidrs: ["100.64.0.0/10"] # tailnet / VPN
+  allowedNamespaces: []
+  allowedHosts: [] # extra VPN DNS names
+  allowedOrigins: [] # browser clients only; native clients omit Origin
 ```
 
-After deployment, connect with `codex mcp add codetend --url
-https://<host>/api/mcp` and `codex mcp login codetend`. Tool availability,
-connected clients, and revocation are managed on CodeTend's Settings page.
+Connect with `codex mcp add codetend --url http://<release>-mcp.<namespace>.svc/api/mcp`
+(or the VPN-reachable name); there is no login step. Tool availability is
+managed on CodeTend's Settings page.

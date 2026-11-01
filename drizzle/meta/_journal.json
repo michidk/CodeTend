@@ -211,6 +211,13 @@
       "when": 1792233574081,
       "tag": "0029_mcp_registration_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793548405817,
+      "tag": "0030_drop_mcp_oauth",
+      "breakpoints": true
     }
   ]
 }

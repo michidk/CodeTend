@@ -36,8 +36,8 @@ boundary in front of it.
 | `TECDEBT_ALLOW_INSECURE_GIT`              | `false`      | Allow plaintext `http://` clones (development only)                                                                                                                                                                                                                                                                                |
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | –            | Optional GitHub App credentials for browsing repositories and cloning private HTTPS repositories. CodeTend resolves the installation per repository, then mints and caches its own installation tokens; both are required together and take precedence over `GITHUB_TOKEN`. See [GitHub App permissions](#github-app-permissions). |
 | `GITHUB_TOKEN`                            | –            | Optional plain short-lived token for browsing and cloning repositories when no GitHub App credentials are configured                                                                                                                                                                                                               |
-| `HODOR_SECRET`                            | –            | Enables the first-party OAuth-protected MCP endpoint using the same secret configured as Hodor `SECRET`; the app derives a separate OAuth signing key without imposing an additional length requirement                                                                                                                            |
-| `MCP_ALLOWED_ORIGINS`                     | –            | Comma-separated allowlist for browser MCP clients; native clients omit `Origin`                                                                                                                                                                                                                                                    |
+| `MCP_ALLOWED_HOSTS`                       | –            | Extra comma-separated hostnames accepted in the `Host` header of MCP requests, on top of `localhost`, `127.0.0.1` and `[::1]`                                                                                                                                                                                                      |
+| `MCP_ALLOWED_ORIGINS`                     | –            | Extra comma-separated hostnames (or origin URLs) accepted in the `Origin` header; native clients send none                                                                                                                                                                                                                         |
 
 ### GitHub App permissions
 
@@ -56,25 +56,33 @@ an existing App's permissions, an installation owner must approve the pending
 permission request before newly minted installation tokens receive the updated
 permissions.
 
-### OAuth-protected MCP
+### MCP
 
-CodeTend serves MCP at `/api/mcp` on its normal public origin. It includes
-OAuth 2.1 discovery, dynamic client registration, PKCE authorization, refresh
-token rotation, revocation, owner-selectable tool policy, and audit events.
-The Helm chart wires the machine-facing paths around Hodor's login form while
-keeping `/oauth/authorize` owner-authenticated. Enable it with `mcp.enabled`;
-do not expose the app port or MCP paths around Hodor through another proxy.
+CodeTend serves MCP at `/api/mcp` as stateless Streamable HTTP using protocol
+revision 2026-07-28 (2025-era clients are answered statelessly too). **The
+endpoint has no authentication**: anyone who can reach it can call every tool
+you leave enabled on **Settings → AI access (MCP)**, including the write tools.
+Security therefore rests on two layers:
 
-Connect Codex after deployment:
+1. **Network restriction.** Keep the port on loopback (Compose publishes
+   `127.0.0.1` only), behind a firewall, or on a private VPN. In Helm,
+   `mcp.enabled` adds a private `<release>-mcp` ClusterIP Service (never in the
+   Ingress) and a NetworkPolicy rule limited to `mcp.allowedCidrs` and
+   `mcp.allowedNamespaces`. Those sources reach the app port directly, which
+   also has no login, so list only trusted ranges.
+2. **Host and Origin validation** on every request against loopback plus
+   `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS`; anything else gets `403`. This
+   blocks DNS-rebinding from browsers. No CORS headers are sent.
+
+Connect Codex (no login step; use the loopback, VPN or in-cluster URL):
 
 ```bash
-codex mcp add codetend --url https://codetend.example.com/api/mcp
-codex mcp login codetend
+codex mcp add codetend --url http://127.0.0.1:3000/api/mcp
 ```
 
-The owner can pause MCP, hide individual tools, and revoke clients from the
-CodeTend Settings page. The `codetend:write` scope controls scan-trigger and
-scan-cancellation tools; read access alone cannot spend model budget.
+The owner can pause MCP and hide individual tools from the CodeTend Settings
+page. Disabling the write tools (register, scan, triage) is the only way to
+make the endpoint read-only; read tools cannot spend model budget.
 
 ## Cost and concurrency guardrails
 

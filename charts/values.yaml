@@ -56,9 +56,20 @@ ingress:
           pathType: Prefix
   tls: []
 
+# Unauthenticated, stateless MCP at http://<release>-mcp/api/mcp. It is never
+# routed through the Ingress or Hodor; the only protection is network placement
+# (NetworkPolicy below) plus Host/Origin validation. Sources listed here reach
+# the app's own port 3000, which has no login, so list only private VPN/trusted
+# ranges and namespaces.
 mcp:
   enabled: false
-  # Optional browser Origin allowlist. Native MCP clients omit Origin.
+  # Required when enabled: at least one of these two source lists.
+  allowedCidrs: [] # e.g. a VPN or tailnet range
+  allowedNamespaces: [] # namespace names whose Pods may connect
+  # Extra Host names clients use (for example a VPN DNS name). The in-cluster
+  # Service names are always allowed; localhost is always allowed.
+  allowedHosts: []
+  # Extra Origin hostnames. Native MCP clients send no Origin.
   allowedOrigins: []
 
 resources:
@@ -219,10 +230,9 @@ hodor:
   # Clients whose real address falls in these CIDRs skip the login gate
   # entirely (for example a private tailnet).
   bypassCidrs: []
-  # Extra unauthenticated machine endpoints. MCP adds only its protocol,
-  # discovery, registration, token and revocation paths automatically.
+  # Extra unauthenticated machine endpoints.
   bypassPaths: []
-  # MCP requires the public Host header for issuer and audience validation.
+  # Forward the original Host header to the app.
   preserveHost: false
   securityContext:
     allowPrivilegeEscalation: false
