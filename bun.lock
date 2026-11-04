@@ -15,7 +15,7 @@
         "clsx": "^2.1.1",
         "cron-parser": "^5.10.1",
         "drizzle-orm": "^0.45.2",
-        "eve": "0.87.0",
+        "eve": "0.91.0",
         "lucide-react": "^1.46.0",
         "postgres": "^3.4.9",
         "react": "^19.3.0",
@@ -601,7 +601,7 @@
 
     "estree-util-is-identifier-name": ["estree-util-is-identifier-name@3.0.0", "", {}, "sha512-hFtqIDZTIUZ9BXLb8y4pYGyk6+wekIivNVTcmvk8NoOh+VeRn5y6cEHzbURrWbfp1fIqdVipilzj+lfaadNZmg=="],
 
-    "eve": ["eve@0.87.0", "", { "dependencies": { "nitro": "3.0.260903-beta", "undici": "8.10.2" }, "peerDependencies": { "@linqapp/sdk": "^0.47.1", "@nuxt/kit": "^4.0.0", "@nuxt/schema": "^4.0.0", "@opentelemetry/api": "^1.0.0", "@vercel/connect": "^2.5.2", "ai": "^7.0.137", "braintrust": "^3.0.0", "chat": "^4.42.0", "dd-trace": "^6.13.0", "just-bash": "^3.6.0", "next": "^16.0.0", "react": "^19.0.0", "svelte": "^5.0.0", "vite": "^8.3.1", "vue": "^3.5.0" }, "optionalPeers": ["@linqapp/sdk", "@nuxt/kit", "@nuxt/schema", "@opentelemetry/api", "@vercel/connect", "braintrust", "chat", "dd-trace", "just-bash", "next", "react", "svelte", "vite", "vue"], "bin": { "eve": "./bin/eve.js" } }, "sha512-ww3ki9xFLzSOXgBPBCrXiEqXyNKQgUUDpEizoHThtcqVpn65EZhiv0o5391MEzuVVJmugA0YYdUV4mE+SpCJ7Q=="],
+    "eve": ["eve@0.91.0", "", { "dependencies": { "nitro": "3.0.260903-beta", "undici": "8.12.3" }, "peerDependencies": { "@linqapp/sdk": "^0.47.1", "@nuxt/kit": "^4.0.0", "@nuxt/schema": "^4.0.0", "@opentelemetry/api": "^1.0.0", "@vercel/connect": "^2.5.2", "ai": "^7.0.137", "braintrust": "^3.0.0", "chat": "^4.42.0", "dd-trace": "^6.13.0", "just-bash": "^3.6.0", "next": "^16.0.0", "react": "^19.0.0", "svelte": "^5.0.0", "vite": "^8.3.1", "vue": "^3.5.0" }, "optionalPeers": ["@linqapp/sdk", "@nuxt/kit", "@nuxt/schema", "@opentelemetry/api", "@vercel/connect", "braintrust", "chat", "dd-trace", "just-bash", "next", "react", "svelte", "vite", "vue"], "bin": { "eve": "./bin/eve.js" } }, "sha512-IVZ73uGFUm3k5sUju/XNi/O3z9Rmq6Iv8mfA0nzrDMypRu+N7iJUIcOhxuU6qDWxLglfqoXimfoOZiyd9/UCxg=="],
 
     "eventsource-parser": ["eventsource-parser@3.1.1", "", {}, "sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ=="],
 
