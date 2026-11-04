@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import {
   dropProgressEvents,
   modelSettingsMiddleware,
   resolveModelSettings,
+  scannerModel,
   stripForeignReasoning,
 } from '../agent/lib/model'
 
@@ -154,5 +155,68 @@ describe('dropProgressEvents', () => {
         'data: {"type":"response.output_text.delta","item_id":"i","delta":"hi"}\n\n' +
         done,
     )
+  })
+})
+
+describe('gateway tool-call compatibility', () => {
+  const item = {
+    id: 'fc_test',
+    type: 'function_call',
+    call_id: 'call_test',
+    name: 'bash',
+    arguments: '{"command":"pwd"}',
+  }
+  const event = (tool: object) =>
+    `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: tool })}\n\n`
+
+  test('the real SDK accepts a gateway tool call after normalization', async () => {
+    const previousKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = 'fixture'
+    const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(`${event(item)}data: [DONE]\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    )
+    try {
+      const { stream } = await scannerModel({
+        model: 'claude/claude-sonnet-5-5',
+        effort: 'high',
+      }).doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'test' }] }],
+      })
+      const parts = []
+      for await (const part of stream) parts.push(part)
+      expect(parts.filter((part) => part.type === 'error')).toEqual([])
+      expect(parts).toContainEqual(
+        expect.objectContaining({
+          type: 'tool-call',
+          toolCallId: 'call_test',
+          toolName: 'bash',
+          input: '{"command":"pwd"}',
+        }),
+      )
+    } finally {
+      fetchMock.mockRestore()
+      if (previousKey === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previousKey
+    }
+  })
+
+  test.each(['completed', 'incomplete', 'in_progress', 'invalid', null])(
+    'preserves explicit status %s',
+    async (status) => {
+      const text = event({ ...item, status })
+      const body = new Response(text).body
+      if (!body) throw new Error('Missing fixture body')
+      expect(await new Response(dropProgressEvents(body)).text()).toBe(text)
+    },
+  )
+
+  test('preserves malformed data and upstream failures', async () => {
+    const text =
+      'data: {invalid}\n\ndata: {"type":"response.failed","response":{"error":{"message":"failed"}}}\n\n'
+    const body = new Response(text).body
+    if (!body) throw new Error('Missing fixture body')
+    expect(await new Response(dropProgressEvents(body)).text()).toBe(text)
   })
 })
