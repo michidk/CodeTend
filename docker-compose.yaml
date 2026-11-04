@@ -87,9 +87,9 @@ services:
       SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-30}
       # GitNexus runs in the app image and is reached by Eve over the shared network.
       GITNEXUS_ENABLED: ${GITNEXUS_ENABLED:-false}
-      # MCP OAuth derives its signing key from the same secret as the Hodor
-      # proxy. Leave empty when MCP is not used in this development topology.
-      HODOR_SECRET: ${HODOR_SECRET:-}
+      # MCP has no login: the app port is published on 127.0.0.1 only. Add the
+      # hostnames/origins you use when reaching it over a private network.
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
     volumes:
       - scan_data:/data

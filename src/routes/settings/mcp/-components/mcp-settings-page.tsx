@@ -4,9 +4,7 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
-  KeyRound,
   ShieldCheck,
-  Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -21,7 +19,6 @@ import type { McpToolName } from '@/lib/mcp/catalog'
 import {
   type getMcpAdminState,
   getMcpAuditPage,
-  revokeMcpClientConnection,
   updateMcpPolicy,
 } from '@/lib/mcp/settings'
 import { cn } from '@/lib/utils'
@@ -63,13 +60,9 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
     () => new Set<McpToolName>(state.policy.disabledTools),
   )
   const [saving, setSaving] = useState(false)
-  const [showRevoked, setShowRevoked] = useState(false)
   const [audit, setAudit] = useState(state.audit)
   const [auditLoading, setAuditLoading] = useState(false)
 
-  const activeClients = state.clients.filter((client) => !client.revokedAt)
-  const revokedCount = state.clients.length - activeClients.length
-  const visibleClients = showRevoked ? state.clients : activeClients
   const dirty =
     enabled !== state.policy.enabled ||
     disabledTools.size !== state.policy.disabledTools.length ||
@@ -121,42 +114,13 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
     }
   }
 
-  async function revoke(clientId: string, name: string) {
-    if (
-      !window.confirm(
-        `Revoke MCP access for “${name}”? Its tokens will stop working immediately.`,
-      )
-    ) {
-      return
-    }
-    try {
-      await revokeMcpClientConnection({ data: { clientId } })
-      await router.invalidate()
-      toast.success(`${name} was revoked`)
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Revoking the client failed'))
-    }
-  }
-
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard
           icon={Bot}
           label="Server"
-          value={
-            !state.configured
-              ? 'Not configured'
-              : state.policy.enabled
-                ? 'Available'
-                : 'Paused'
-          }
-        />
-        <SummaryCard
-          icon={KeyRound}
-          label="Clients"
-          value={String(activeClients.length)}
-          mono
+          value={state.policy.enabled ? 'Available' : 'Paused'}
         />
         <SummaryCard
           icon={ShieldCheck}
@@ -170,27 +134,23 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
         <CardHeader>
           <CardTitle>Connection</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            CodeTend serves MCP at its own public origin. Use this URL in your
-            AI client; no separate MCP service or URL setting is required.
+            CodeTend serves stateless Streamable HTTP MCP (protocol 2026-07-28)
+            with no login of its own. Reach it only over loopback or a private
+            network and add that hostname to MCP_ALLOWED_HOSTS; requests with
+            any other Host or Origin are rejected.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {state.endpoint ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-xl bg-muted px-4 py-3 font-mono text-sm">
-                {state.endpoint}
-              </code>
-              <CopyButton
-                text={state.endpoint}
-                label="Copy URL"
-                variant="outline"
-              />
-            </div>
-          ) : (
-            <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {state.configurationError ?? 'MCP is not configured'}
-            </p>
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <code className="min-w-0 flex-1 overflow-x-auto rounded-xl bg-muted px-4 py-3 font-mono text-sm">
+              {state.endpoint}
+            </code>
+            <CopyButton
+              text={state.endpoint}
+              label="Copy URL"
+              variant="outline"
+            />
+          </div>
 
           <label
             htmlFor="mcp-enabled"
@@ -199,8 +159,7 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
             <span>
               <span className="block font-semibold">Enable MCP access</span>
               <span className="mt-1 block text-sm text-muted-foreground">
-                Pausing rejects protocol and OAuth requests without deleting
-                clients or audit history.
+                Pausing rejects MCP requests without deleting audit history.
               </span>
             </span>
             <Switch
@@ -218,24 +177,15 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
             Available tools
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Disabled tools disappear from MCP discovery. OAuth scopes provide a
-            second, client-specific permission boundary.
+            Disabled tools disappear from MCP discovery. Any client that can
+            reach the endpoint can use the enabled tools, including write tools.
           </p>
         </div>
         <div className="grid gap-5 lg:grid-cols-3">
           {groups.map(({ group, tools }) => (
             <Card key={group}>
               <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>{group}</CardTitle>
-                  <Badge
-                    variant={
-                      tools[0]?.scope.endsWith(':read') ? 'default' : 'outline'
-                    }
-                  >
-                    {tools[0]?.scope.endsWith(':read') ? 'read' : 'write'}
-                  </Badge>
-                </div>
+                <CardTitle>{group}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="divide-y divide-border">
@@ -280,91 +230,6 @@ export function McpSettingsPage({ state }: { state: McpAdminState }) {
             {saving ? 'Saving…' : 'Save AI access'}
           </Button>
         </div>
-      </section>
-
-      <section aria-labelledby="clients-heading">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 id="clients-heading" className="text-xl font-semibold">
-              Connected clients
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Revoking a client invalidates all of its access and refresh tokens
-              immediately.
-            </p>
-          </div>
-          {revokedCount > 0 ? (
-            <label
-              htmlFor="mcp-show-revoked"
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-            >
-              <Switch
-                id="mcp-show-revoked"
-                checked={showRevoked}
-                onCheckedChange={setShowRevoked}
-              />
-              Show {revokedCount} revoked
-            </label>
-          ) : null}
-        </div>
-        {state.clients.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">
-            No MCP clients have connected yet.
-          </Card>
-        ) : visibleClients.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">
-            Every client is revoked. Enable “Show {revokedCount} revoked” to see
-            them.
-          </Card>
-        ) : (
-          <Card className="overflow-hidden">
-            <ul className="divide-y divide-border">
-              {visibleClients.map((client) => (
-                <li
-                  key={client.id}
-                  className={cn(
-                    'flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3',
-                    client.revokedAt && 'bg-muted/35',
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate font-medium">
-                    {client.name}
-                  </span>
-                  {client.scopes.map((scope) => (
-                    <Badge
-                      key={scope}
-                      variant="outline"
-                      className="font-mono text-xs"
-                    >
-                      {scope.replace('codetend:', '')}
-                    </Badge>
-                  ))}
-                  <Badge variant={client.revokedAt ? 'secondary' : 'default'}>
-                    {client.revokedAt
-                      ? 'Revoked'
-                      : `${client.activeTokenCount} token${client.activeTokenCount === 1 ? '' : 's'}`}
-                  </Badge>
-                  <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                    {formatDateTime(client.createdAt)}
-                  </span>
-                  {client.revokedAt ? (
-                    <span className="w-20" />
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="w-20 text-destructive"
-                      onClick={() => void revoke(client.id, client.name)}
-                    >
-                      <Trash2 size={15} aria-hidden="true" /> Revoke
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
       </section>
 
       <section aria-labelledby="activity-heading">

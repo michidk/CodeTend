@@ -19,7 +19,7 @@ function McpSettingsRoute() {
     <Page width="wide">
       <PageHeader
         title="AI access"
-        description="Control exactly what connected assistants can read or change through the Model Context Protocol. OAuth scopes and per-tool switches are enforced on every request."
+        description="Control exactly what connected assistants can read or change through the Model Context Protocol. Per-tool switches are enforced on every request."
         size="compact"
       />
       <McpSettingsPage state={state} />

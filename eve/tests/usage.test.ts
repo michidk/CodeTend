@@ -2,17 +2,19 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { HookContext } from 'eve/hooks'
 import { usageHooks } from '../agent/lib/usage'
 
-function hookContext(turnId = 'scanner-turn'): HookContext {
+type UsageContext = Parameters<
+  ReturnType<typeof usageHooks>['model.started']
+>[1]
+
+function hookContext(turnId = 'scanner-turn'): UsageContext {
   return {
-    agent: { name: 'scanner' },
-    channel: { kind: 'subagent' },
+    now: new Date('2026-09-09T00:00:00.000Z'),
+    turn: { id: turnId, status: 'running', input: [] },
     session: {
       id: 'scanner-session',
       auth: { current: null, initiator: null },
-      turn: { id: turnId, sequence: 0 },
       parent: {
         callId: 'call-1',
         rootSessionId: 'root-session',
@@ -20,16 +22,8 @@ function hookContext(turnId = 'scanner-turn'): HookContext {
         turn: { id: 'root-turn', sequence: 0 },
       },
     },
-    async getSandbox() {
-      throw new Error('not used by this hook')
-    },
-    getSkill() {
-      throw new Error('not used by this hook')
-    },
   }
 }
-
-const meta = (id: string) => ({ id, at: '2026-09-09T00:00:00.000Z' })
 
 describe('Eve usage hooks', () => {
   test('records child usage against the root scan and clears turn state', async () => {
@@ -42,39 +36,42 @@ describe('Eve usage hooks', () => {
     try {
       const hooks = usageHooks('scanner')
       const context = hookContext()
-      await hooks['message.received'](
+      await hooks['delivery.consumed'](
         {
-          type: 'message.received',
+          type: 'delivery.consumed',
           data: {
-            message: '# Scanner: Security Hygiene (id: security)',
-            sequence: 0,
+            deliveryId: 'delivery-1',
             turnId: 'scanner-turn',
+            parts: [
+              {
+                kind: 'text',
+                text: '# Scanner: Security Hygiene (id: security)',
+              },
+            ],
           },
-          meta: meta('message-event'),
         },
         context,
       )
-      await hooks['step.started'](
+      await hooks['model.started'](
         {
-          type: 'step.started',
-          data: {
-            modelId: 'claude-sonnet-5',
-            sequence: 1,
-            stepIndex: 0,
-            turnId: 'scanner-turn',
-          },
-          meta: meta('started-event'),
+          type: 'model.started',
+          data: { modelId: 'claude-sonnet-5', runId: 'run-1', attempt: 0 },
         },
         context,
       )
-      await hooks['step.completed'](
+      await hooks['model.settled'](
         {
-          type: 'step.completed',
+          type: 'model.settled',
+          data: { runId: 'run-1', outcome: 'completed', finishReason: 'stop' },
+        },
+        context,
+      )
+      await hooks['usage.recorded'](
+        {
+          type: 'usage.recorded',
           data: {
-            finishReason: 'stop',
-            sequence: 2,
-            stepIndex: 0,
-            turnId: 'scanner-turn',
+            kind: 'model',
+            owner: { runId: 'run-1' },
             usage: {
               inputTokens: 120,
               outputTokens: 30,
@@ -82,58 +79,64 @@ describe('Eve usage hooks', () => {
               cacheWriteTokens: 10,
             },
           },
-          meta: meta('completed-event'),
         },
         context,
       )
-      await hooks['turn.completed'](
+      await hooks['turn.settled'](
         {
-          type: 'turn.completed',
-          data: { sequence: 3, turnId: 'scanner-turn' },
-          meta: meta('turn-event'),
+          type: 'turn.settled',
+          data: { turnId: 'scanner-turn', outcome: 'completed' },
         },
         context,
       )
-
-      await hooks['step.completed'](
+      const next = hookContext('next-turn')
+      await hooks['model.settled'](
         {
-          type: 'step.completed',
+          type: 'model.settled',
+          data: { runId: 'run-2', outcome: 'completed', finishReason: 'stop' },
+        },
+        next,
+      )
+      await hooks['usage.recorded'](
+        {
+          type: 'usage.recorded',
           data: {
-            finishReason: 'stop',
-            sequence: 1,
-            stepIndex: 0,
-            turnId: 'next-turn',
-            usage: { inputTokens: 1, outputTokens: 1 },
+            kind: 'model',
+            owner: { runId: 'run-2' },
+            usage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+            },
           },
-          meta: meta('next-completed-event'),
         },
-        hookContext('next-turn'),
+        next,
       )
-      await hooks['step.completed'](
+      await hooks['model.settled'](
         {
-          type: 'step.completed',
+          type: 'model.settled',
           data: {
+            runId: 'refused',
+            outcome: 'completed',
             finishReason: 'content-filter',
-            sequence: 2,
-            stepIndex: 1,
-            turnId: 'next-turn',
           },
-          meta: meta('refused-event'),
         },
-        hookContext('next-turn'),
+        next,
       )
-      await hooks['step.completed'](
+      await hooks['model.settled'](
         {
-          type: 'step.completed',
-          data: {
-            finishReason: 'stop',
-            sequence: 3,
-            stepIndex: 2,
-            turnId: 'next-turn',
-          },
-          meta: meta('usage-less-event'),
+          type: 'model.settled',
+          data: { runId: 'empty', outcome: 'completed', finishReason: 'stop' },
         },
-        hookContext('next-turn'),
+        next,
+      )
+      await hooks['turn.settled'](
+        {
+          type: 'turn.settled',
+          data: { turnId: 'next-turn', outcome: 'completed' },
+        },
+        next,
       )
 
       const rows = (
@@ -148,7 +151,7 @@ describe('Eve usage hooks', () => {
 
       expect(rows).toHaveLength(3)
       expect(rows[0]).toMatchObject({
-        eventId: 'completed-event',
+        eventId: 'scanner-session:run-1',
         rootSessionId: 'root-session',
         scannerId: 'security',
         modelId: 'claude-sonnet-5',
@@ -163,7 +166,7 @@ describe('Eve usage hooks', () => {
         modelId: 'fallback-model',
       })
       expect(rows[2]).toMatchObject({
-        eventId: 'refused-event',
+        eventId: 'scanner-session:refused',
         finishReason: 'content-filter',
         inputTokens: 0,
         outputTokens: 0,

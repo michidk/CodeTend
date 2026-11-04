@@ -29,8 +29,8 @@ the operator's account. CodeTend cannot enforce those external policies.
 ## Stored data
 
 PostgreSQL retains repository configuration, scan and finding history,
-knowledge and security profiles, dependency results, usage totals, OAuth
-records, and patch proposals. Usage records contain token and cost accounting,
+knowledge and security profiles, dependency results, usage totals, MCP audit
+events, and patch proposals. Usage records contain token and cost accounting,
 not model prompt or response bodies.
 
 Repository checkouts, request/result exchange files, validation artifacts,

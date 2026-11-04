@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import { Client } from 'eve/client'
+import { Client, type CreatedClientSession } from 'eve/client'
 import {
   type AgentExecutionProfile,
   executionProfileMarker,
@@ -15,7 +15,7 @@ export function getEveClient(): Client {
   if (cachedClient) return cachedClient
   const env = getServerEnv()
   cachedClient = new Client({
-    host: env.EVE_URL,
+    baseUrl: env.EVE_URL,
     auth: env.EVE_PASSWORD
       ? { basic: { username: env.EVE_USERNAME, password: env.EVE_PASSWORD } }
       : undefined,
@@ -65,10 +65,10 @@ export async function startEveScanSession(
   profile: AgentExecutionProfile,
 ): Promise<EveScanSession> {
   const client = getEveClient()
-  const { response } = await client.sessions.create({
+  const { delivery } = await client.sessions.create({
     message: `${executionProfileMarker(profile)}\nRun scan ${scanId}.`,
   })
-  return responseSession(response)
+  return responseSession(delivery)
 }
 
 export async function startEvePatchSession(
@@ -76,18 +76,18 @@ export async function startEvePatchSession(
   profile: AgentExecutionProfile,
 ): Promise<EveScanSession> {
   const client = getEveClient()
-  const { response } = await client.sessions.create({
+  const { delivery } = await client.sessions.create({
     message: `${executionProfileMarker(profile)}\nGenerate patch ${patchId}.`,
   })
-  return responseSession(response)
+  return responseSession(delivery)
 }
 
 /** Cooperatively cancels the active Eve turn and every task it spawned. */
 export async function cancelEveScanSession(
   sessionId: string,
 ): Promise<'accepted' | 'no_active_turn'> {
-  const result = await getEveClient().sessions.attach(sessionId).cancel()
-  return result.status
+  await getEveClient().sessions.attach(sessionId).cancel()
+  return 'accepted'
 }
 
 /** Cancels a durable Eve turn and gives its stream a bounded drain window. */
@@ -117,96 +117,65 @@ export async function cancelAndDrainEveSession(
   if (timer) clearTimeout(timer)
 }
 
-interface StreamResponse
-  extends AsyncIterable<{ readonly type: string; readonly data?: unknown }> {
-  readonly sessionId: string
-}
-
-function responseSession(response: StreamResponse): EveScanSession {
+export function responseSession(
+  delivery: CreatedClientSession['delivery'],
+): EveScanSession {
   return {
-    sessionId: response.sessionId,
+    sessionId: delivery.sessionId,
     settle: async (onProgress) => {
-      let message: string | undefined
-      let failure: string | undefined
-      let status: EveTurnOutcome['status'] = 'waiting'
       let lastProgress: string | undefined
-
-      for await (const event of response) {
-        switch (event.type) {
-          case 'action.partial': {
-            const output = readPartialOutput(event.data)
-            const serialized = output ? JSON.stringify(output) : undefined
-            if (output && serialized !== lastProgress) {
-              lastProgress = serialized
-              await onProgress(output)
-            }
-            break
-          }
-          case 'message.completed': {
-            const data = event.data as { message?: string | null }
-            if (typeof data.message === 'string') message = data.message
-            break
-          }
-          case 'input.requested': {
-            // A session that hits a configured usage limit does not fail: Eve
-            // parks it on an approval prompt and completes the turn without a
-            // result. Nothing in CodeTend answers prompts, so treat it as a
-            // failure now instead of waiting for the scan timeout.
-            const parked = readParkedRequest(event.data)
-            if (parked) {
-              status = 'failed'
-              failure = parked
-            }
-            break
-          }
-          case 'turn.completed':
-            if (status !== 'failed') status = 'completed'
-            break
-          case 'turn.failed':
-          case 'session.failed': {
-            const data = event.data as { code?: string; message?: string }
-            status = 'failed'
-            failure = [data.code, data.message].filter(Boolean).join(': ')
-            break
-          }
-          case 'turn.cancelled':
-            status = 'failed'
-            failure = 'The Eve turn was cancelled.'
-            break
-          default:
-            break
+      for await (const event of delivery.stream()) {
+        if (event.type !== 'call.progress') continue
+        const output = readPartialOutput(event.data.output)
+        const serialized = output ? JSON.stringify(output) : undefined
+        if (output && serialized !== lastProgress) {
+          lastProgress = serialized
+          await onProgress(output)
         }
       }
 
-      return { status, message, failure }
+      const result = await delivery.result()
+      switch (result.status) {
+        case 'completed':
+          return {
+            status: 'completed',
+            message: result.reply,
+            failure: undefined,
+          }
+        case 'failed':
+          return {
+            status: 'failed',
+            message: result.reply,
+            failure: [result.error.code, result.error.message]
+              .filter(Boolean)
+              .join(': '),
+          }
+        case 'cancelled':
+          return {
+            status: 'failed',
+            message: result.reply,
+            failure: 'The Eve turn was cancelled.',
+          }
+        case 'awaiting-input':
+          return {
+            status: 'failed',
+            message: result.reply,
+            failure: `Eve paused the session for operator input: ${result.interactions.map((interaction) => interaction.request.prompt).join('; ') || 'operator approval is required'}`,
+          }
+      }
     },
   }
 }
 
-function readParkedRequest(data: unknown): string | undefined {
-  if (typeof data !== 'object' || data === null) return undefined
-  const requests = (data as { requests?: unknown }).requests
-  if (!Array.isArray(requests)) return undefined
-  for (const request of requests) {
-    if (typeof request !== 'object' || request === null) continue
-    const { kind, prompt } = request as { kind?: unknown; prompt?: unknown }
-    if (kind === 'session-limit') {
-      return `Eve paused the session for operator approval: ${
-        typeof prompt === 'string'
-          ? prompt
-          : 'a session usage limit was reached'
-      } Raise or unset TECDEBT_MAX_INPUT_TOKENS_PER_SESSION.`
-    }
-  }
-  return undefined
-}
-
 function readPartialOutput(data: unknown): ScanProgress | undefined {
   if (typeof data !== 'object' || data === null) return undefined
-  const result = (data as { result?: { output?: unknown } }).result
-  const output = result?.output
-  if (typeof output !== 'object' || output === null) return undefined
-  const candidate = output as Record<string, unknown>
+  const candidate = data
+  if (
+    !('phase' in candidate) ||
+    !('completed' in candidate) ||
+    !('total' in candidate)
+  )
+    return undefined
   if (
     typeof candidate.phase !== 'string' ||
     typeof candidate.completed !== 'number' ||
@@ -218,16 +187,19 @@ function readPartialOutput(data: unknown): ScanProgress | undefined {
     phase: candidate.phase,
     completed: candidate.completed,
     total: candidate.total,
-    ...(typeof candidate.detail === 'string'
+    ...('detail' in candidate && typeof candidate.detail === 'string'
       ? { detail: candidate.detail }
       : {}),
-    ...(typeof candidate.scannerCompleted === 'number'
+    ...('scannerCompleted' in candidate &&
+    typeof candidate.scannerCompleted === 'number'
       ? { scannerCompleted: candidate.scannerCompleted }
       : {}),
-    ...(typeof candidate.scannerTotal === 'number'
+    ...('scannerTotal' in candidate &&
+    typeof candidate.scannerTotal === 'number'
       ? { scannerTotal: candidate.scannerTotal }
       : {}),
-    ...(typeof candidate.targetFileCount === 'number'
+    ...('targetFileCount' in candidate &&
+    typeof candidate.targetFileCount === 'number'
       ? { targetFileCount: candidate.targetFileCount }
       : {}),
   }

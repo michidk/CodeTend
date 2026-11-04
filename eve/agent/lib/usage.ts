@@ -29,84 +29,110 @@ export interface UsageRecord {
   readonly at: string
 }
 
+type UsageContext = Pick<HookContext, 'session' | 'turn' | 'now'>
+
 const SCANNER_HEADING = /^# Scanner: .* \(id: ([^)\s]+)\)/m
 
-/**
- * Hook handlers shared by every agent. `step.started` carries the model id
- * and `step.completed` the usage, so the model is remembered per session in
- * memory between the two; after a process restart it falls back to the
- * configured model.
- */
+/** Records model usage and refusal outcomes from Eve's durable run events. */
 export function usageHooks(agent: string) {
-  const models = new Map<string, string>()
+  const runs = new Map<
+    string,
+    {
+      modelId: string
+      stepIndex: number
+      finishReason?: string
+      recorded?: boolean
+    }
+  >()
   const scanners = new Map<string, string>()
-  const clearSession = (sessionId: string) => {
-    models.delete(sessionId)
-    scanners.delete(sessionId)
+  const steps = new Map<string, number>()
+  const runKey = (ctx: UsageContext, runId: string) =>
+    `${ctx.session.id}:${runId}`
+  const record = async (
+    ctx: UsageContext,
+    runId: string,
+    usage?: HookEvent<'usage.recorded'>['data']['usage'],
+  ) => {
+    const run = runs.get(runKey(ctx, runId))
+    const row: UsageRecord = {
+      eventId: `${ctx.session.id}:${runId}`,
+      sessionId: ctx.session.id,
+      rootSessionId: ctx.session.parent?.rootSessionId ?? ctx.session.id,
+      turnId: ctx.turn?.id ?? '',
+      stepIndex: run?.stepIndex ?? 0,
+      agent,
+      scannerId: scanners.get(ctx.session.id) ?? null,
+      modelId: run?.modelId ?? resolveModelSettings().modelId,
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      cacheReadTokens: usage?.cacheReadTokens ?? 0,
+      cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
+      costUsd: usage?.costUsd ?? null,
+      finishReason: run?.finishReason ?? 'unknown',
+      at: ctx.now.toISOString(),
+    }
+    try {
+      await appendUsageRecord(row)
+      if (run) run.recorded = true
+    } catch (error) {
+      console.warn('[CodeTend] failed to record usage', error)
+    }
   }
   return {
-    async 'message.received'(
-      event: HookEvent<'message.received'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      const match = SCANNER_HEADING.exec(event.data.message)
+    async 'delivery.consumed'(
+      event: HookEvent<'delivery.consumed'>,
+      ctx: UsageContext,
+    ) {
+      const message = event.data.parts
+        .flatMap((part) => (part.kind === 'text' ? [part.text] : []))
+        .join('\n')
+      const match = SCANNER_HEADING.exec(message)
       if (match?.[1]) scanners.set(ctx.session.id, match[1])
     },
-    async 'step.started'(
-      event: HookEvent<'step.started'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      models.set(ctx.session.id, event.data.modelId)
-    },
-    async 'step.completed'(
-      event: HookEvent<'step.completed'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      const usage = event.data.usage
-      // A refused step may report no usage; it is still recorded so the app
-      // can tell a declined scan from a genuinely empty one.
-      if (!usage && event.data.finishReason !== 'content-filter') return
-      const record: UsageRecord = {
-        eventId: event.meta.id,
-        sessionId: ctx.session.id,
-        rootSessionId: ctx.session.parent?.rootSessionId ?? ctx.session.id,
-        turnId: event.data.turnId,
-        stepIndex: event.data.stepIndex,
-        agent,
-        scannerId: scanners.get(ctx.session.id) ?? null,
-        modelId: models.get(ctx.session.id) ?? resolveModelSettings().modelId,
-        inputTokens: usage?.inputTokens ?? 0,
-        outputTokens: usage?.outputTokens ?? 0,
-        cacheReadTokens: usage?.cacheReadTokens ?? 0,
-        cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
-        costUsd: usage?.costUsd ?? null,
-        finishReason: event.data.finishReason,
-        at: event.meta.at,
+    async 'model.started'(
+      event: HookEvent<'model.started'>,
+      ctx: UsageContext,
+    ) {
+      const key = runKey(ctx, event.data.runId)
+      const existing = runs.get(key)
+      if (existing) {
+        existing.modelId = event.data.modelId
+        return
       }
-      try {
-        await appendUsageRecord(record)
-      } catch (error) {
-        // Usage accounting must never fail a scan.
-        console.warn('[CodeTend] failed to record usage', error)
+      const stepIndex = steps.get(ctx.session.id) ?? 0
+      runs.set(key, { modelId: event.data.modelId, stepIndex })
+      steps.set(ctx.session.id, stepIndex + 1)
+    },
+    async 'model.settled'(
+      event: HookEvent<'model.settled'>,
+      ctx: UsageContext,
+    ) {
+      const key = runKey(ctx, event.data.runId)
+      const run = runs.get(key) ?? {
+        modelId: resolveModelSettings().modelId,
+        stepIndex: 0,
       }
+      run.finishReason = event.data.finishReason
+      runs.set(key, run)
     },
-    async 'turn.completed'(
-      _event: HookEvent<'turn.completed'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      clearSession(ctx.session.id)
+    async 'usage.recorded'(
+      event: HookEvent<'usage.recorded'>,
+      ctx: UsageContext,
+    ) {
+      const owner = event.data.owner
+      if (event.data.kind !== 'model' || !owner || !('runId' in owner)) return
+      await record(ctx, owner.runId, event.data.usage)
     },
-    async 'turn.failed'(
-      _event: HookEvent<'turn.failed'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      clearSession(ctx.session.id)
-    },
-    async 'turn.cancelled'(
-      _event: HookEvent<'turn.cancelled'>,
-      ctx: HookContext,
-    ): Promise<void> {
-      clearSession(ctx.session.id)
+    async 'turn.settled'(_event: HookEvent<'turn.settled'>, ctx: UsageContext) {
+      const prefix = `${ctx.session.id}:`
+      for (const [key, run] of runs) {
+        if (!key.startsWith(prefix)) continue
+        if (!run.recorded && run.finishReason === 'content-filter')
+          await record(ctx, key.slice(prefix.length))
+        runs.delete(key)
+      }
+      scanners.delete(ctx.session.id)
+      steps.delete(ctx.session.id)
     },
   }
 }

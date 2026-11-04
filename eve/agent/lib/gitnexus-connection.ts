@@ -7,29 +7,25 @@ import { defineDynamic, defineMcpClientConnection } from 'eve/connections'
  * back to filesystem search. Read-only tools only.
  */
 export function gitnexusConnection() {
-  return defineDynamic({
-    events: {
-      'session.started': () => {
-        const url = process.env.GITNEXUS_MCP_URL
-        if (!url) return null
-        return defineMcpClientConnection({
-          url,
-          description:
-            'GitNexus code intelligence for the repository under analysis: symbol search, callers/callees, execution flows, clusters, impact analysis and import cycles. Pass the repo name given in the task.',
-          tools: {
-            allow: [
-              'query',
-              'context',
-              'impact',
-              'trace',
-              'check',
-              'cypher',
-              'list_repos',
-              'route_map',
-            ],
-          },
-        })
+  return defineDynamic(() => {
+    const url = process.env.GITNEXUS_MCP_URL
+    if (!url) return null
+    return defineMcpClientConnection({
+      url,
+      description:
+        'GitNexus code intelligence for the repository under analysis: symbol search, callers/callees, execution flows, clusters, impact analysis and import cycles. Pass the repo name given in the task.',
+      tools: {
+        allow: [
+          'query',
+          'context',
+          'impact',
+          'trace',
+          'check',
+          'cypher',
+          'list_repos',
+          'route_map',
+        ],
       },
-    },
+    })
   })
 }

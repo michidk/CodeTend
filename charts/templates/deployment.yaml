@@ -4,8 +4,11 @@
 {{- if and .Values.hodor.trustedProxyCidrs (not .Values.hodor.trustProxy) -}}
 {{- fail "hodor.trustProxy must be true when hodor.trustedProxyCidrs is set, because Hodor rejects the combination at startup" -}}
 {{- end -}}
-{{- if and .Values.mcp.enabled (not .Values.hodor.enabled) -}}
-{{- fail "hodor.enabled must be true when MCP is enabled because OAuth consent requires owner authentication" -}}
+{{- if and .Values.mcp.enabled (not .Values.networkPolicy.enabled) -}}
+{{- fail "networkPolicy.enabled must be true when MCP is enabled because MCP has no authentication of its own" -}}
+{{- end -}}
+{{- if and .Values.mcp.enabled (not .Values.mcp.allowedCidrs) (not .Values.mcp.allowedNamespaces) -}}
+{{- fail "mcp.allowedCidrs or mcp.allowedNamespaces is required when MCP is enabled" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -80,11 +83,8 @@ spec:
             - name: GITNEXUS_ENABLED
               value: "false"
             {{- if .Values.mcp.enabled }}
-            - name: HODOR_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ required "hodor.existingSecret is required when MCP is enabled" .Values.hodor.existingSecret }}
-                  key: {{ .Values.hodor.existingSecretSecretKey }}
+            - name: MCP_ALLOWED_HOSTS
+              value: {{ include "codetend.mcpAllowedHosts" . | quote }}
             {{- if .Values.mcp.allowedOrigins }}
             - name: MCP_ALLOWED_ORIGINS
               value: {{ join "," .Values.mcp.allowedOrigins | quote }}
@@ -196,7 +196,7 @@ spec:
               value: {{ . | quote }}
             {{- end }}
             - name: PRESERVE_HOST
-              value: {{ include "codetend.hodorPreserveHost" . | quote }}
+              value: {{ .Values.hodor.preserveHost | quote }}
           livenessProbe:
             httpGet:
               path: /_gate/health

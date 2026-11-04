@@ -1,6 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai'
-import { defineDynamic, type SessionUsageLimit } from 'eve'
+import type { SessionUsageLimit } from 'eve'
+import { defineDynamic } from 'eve/models'
+import { z } from 'zod'
 import {
   type AgentExecutionProfile,
   readExecutionProfileMarker,
@@ -111,8 +113,44 @@ export function modelSettingsMiddleware(
   }
 }
 
+const completedFunctionCall = z
+  .object({
+    type: z.literal('response.output_item.done'),
+    item: z
+      .object({
+        type: z.literal('function_call'),
+        status: z.undefined().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+function normalizeToolCall(event: string): string {
+  const lines = event.split('\n')
+  const data = lines
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart())
+    .join('\n')
+  let value: unknown
+  try {
+    value = JSON.parse(data)
+  } catch {
+    return event
+  }
+  const parsed = completedFunctionCall.safeParse(value)
+  if (!parsed.success) return event
+  const normalized = {
+    ...parsed.data,
+    item: { ...parsed.data.item, status: 'completed' },
+  }
+  return [
+    ...lines.filter((line) => !line.startsWith('data:')),
+    `data: ${JSON.stringify(normalized)}`,
+  ].join('\n')
+}
+
 /**
- * Removes `response.in_progress` events from a Responses API SSE stream.
+ * Normalizes missing completed tool-call status and removes progress keepalives.
  * Some OpenAI-compatible gateways emit them as keepalives with only `id` and
  * `status`, which the AI SDK's chunk schema rejects, failing the whole step.
  * The SDK takes response metadata from `response.created`, so nothing it uses
@@ -133,12 +171,16 @@ export function dropProgressEvents(
         const events = buffer.split('\n\n')
         buffer = events.pop() ?? ''
         for (const event of events) {
-          if (keep(event)) controller.enqueue(encoder.encode(`${event}\n\n`))
+          if (keep(event))
+            controller.enqueue(
+              encoder.encode(`${normalizeToolCall(event)}\n\n`),
+            )
         }
       },
       flush(controller) {
         buffer += decoder.decode()
-        if (buffer && keep(buffer)) controller.enqueue(encoder.encode(buffer))
+        if (buffer && keep(buffer))
+          controller.enqueue(encoder.encode(normalizeToolCall(buffer)))
       },
     }),
   )
@@ -187,26 +229,23 @@ export function scannerModel(configured?: AgentExecutionProfile) {
 
 /** Selects the persisted job profile from the current root/subagent prompt. */
 export function dynamicScannerModel() {
-  return defineDynamic({
-    events: {
-      'step.started': (_event, ctx) => {
-        const profile = ctx.messages
-          .map((message) =>
-            typeof message.content === 'string'
-              ? message.content
-              : JSON.stringify(message.content),
-          )
-          .map(readExecutionProfileMarker)
-          .find((candidate) => candidate !== null) ?? {
-          model: process.env.TECDEBT_MODEL?.trim() || DEFAULT_MODEL,
-          effort: 'medium',
-        }
-        return {
-          model: scannerModel(profile),
-          modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
-        }
-      },
-    },
+  return defineDynamic(async (ctx) => {
+    const messages = await ctx.messages()
+    const profile = messages
+      .map((message) =>
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content),
+      )
+      .map(readExecutionProfileMarker)
+      .find((candidate) => candidate !== null) ?? {
+      model: process.env.TECDEBT_MODEL?.trim() || DEFAULT_MODEL,
+      effort: 'medium',
+    }
+    return {
+      model: scannerModel(profile),
+      modelContextWindowTokens: MODEL_CONTEXT_WINDOW_TOKENS,
+    }
   })
 }
 
