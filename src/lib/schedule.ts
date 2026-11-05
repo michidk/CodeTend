@@ -23,7 +23,7 @@ export function computeNextScanAt(expression: string, from: Date): Date {
   return interval.next().toDate()
 }
 
-/** Next evenly spaced slot for a target number of scans per UTC day. */
+/** Daily scans run at 03:00 UTC; higher frequencies use evenly spaced intervals. */
 export function computeNextDistributedScanAt(
   scansPerDay: number,
   from: Date,
@@ -31,5 +31,6 @@ export function computeNextDistributedScanAt(
   if (!Number.isInteger(scansPerDay) || scansPerDay < 1) {
     throw new RangeError('scansPerDay must be a positive integer')
   }
+  if (scansPerDay === 1) return computeNextScanAt('0 3 * * *', from)
   return new Date(from.getTime() + 86_400_000 / scansPerDay)
 }

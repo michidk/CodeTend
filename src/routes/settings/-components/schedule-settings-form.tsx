@@ -324,7 +324,7 @@ export function ScheduleSettingsForm({
                 )}
               >
                 {scansPerDayValid
-                  ? `One inherited repository is queued every ${formatDistributedInterval(dailyScanCount)}. Next slot after saving: ${formatDateTime(nextRun)}. Custom cron overrides run separately.`
+                  ? `One inherited repository is queued ${dailyScanCount === 1 ? 'daily at 03:00 UTC' : `every ${formatDistributedInterval(dailyScanCount)}`}. Next slot after saving: ${formatDateTime(nextRun)}. Custom cron overrides run separately.`
                   : 'Enter a whole number between 1 and 1,440.'}
               </p>
             </div>

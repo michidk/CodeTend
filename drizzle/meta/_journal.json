@@ -218,6 +218,13 @@
       "when": 1793548405817,
       "tag": "0030_drop_mcp_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793867065740,
+      "tag": "0031_align_nightly_distributed_scans",
+      "breakpoints": true
     }
   ]
 }

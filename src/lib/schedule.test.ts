@@ -42,11 +42,25 @@ describe('cron schedules', () => {
   test('spaces distributed scans evenly across a UTC day', () => {
     const from = new Date('2026-09-17T00:00:00.000Z')
     expect(computeNextDistributedScanAt(1, from).toISOString()).toBe(
-      '2026-09-18T00:00:00.000Z',
+      '2026-09-17T03:00:00.000Z',
     )
     expect(computeNextDistributedScanAt(4, from).toISOString()).toBe(
       '2026-09-17T06:00:00.000Z',
     )
     expect(() => computeNextDistributedScanAt(0, from)).toThrow()
+  })
+})
+
+describe('nightly distributed scans', () => {
+  test.each([
+    ['2026-11-05T02:59:59.999Z', '2026-11-05T03:00:00.000Z'],
+    ['2026-11-05T03:00:00.000Z', '2026-11-06T03:00:00.000Z'],
+    ['2026-11-05T03:00:27.223Z', '2026-11-06T03:00:00.000Z'],
+    ['2026-11-05T10:13:27.223Z', '2026-11-06T03:00:00.000Z'],
+    ['2026-12-31T23:59:59.000Z', '2027-01-01T03:00:00.000Z'],
+  ])('keeps the overnight slot after %s', (from, expected) => {
+    expect(computeNextDistributedScanAt(1, new Date(from)).toISOString()).toBe(
+      expected,
+    )
   })
 })

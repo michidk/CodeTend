@@ -6,8 +6,9 @@ working local layout; Docker Compose maps the same names into the `app` and
 reports the affected names. The default repository scheduling mode, enabled
 state, and cooldown between queued repositories are stored in PostgreSQL and
 edited on the Settings page. Cron mode queues every inherited repository at
-once; distributed mode rotates through them at an evenly spaced scans-per-day
-rate. Individual repositories can override either default with their own cron
+once; distributed mode rotates through them. One scan per day runs at 03:00
+UTC; higher frequencies use evenly spaced intervals. Manual scans do not move
+the automatic schedule. Individual repositories can override either default with their own cron
 or disable scheduled runs; five-field cron day-of-week expressions support
 weekday and weekly schedules. Scanner enablement and custom scanner definitions
 are also stored in PostgreSQL and managed on the Scanners page. A running scan
