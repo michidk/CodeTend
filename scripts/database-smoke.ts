@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { db, setDatabaseForTesting } from '@/db'
@@ -18,6 +19,7 @@ import {
   updateFindingAsFixed,
   updateFindingDisposition,
 } from '@/lib/server/finding-triage'
+import { updateRepositoryAutomation } from '@/lib/server/repository-write.server'
 import { startScan } from '@/lib/server/scan-admission.server'
 import {
   recoverInterruptedScans,
@@ -1005,6 +1007,69 @@ try {
     if (scheduled.queued !== 1) {
       throw new Error('Scheduler tick did not durably enqueue the repository')
     }
+    const historyBefore = await db.$count(
+      schema.scans,
+      eq(schema.scans.repositoryId, lifecycleRepository.id),
+    )
+    const archived = await updateRepositoryAutomation({
+      id: lifecycleRepository.id,
+      action: 'archive',
+    })
+    if (
+      !archived.archived ||
+      archived.scheduleEnabled ||
+      archived.nextScheduledScanAt !== null
+    ) {
+      throw new Error('Archiving did not disable automatic scanning')
+    }
+    const queueAfter = await db.$count(
+      schema.scheduledRepositoryQueue,
+      eq(schema.scheduledRepositoryQueue.repositoryId, lifecycleRepository.id),
+    )
+    const historyAfter = await db.$count(
+      schema.scans,
+      eq(schema.scans.repositoryId, lifecycleRepository.id),
+    )
+    if (queueAfter !== 0 || historyBefore !== historyAfter)
+      throw new Error(
+        'Archiving did not preserve history and clear scheduled work',
+      )
+    if ((await startScan(lifecycleRepository.id, 'schedule')) !== null)
+      throw new Error('Archived repository admitted a scheduled scan')
+    let rejected = false
+    try {
+      await updateRepositoryAutomation({
+        id: lifecycleRepository.id,
+        action: 'schedule',
+        enabled: true,
+      })
+    } catch {
+      rejected = true
+    }
+    if (!rejected)
+      throw new Error('Archived repository allowed automatic scanning')
+    const restored = await updateRepositoryAutomation({
+      id: lifecycleRepository.id,
+      action: 'restore',
+    })
+    if (restored.archived || restored.scheduleEnabled)
+      throw new Error('Restore enabled automatic scans')
+    const enabled = await updateRepositoryAutomation({
+      id: lifecycleRepository.id,
+      action: 'schedule',
+      enabled: true,
+    })
+    if (!enabled.scheduleEnabled)
+      throw new Error('Automatic scanning could not be enabled')
+    const disabled = await updateRepositoryAutomation({
+      id: lifecycleRepository.id,
+      action: 'schedule',
+      enabled: false,
+    })
+    if (disabled.scheduleEnabled)
+      throw new Error('Automatic scanning could not be disabled')
+    if ((await startScan(lifecycleRepository.id, 'schedule')) !== null)
+      throw new Error('Paused repository admitted a scheduled scan')
   } finally {
     await client`
       delete from repositories where id = ${lifecycleRepository.id}

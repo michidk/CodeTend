@@ -22,6 +22,7 @@ import { removeGitNexusIndex } from '@/lib/server/gitnexus.server'
 import {
   assertRepositoryAccess,
   insertRepository,
+  updateRepositoryAutomation,
 } from '@/lib/server/repository-write.server'
 import {
   removeGitNexusRepository,
@@ -235,14 +236,22 @@ export const updateRepository = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     assertRepositoryAccess(data.url)
     const { id, ...values } = data
-    const current = await db.query.repositories.findFirst({
-      where: eq(repositories.id, id),
-    })
-    if (!current) throw new DomainError('not_found', 'Repository not found')
-    const scheduleChanged =
-      current.scheduleEnabled !== values.scheduleEnabled ||
-      current.scheduleCronExpression !== values.scheduleCronExpression
     const [row] = await db.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(repositories)
+        .where(eq(repositories.id, id))
+        .for('update')
+      if (!current) throw new DomainError('not_found', 'Repository not found')
+      if (current.archived && values.scheduleEnabled) {
+        throw new DomainError(
+          'conflict',
+          'Restore the repository before enabling automatic scans.',
+        )
+      }
+      const scheduleChanged =
+        current.scheduleEnabled !== values.scheduleEnabled ||
+        current.scheduleCronExpression !== values.scheduleCronExpression
       const updated = await transaction
         .update(repositories)
         .set({
@@ -265,6 +274,20 @@ export const updateRepository = createServerFn({ method: 'POST' })
     })
     return expectReturnedRow(row, 'Repository')
   })
+
+export const setRepositoryAutomation = createServerFn({ method: 'POST' })
+  .validator(
+    z.discriminatedUnion('action', [
+      z.object({
+        id: positiveId,
+        action: z.literal('schedule'),
+        enabled: z.boolean(),
+      }),
+      z.object({ id: positiveId, action: z.literal('archive') }),
+      z.object({ id: positiveId, action: z.literal('restore') }),
+    ]),
+  )
+  .handler(({ data }) => updateRepositoryAutomation(data))
 
 export const deleteRepository = createServerFn({ method: 'POST' })
   .validator(positiveId)

@@ -84,6 +84,7 @@ export const repositories = pgTable('repositories', {
   name: text('name').notNull(),
   url: text('url').notNull(),
   branch: text('branch').notNull().default('main'),
+  archived: boolean('archived').notNull().default(false),
   scheduleEnabled: boolean('schedule_enabled').notNull().default(true),
   /** Null inherits the global scheduling mode from scan_schedule_settings. */
   scheduleCronExpression: text('schedule_cron_expression'),

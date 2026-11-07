@@ -225,6 +225,13 @@
       "when": 1793867065740,
       "tag": "0031_align_nightly_distributed_scans",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794092492553,
+      "tag": "0032_ambiguous_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

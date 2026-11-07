@@ -134,6 +134,7 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         .where(
           and(
             eq(repositories.scheduleEnabled, true),
+            eq(repositories.archived, false),
             isNull(repositories.scheduleCronExpression),
           ),
         )
@@ -188,6 +189,7 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
     const dueOverrides = await db.query.repositories.findMany({
       where: and(
         eq(repositories.scheduleEnabled, true),
+        eq(repositories.archived, false),
         isNotNull(repositories.scheduleCronExpression),
         isNotNull(repositories.nextScheduledScanAt),
         lte(repositories.nextScheduledScanAt, now),
@@ -253,6 +255,12 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
       .innerJoin(
         repositories,
         eq(scheduledRepositoryQueue.repositoryId, repositories.id),
+      )
+      .where(
+        and(
+          eq(repositories.scheduleEnabled, true),
+          eq(repositories.archived, false),
+        ),
       )
       .orderBy(
         asc(scheduledRepositoryQueue.enqueuedAt),

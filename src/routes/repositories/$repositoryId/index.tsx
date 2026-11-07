@@ -28,6 +28,7 @@ import { ScoreDelta } from '@/components/health/score-delta'
 import { TrendCharts } from '@/components/health/trend-charts'
 import { CostCell, TokensCell } from '@/components/health/usage-stats'
 import { Page, PageHeader, SectionHeading } from '@/components/page-layout'
+import { RepositoryControls } from '@/components/repository-controls'
 import { RouteError } from '@/components/route-error'
 import { RoutePending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
@@ -186,6 +187,7 @@ function RepositoryPage() {
         leading={<GradeBadge grade={latestScan?.grade} size="lg" />}
         actions={
           <>
+            <RepositoryControls repository={repository} />
             <Button
               onClick={() => setScanDialogOpen(true)}
               disabled={running !== null}

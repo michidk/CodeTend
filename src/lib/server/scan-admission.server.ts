@@ -39,6 +39,11 @@ export async function startScan(
     where: eq(repositories.id, repositoryId),
   })
   if (!repository) throw new Error('Repository not found')
+  if (
+    trigger === 'schedule' &&
+    (!repository.scheduleEnabled || repository.archived)
+  )
+    return null
 
   const hasEnabledScanner = (await listGlobalScanners()).some(
     (scanner) => scanner.enabled,

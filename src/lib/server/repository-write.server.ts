@@ -1,7 +1,8 @@
 import '@tanstack/react-start/server-only'
 
+import { eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { repositories } from '@/db/schema'
+import { repositories, scheduledRepositoryQueue } from '@/db/schema'
 import { DomainError, expectReturnedRow } from '@/lib/domain-errors'
 import { getServerEnv } from '@/lib/env.server'
 import { validateRepositoryLocation } from '@/lib/repository-access'
@@ -31,4 +32,48 @@ export async function insertRepository(data: RepositoryInput) {
     })
     .returning()
   return expectReturnedRow(row, 'Repository')
+}
+
+export type RepositoryAutomationInput =
+  | { id: number; action: 'schedule'; enabled: boolean }
+  | { id: number; action: 'archive' | 'restore' }
+
+export async function updateRepositoryAutomation(
+  data: RepositoryAutomationInput,
+) {
+  return db.transaction(async (transaction) => {
+    const [current] = await transaction
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, data.id))
+      .for('update')
+    if (!current) throw new DomainError('not_found', 'Repository not found')
+    if (data.action === 'schedule' && data.enabled && current.archived) {
+      throw new DomainError(
+        'conflict',
+        'Restore the repository before enabling automatic scans.',
+      )
+    }
+    const scheduleEnabled = data.action === 'schedule' ? data.enabled : false
+    const [row] = await transaction
+      .update(repositories)
+      .set({
+        archived:
+          data.action === 'schedule'
+            ? current.archived
+            : data.action === 'archive',
+        scheduleEnabled,
+        nextScheduledScanAt:
+          scheduleEnabled && current.scheduleCronExpression
+            ? computeNextScanAt(current.scheduleCronExpression, new Date())
+            : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(repositories.id, data.id))
+      .returning()
+    await transaction
+      .delete(scheduledRepositoryQueue)
+      .where(eq(scheduledRepositoryQueue.repositoryId, data.id))
+    return expectReturnedRow(row, 'Repository')
+  })
 }

@@ -10,6 +10,7 @@ import {
 import { ScanStatusBadge } from '@/components/health/scan-status'
 import { ScoreDelta } from '@/components/health/score-delta'
 import { Page, PageHeader } from '@/components/page-layout'
+import { RepositoryControls } from '@/components/repository-controls'
 import { RouteError } from '@/components/route-error'
 import { ListPending } from '@/components/route-pending'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +37,8 @@ export const Route = createFileRoute('/')({
 function DashboardPage() {
   const rows = Route.useLoaderData()
   const router = useRouter()
+  const activeRows = rows.filter((row) => !row.archived)
+  const archivedRows = rows.filter((row) => row.archived)
   const scanning = rows.some((row) => row.runningScan !== null)
   useActivityRefresh({ kind: 'all' }, scanning)
 
@@ -72,7 +75,7 @@ function DashboardPage() {
         />
       ) : (
         <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((row) => (
+          {activeRows.map((row) => (
             <RepositoryCard
               key={row.id}
               row={row}
@@ -80,6 +83,22 @@ function DashboardPage() {
             />
           ))}
         </div>
+      )}
+      {archivedRows.length > 0 && (
+        <details className="mt-6 rounded-lg border border-border p-4">
+          <summary className="cursor-pointer font-medium">
+            Archived repositories ({archivedRows.length})
+          </summary>
+          <div className="mt-4 grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {archivedRows.map((row) => (
+              <RepositoryCard
+                key={row.id}
+                row={row}
+                onScanNow={() => void scanNow(row)}
+              />
+            ))}
+          </div>
+        </details>
       )}
     </Page>
   )
@@ -173,6 +192,8 @@ function RepositoryCard({
               : 'Disabled'}
           </dd>
         </dl>
+
+        <RepositoryControls repository={row} />
 
         <div className="flex gap-2">
           <Button
