@@ -6,7 +6,7 @@
 image:
   repository: ghcr.io/michidk/codetend
   pullPolicy: IfNotPresent
-  tag: "@sha256:e267d7763e0af5a852baaf4d0b1c5e469ab562a683dcbf538fc371f05ff63046"
+  tag: "@sha256:f91865c3203dd01fb0a93c36b75327cbce47f48ea0bb2d57dc5110b7de695447"
   # Preferred over tag: an immutable "sha256:..." digest.
   digest: ""
 
