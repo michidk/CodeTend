@@ -129,7 +129,10 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
     let settings = await ensureScheduleSettingsRow()
     if (settings.enabled && settings.nextRunAt && settings.nextRunAt <= now) {
       const repositoryIds = await db
-        .select({ repositoryId: repositories.id })
+        .select({
+          repositoryId: repositories.id,
+          createdAt: repositories.createdAt,
+        })
         .from(repositories)
         .where(
           and(
@@ -149,10 +152,11 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
               .from(scheduledRepositoryQueue)
           ).map((row) => row.id),
         )
-        const stalest = repositoryIdsToQueue
-          .filter((id) => !alreadyQueued.has(id))
-          .map((id) => ({
+        const stalest = repositoryIds
+          .filter((row) => !alreadyQueued.has(row.repositoryId))
+          .map(({ repositoryId: id, createdAt }) => ({
             id,
+            createdAt,
             hasRating: lastScans.get(id)?.hasRating ?? false,
             lastScanAt: lastScans.get(id)?.lastScanAt ?? null,
           }))
@@ -250,6 +254,7 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
         id: scheduledRepositoryQueue.id,
         repositoryId: scheduledRepositoryQueue.repositoryId,
         repositoryName: repositories.name,
+        createdAt: repositories.createdAt,
       })
       .from(scheduledRepositoryQueue)
       .innerJoin(
@@ -272,11 +277,13 @@ async function tick(state: Pick<SchedulerState, 'ticking'>) {
       compareByLastScan(
         {
           id: left.repositoryId,
+          createdAt: left.createdAt,
           hasRating: lastScans.get(left.repositoryId)?.hasRating ?? false,
           lastScanAt: lastScans.get(left.repositoryId)?.lastScanAt ?? null,
         },
         {
           id: right.repositoryId,
+          createdAt: right.createdAt,
           hasRating: lastScans.get(right.repositoryId)?.hasRating ?? false,
           lastScanAt: lastScans.get(right.repositoryId)?.lastScanAt ?? null,
         },

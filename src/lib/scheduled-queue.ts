@@ -8,15 +8,24 @@ export function isScheduleDispatchReady(
   return lastDispatchedAt.getTime() + cooldownMinutes * 60_000 <= now.getTime()
 }
 
-/** Orders unrated repositories first, then the oldest scan attempt. */
+/** Unrated first; waiting time starts at the last attempt or registration. */
 export function compareByLastScan(
-  left: { id: number; hasRating: boolean; lastScanAt: Date | null },
-  right: { id: number; hasRating: boolean; lastScanAt: Date | null },
+  left: {
+    id: number
+    hasRating: boolean
+    createdAt: Date
+    lastScanAt: Date | null
+  },
+  right: {
+    id: number
+    hasRating: boolean
+    createdAt: Date
+    lastScanAt: Date | null
+  },
 ): number {
   if (left.hasRating !== right.hasRating) return left.hasRating ? 1 : -1
-  if (!left.lastScanAt !== !right.lastScanAt) return left.lastScanAt ? 1 : -1
   return (
-    (left.lastScanAt?.getTime() ?? 0) - (right.lastScanAt?.getTime() ?? 0) ||
-    left.id - right.id
+    (left.lastScanAt ?? left.createdAt).getTime() -
+      (right.lastScanAt ?? right.createdAt).getTime() || left.id - right.id
   )
 }
