@@ -28,6 +28,25 @@ describe('AI pricing', () => {
     expect(cost).toBeCloseTo(0.0087, 10)
   })
 
+  test('prices Sonnet 5.5 gateway and dated IDs with its cache rates', () => {
+    for (const model of [
+      'claude-sonnet-5-5',
+      'openai/claude/claude-sonnet-5-5',
+      'anthropic/claude-sonnet-5-5-20261001',
+    ]) {
+      expect(isPricedModel(model)).toBe(true)
+      expect(
+        estimateCostUsd(model, {
+          inputTokens: 1_000_000,
+          outputTokens: 1_000_000,
+          cacheReadTokens: 1_000_000,
+          cacheWriteTokens: 1_000_000,
+        }),
+      ).toBeCloseTo(14.6, 10)
+      expect(estimateCostUsd(model, ZERO_USAGE, 0.42)).toBe(0.42)
+    }
+  })
+
   test('prefers a provider cost and leaves unknown models unpriced', () => {
     expect(estimateCostUsd('custom-model', ZERO_USAGE)).toBeNull()
     expect(estimateCostUsd('custom-model', ZERO_USAGE, 0.42)).toBe(0.42)
