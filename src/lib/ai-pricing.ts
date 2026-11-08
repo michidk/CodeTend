@@ -36,12 +36,14 @@ interface ModelRates {
   readonly input: number
   /** USD per million output tokens. */
   readonly output: number
+  /** USD per million cache reads when the standard multiplier differs. */
+  readonly cacheRead?: number
 }
 
 /**
  * Provider list prices (USD per million tokens, first-party APIs). Cache reads
- * cost 10% of the input price and cache writes 125% for the models listed
- * here. Unknown models still get their tokens tracked, but no cost is
+ * default to 10% of the input price and cache writes to 125%. Models
+ * with different cache read prices specify them explicitly. Unknown models still get their tokens tracked, but no cost is
  * estimated rather than a misleading one.
  *
  * Prices go stale: check this table against the OpenAI and Anthropic pricing
@@ -58,6 +60,8 @@ const MODEL_RATES: Readonly<Record<string, ModelRates>> = {
   'claude-opus-4-7': { input: 5, output: 25 },
   'claude-opus-4-6': { input: 5, output: 25 },
   'claude-opus-4-5': { input: 5, output: 25 },
+  // https://platform.claude.com/docs/en/about-claude/pricing (2026-11-08)
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.1 },
   'claude-sonnet-5': { input: 3, output: 15 },
   'claude-sonnet-4-6': { input: 3, output: 15 },
   'claude-sonnet-4-5': { input: 3, output: 15 },
@@ -93,7 +97,8 @@ export function estimateCostUsd(
   if (!rates) return null
   return (
     (usage.inputTokens * rates.input +
-      usage.cacheReadTokens * rates.input * CACHE_READ_MULTIPLIER +
+      usage.cacheReadTokens *
+        (rates.cacheRead ?? rates.input * CACHE_READ_MULTIPLIER) +
       usage.cacheWriteTokens * rates.input * CACHE_WRITE_MULTIPLIER +
       usage.outputTokens * rates.output) /
     1_000_000
