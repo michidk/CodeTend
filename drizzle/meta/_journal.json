@@ -239,6 +239,13 @@
       "when": 1794127288672,
       "tag": "0033_backfill_sonnet_5_5_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794562997488,
+      "tag": "0034_schedule_position_overrides",
+      "breakpoints": true
     }
   ]
 }

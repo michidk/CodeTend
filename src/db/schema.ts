@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -159,6 +160,18 @@ export const scheduledRepositoryQueue = pgTable(
     ),
     index('scheduled_repository_queue_enqueued_idx').on(table.enqueuedAt),
   ],
+)
+
+/** Only repositories explicitly moved in the next scan rotation are persisted. */
+export const schedulePositionOverrides = pgTable(
+  'schedule_position_overrides',
+  {
+    repositoryId: integer('repository_id')
+      .primaryKey()
+      .references(() => repositories.id, { onDelete: 'cascade' }),
+    position: doublePrecision('position').notNull().unique(),
+    updatedAt,
+  },
 )
 
 /**

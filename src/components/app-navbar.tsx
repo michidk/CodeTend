@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { title: 'Dashboard', url: '/', exact: true },
   { title: 'Scanners', url: '/scanners', exact: false },
   { title: 'Scans', url: '/scans', exact: false },
+  { title: 'Schedule', url: '/schedule', exact: false },
   { title: 'Agents', url: '/agents', exact: false },
 ] as const
 
@@ -46,7 +47,7 @@ export function AppNavbar() {
           </Link>
           <nav
             aria-label="Main navigation"
-            className="flex items-center gap-0 text-xs md:gap-1 md:text-sm"
+            className="flex min-w-0 items-center gap-0 overflow-x-auto text-xs md:gap-1 md:text-sm"
           >
             {NAV_ITEMS.map((item) => {
               const active = isActive(pathname, item.url, item.exact)
@@ -56,7 +57,7 @@ export function AppNavbar() {
                   to={item.url}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'inline-flex min-h-11 items-center rounded-full px-2 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:px-4 md:text-sm [@media(hover:hover)_and_(pointer:fine)]:min-h-0',
+                    'inline-flex min-h-11 shrink-0 items-center rounded-full px-2 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:px-4 md:text-sm [@media(hover:hover)_and_(pointer:fine)]:min-h-0',
                     active &&
                       'bg-primary text-primary-foreground shadow-control hover:bg-primary hover:text-primary-foreground',
                   )}
@@ -66,7 +67,7 @@ export function AppNavbar() {
               )
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <Button
               asChild
               size="icon"

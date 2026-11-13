@@ -1,16 +1,6 @@
 import '@tanstack/react-start/server-only'
 
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  max,
-  sql,
-} from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   findingPatches,
@@ -18,13 +8,12 @@ import {
   scanScheduleSettings,
   scans,
   scheduledRepositoryQueue,
+  schedulePositionOverrides,
 } from '@/db/schema'
 import { getServerEnv } from '@/lib/env.server'
 import { computeNextDistributedScanAt, computeNextScanAt } from '@/lib/schedule'
-import {
-  compareByLastScan,
-  isScheduleDispatchReady,
-} from '@/lib/scheduled-queue'
+import { applySchedulePositions } from '@/lib/schedule-order'
+import { isScheduleDispatchReady } from '@/lib/scheduled-queue'
 import { dispatchExecutionQueues } from '@/lib/server/execution-queue.server'
 import { recoverInterruptedPatches } from '@/lib/server/finding-patches.server'
 import {
@@ -36,6 +25,7 @@ import {
   startScan,
 } from '@/lib/server/scan-pipeline.server'
 import { pruneTransientUsageFiles } from '@/lib/server/scan-usage.server'
+import { loadScheduleCandidates } from '@/lib/server/schedule-queue.server'
 import { ensureScheduleSettingsRow } from '@/lib/server/schedule-settings'
 
 const SCHEDULER_KEY = Symbol.for('codetend.scheduler')
@@ -108,216 +98,193 @@ export function ensureScheduler(): void {
     )
 }
 
-/** Rating availability and latest attempt time for scheduling priority. */
-async function loadScanPriorities() {
-  const rows = await db
-    .select({
-      repositoryId: scans.repositoryId,
-      lastScanAt: max(scans.createdAt),
-      hasRating: sql<boolean>`bool_or(${scans.overallScore} is not null and ${scans.status} in ('completed', 'partial'))`,
-    })
-    .from(scans)
-    .groupBy(scans.repositoryId)
-  return new Map(rows.map((row) => [row.repositoryId, row]))
-}
-
 async function tick(state: Pick<SchedulerState, 'ticking'>) {
   if (state.ticking) return
   state.ticking = true
   try {
-    const now = new Date()
-    let settings = await ensureScheduleSettingsRow()
-    if (settings.enabled && settings.nextRunAt && settings.nextRunAt <= now) {
-      const repositoryIds = await db
+    await db.transaction(async (lock) => {
+      const result = await lock.execute<{ locked: boolean }>(
+        sql`select pg_try_advisory_xact_lock(47219302) as locked`,
+      )
+      if (!result[0]?.locked) return
+      const now = new Date()
+      let settings = await ensureScheduleSettingsRow()
+      if (settings.enabled && settings.nextRunAt && settings.nextRunAt <= now) {
+        const repositoryIds = await db
+          .select({
+            repositoryId: repositories.id,
+            createdAt: repositories.createdAt,
+          })
+          .from(repositories)
+          .where(
+            and(
+              eq(repositories.scheduleEnabled, true),
+              eq(repositories.archived, false),
+              isNull(repositories.scheduleCronExpression),
+            ),
+          )
+          .orderBy(asc(repositories.createdAt), asc(repositories.id))
+        let repositoryIdsToQueue = repositoryIds.map((row) => row.repositoryId)
+        if (settings.mode === 'distributed') {
+          const { automatic } = await loadScheduleCandidates()
+          const ordered = applySchedulePositions(automatic)
+          const stalest = ordered.find((row) => !row.queued)
+          repositoryIdsToQueue = stalest ? [stalest.id] : []
+        }
+        if (repositoryIdsToQueue.length > 0) {
+          await db
+            .insert(scheduledRepositoryQueue)
+            .values(
+              repositoryIdsToQueue.map((repositoryId) => ({ repositoryId })),
+            )
+            .onConflictDoNothing()
+        }
+        const [advanced] = await db
+          .update(scanScheduleSettings)
+          .set({
+            nextRunAt:
+              settings.mode === 'distributed'
+                ? computeNextDistributedScanAt(settings.scansPerDay, now)
+                : computeNextScanAt(settings.cronExpression, now),
+            updatedAt: now,
+          })
+          .where(lte(scanScheduleSettings.nextRunAt, now))
+          .returning()
+        settings = advanced ?? settings
+        console.info(
+          `[CodeTend] queued ${repositoryIdsToQueue.length} repositories for ${settings.mode} scheduled scanning`,
+        )
+      }
+
+      if (!settings.enabled) return
+
+      const dueOverrides = await db.query.repositories.findMany({
+        where: and(
+          eq(repositories.scheduleEnabled, true),
+          eq(repositories.archived, false),
+          isNotNull(repositories.scheduleCronExpression),
+          isNotNull(repositories.nextScheduledScanAt),
+          lte(repositories.nextScheduledScanAt, now),
+        ),
+        columns: {
+          id: true,
+          scheduleCronExpression: true,
+          nextScheduledScanAt: true,
+        },
+        orderBy: [asc(repositories.nextScheduledScanAt), asc(repositories.id)],
+      })
+      if (dueOverrides.length > 0) {
+        await db.transaction(async (transaction) => {
+          await transaction
+            .insert(scheduledRepositoryQueue)
+            .values(
+              dueOverrides.map((repository) => ({
+                repositoryId: repository.id,
+              })),
+            )
+            .onConflictDoNothing()
+          for (const repository of dueOverrides) {
+            if (!repository.scheduleCronExpression) continue
+            await transaction
+              .update(repositories)
+              .set({
+                nextScheduledScanAt: computeNextScanAt(
+                  repository.scheduleCronExpression,
+                  now,
+                ),
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(repositories.id, repository.id),
+                  lte(repositories.nextScheduledScanAt, now),
+                ),
+              )
+          }
+        })
+        console.info(
+          `[CodeTend] queued ${dueOverrides.length} repository schedule overrides`,
+        )
+      }
+
+      if (
+        !isScheduleDispatchReady(
+          settings.lastDispatchedAt,
+          settings.cooldownMinutes,
+          now,
+        )
+      ) {
+        return
+      }
+
+      const queue = await db
         .select({
-          repositoryId: repositories.id,
+          id: scheduledRepositoryQueue.id,
+          repositoryId: scheduledRepositoryQueue.repositoryId,
+          repositoryName: repositories.name,
           createdAt: repositories.createdAt,
         })
-        .from(repositories)
+        .from(scheduledRepositoryQueue)
+        .innerJoin(
+          repositories,
+          eq(scheduledRepositoryQueue.repositoryId, repositories.id),
+        )
         .where(
           and(
             eq(repositories.scheduleEnabled, true),
             eq(repositories.archived, false),
-            isNull(repositories.scheduleCronExpression),
           ),
         )
-        .orderBy(asc(repositories.createdAt), asc(repositories.id))
-      let repositoryIdsToQueue = repositoryIds.map((row) => row.repositoryId)
-      if (settings.mode === 'distributed') {
-        const lastScans = await loadScanPriorities()
-        const alreadyQueued = new Set(
-          (
-            await db
-              .select({ id: scheduledRepositoryQueue.repositoryId })
-              .from(scheduledRepositoryQueue)
-          ).map((row) => row.id),
+        .orderBy(
+          asc(scheduledRepositoryQueue.enqueuedAt),
+          asc(scheduledRepositoryQueue.id),
         )
-        const stalest = repositoryIds
-          .filter((row) => !alreadyQueued.has(row.repositoryId))
-          .map(({ repositoryId: id, createdAt }) => ({
-            id,
-            createdAt,
-            hasRating: lastScans.get(id)?.hasRating ?? false,
-            lastScanAt: lastScans.get(id)?.lastScanAt ?? null,
-          }))
-          .sort(compareByLastScan)[0]
-        repositoryIdsToQueue = stalest ? [stalest.id] : []
-      }
-      if (repositoryIdsToQueue.length > 0) {
-        await db
-          .insert(scheduledRepositoryQueue)
-          .values(
-            repositoryIdsToQueue.map((repositoryId) => ({ repositoryId })),
-          )
-          .onConflictDoNothing()
-      }
-      const [advanced] = await db
-        .update(scanScheduleSettings)
-        .set({
-          nextRunAt:
-            settings.mode === 'distributed'
-              ? computeNextDistributedScanAt(settings.scansPerDay, now)
-              : computeNextScanAt(settings.cronExpression, now),
-          updatedAt: now,
-        })
-        .where(lte(scanScheduleSettings.nextRunAt, now))
-        .returning()
-      settings = advanced ?? settings
-      console.info(
-        `[CodeTend] queued ${repositoryIdsToQueue.length} repositories for ${settings.mode} scheduled scanning`,
+      if (queue.length === 0) return
+      const candidates = await loadScheduleCandidates()
+      const queuedIds = new Set(queue.map((entry) => entry.repositoryId))
+      const orderedGlobal = applySchedulePositions(candidates.automatic)
+      const dueCustom = candidates.custom.filter((row) => queuedIds.has(row.id))
+      const orderedIds = [...dueCustom, ...orderedGlobal].map((row) => row.id)
+
+      const ranks = new Map(orderedIds.map((id, index) => [id, index]))
+      queue.sort(
+        (left, right) =>
+          (ranks.get(left.repositoryId) ?? Number.MAX_SAFE_INTEGER) -
+          (ranks.get(right.repositoryId) ?? Number.MAX_SAFE_INTEGER),
       )
-    }
 
-    if (!settings.enabled) return
+      const activeScans = await db.query.scans.findMany({
+        where: inArray(scans.status, ['queued', 'running']),
+        columns: { repositoryId: true },
+      })
+      const activeRepositoryIds = new Set(
+        activeScans.map((scan) => scan.repositoryId),
+      )
+      const next = queue.find(
+        (entry) => !activeRepositoryIds.has(entry.repositoryId),
+      )
+      if (!next) return
 
-    const dueOverrides = await db.query.repositories.findMany({
-      where: and(
-        eq(repositories.scheduleEnabled, true),
-        eq(repositories.archived, false),
-        isNotNull(repositories.scheduleCronExpression),
-        isNotNull(repositories.nextScheduledScanAt),
-        lte(repositories.nextScheduledScanAt, now),
-      ),
-      columns: {
-        id: true,
-        scheduleCronExpression: true,
-        nextScheduledScanAt: true,
-      },
-      orderBy: [asc(repositories.nextScheduledScanAt), asc(repositories.id)],
-    })
-    if (dueOverrides.length > 0) {
+      const scanId = await startScan(next.repositoryId, 'schedule', {
+        maxInputTokens: settings.maxInputTokens,
+      })
+      if (!scanId) return
       await db.transaction(async (transaction) => {
         await transaction
-          .insert(scheduledRepositoryQueue)
-          .values(
-            dueOverrides.map((repository) => ({
-              repositoryId: repository.id,
-            })),
-          )
-          .onConflictDoNothing()
-        for (const repository of dueOverrides) {
-          if (!repository.scheduleCronExpression) continue
-          await transaction
-            .update(repositories)
-            .set({
-              nextScheduledScanAt: computeNextScanAt(
-                repository.scheduleCronExpression,
-                now,
-              ),
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(repositories.id, repository.id),
-                lte(repositories.nextScheduledScanAt, now),
-              ),
-            )
-        }
+          .delete(schedulePositionOverrides)
+          .where(eq(schedulePositionOverrides.repositoryId, next.repositoryId))
+        await transaction
+          .delete(scheduledRepositoryQueue)
+          .where(eq(scheduledRepositoryQueue.id, next.id))
+        await transaction
+          .update(scanScheduleSettings)
+          .set({ lastDispatchedAt: now, updatedAt: now })
+          .where(eq(scanScheduleSettings.id, settings.id))
       })
       console.info(
-        `[CodeTend] queued ${dueOverrides.length} repository schedule overrides`,
+        `[CodeTend] scheduled scan ${scanId} for ${next.repositoryName}`,
       )
-    }
-
-    if (
-      !isScheduleDispatchReady(
-        settings.lastDispatchedAt,
-        settings.cooldownMinutes,
-        now,
-      )
-    ) {
-      return
-    }
-
-    const queue = await db
-      .select({
-        id: scheduledRepositoryQueue.id,
-        repositoryId: scheduledRepositoryQueue.repositoryId,
-        repositoryName: repositories.name,
-        createdAt: repositories.createdAt,
-      })
-      .from(scheduledRepositoryQueue)
-      .innerJoin(
-        repositories,
-        eq(scheduledRepositoryQueue.repositoryId, repositories.id),
-      )
-      .where(
-        and(
-          eq(repositories.scheduleEnabled, true),
-          eq(repositories.archived, false),
-        ),
-      )
-      .orderBy(
-        asc(scheduledRepositoryQueue.enqueuedAt),
-        asc(scheduledRepositoryQueue.id),
-      )
-    if (queue.length === 0) return
-    const lastScans = await loadScanPriorities()
-    queue.sort((left, right) =>
-      compareByLastScan(
-        {
-          id: left.repositoryId,
-          createdAt: left.createdAt,
-          hasRating: lastScans.get(left.repositoryId)?.hasRating ?? false,
-          lastScanAt: lastScans.get(left.repositoryId)?.lastScanAt ?? null,
-        },
-        {
-          id: right.repositoryId,
-          createdAt: right.createdAt,
-          hasRating: lastScans.get(right.repositoryId)?.hasRating ?? false,
-          lastScanAt: lastScans.get(right.repositoryId)?.lastScanAt ?? null,
-        },
-      ),
-    )
-
-    const activeScans = await db.query.scans.findMany({
-      where: inArray(scans.status, ['queued', 'running']),
-      columns: { repositoryId: true },
     })
-    const activeRepositoryIds = new Set(
-      activeScans.map((scan) => scan.repositoryId),
-    )
-    const next = queue.find(
-      (entry) => !activeRepositoryIds.has(entry.repositoryId),
-    )
-    if (!next) return
-
-    const scanId = await startScan(next.repositoryId, 'schedule', {
-      maxInputTokens: settings.maxInputTokens,
-    })
-    if (!scanId) return
-    await db.transaction(async (transaction) => {
-      await transaction
-        .delete(scheduledRepositoryQueue)
-        .where(eq(scheduledRepositoryQueue.id, next.id))
-      await transaction
-        .update(scanScheduleSettings)
-        .set({ lastDispatchedAt: now, updatedAt: now })
-        .where(eq(scanScheduleSettings.id, settings.id))
-    })
-    console.info(
-      `[CodeTend] scheduled scan ${scanId} for ${next.repositoryName}`,
-    )
   } catch (error) {
     console.error('[CodeTend] scheduler tick failed', error)
   } finally {

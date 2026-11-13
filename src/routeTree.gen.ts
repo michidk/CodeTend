@@ -14,6 +14,7 @@ import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ScannersIndexRouteImport } from './routes/scanners/index'
 import { Route as ScansIndexRouteImport } from './routes/scans/index'
+import { Route as ScheduleIndexRouteImport } from './routes/schedule/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as RepositoriesRepositoryIdIndexRouteImport } from './routes/repositories/$repositoryId/index'
 import { Route as RepositoriesNewIndexRouteImport } from './routes/repositories/new/index'
@@ -49,6 +50,11 @@ const ScannersIndexRoute = ScannersIndexRouteImport.update({
 const ScansIndexRoute = ScansIndexRouteImport.update({
   id: '/scans/',
   path: '/scans/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduleIndexRoute = ScheduleIndexRouteImport.update({
+  id: '/schedule/',
+  path: '/schedule/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/agents/': typeof AgentsIndexRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
+  '/schedule/': typeof ScheduleIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new/': typeof RepositoriesNewIndexRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsIndexRoute
   '/scanners': typeof ScannersIndexRoute
   '/scans': typeof ScansIndexRoute
+  '/schedule': typeof ScheduleIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/repositories/$repositoryId': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new': typeof RepositoriesNewIndexRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/agents/': typeof AgentsIndexRoute
   '/scanners/': typeof ScannersIndexRoute
   '/scans/': typeof ScansIndexRoute
+  '/schedule/': typeof ScheduleIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/repositories/$repositoryId/': typeof RepositoriesRepositoryIdIndexRoute
   '/repositories/new/': typeof RepositoriesNewIndexRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/scanners/'
     | '/scans/'
+    | '/schedule/'
     | '/settings/'
     | '/repositories/$repositoryId/'
     | '/repositories/new/'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/scanners'
     | '/scans'
+    | '/schedule'
     | '/settings'
     | '/repositories/$repositoryId'
     | '/repositories/new'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/scanners/'
     | '/scans/'
+    | '/schedule/'
     | '/settings/'
     | '/repositories/$repositoryId/'
     | '/repositories/new/'
@@ -231,6 +243,7 @@ export interface RootRouteChildren {
   AgentsIndexRoute: typeof AgentsIndexRoute
   ScannersIndexRoute: typeof ScannersIndexRoute
   ScansIndexRoute: typeof ScansIndexRoute
+  ScheduleIndexRoute: typeof ScheduleIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   RepositoriesRepositoryIdIndexRoute: typeof RepositoriesRepositoryIdIndexRoute
   RepositoriesNewIndexRoute: typeof RepositoriesNewIndexRoute
@@ -279,6 +292,13 @@ declare module '@tanstack/react-router' {
       path: '/scans'
       fullPath: '/scans/'
       preLoaderRoute: typeof ScansIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schedule/': {
+      id: '/schedule/'
+      path: '/schedule'
+      fullPath: '/schedule/'
+      preLoaderRoute: typeof ScheduleIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -367,6 +387,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentsIndexRoute: AgentsIndexRoute,
   ScannersIndexRoute: ScannersIndexRoute,
   ScansIndexRoute: ScansIndexRoute,
+  ScheduleIndexRoute: ScheduleIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   RepositoriesRepositoryIdIndexRoute: RepositoriesRepositoryIdIndexRoute,
   RepositoriesNewIndexRoute: RepositoriesNewIndexRoute,

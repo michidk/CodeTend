@@ -31,11 +31,12 @@ import {
   persistScanResult,
 } from '@/lib/server/scan-result-ingestion.server'
 import { runSchedulerTick } from '@/lib/server/scheduler.server'
+import { verifyScheduleEditing } from './schedule-smoke'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error('DATABASE_URL is required')
 
-const client = postgres(connectionString, { max: 1 })
+const client = postgres(connectionString, { max: 2 })
 const rollback = new Error('rollback database smoke test')
 const lifecycleDataDir = await mkdtemp(join(tmpdir(), 'codetend-lifecycle-'))
 process.env.TECDEBT_DATA_DIR = lifecycleDataDir
@@ -221,6 +222,8 @@ try {
   }
 
   let activeConstraintEnforced = false
+  await verifyScheduleEditing()
+
   try {
     await client.begin(async (transaction) => {
       const [repository] = await transaction<[{ id: number }]>`
@@ -1007,6 +1010,73 @@ try {
     if (scheduled.queued !== 1) {
       throw new Error('Scheduler tick did not durably enqueue the repository')
     }
+    // Keep admitted scans queued so this dispatch check makes no model calls.
+    await client`update scan_schedule_settings set scan_concurrency = 0,
+      mode = 'distributed', next_run_at = now() - interval '1 minute',
+      last_dispatched_at = null, cooldown_minutes = 0 where id = 1`
+    await client`delete from scheduled_repository_queue`
+    const extraScheduleRepos = await db
+      .insert(schema.repositories)
+      .values([
+        {
+          name: 'older-automatic',
+          url: 'https://github.com/test/older.git',
+          createdAt: new Date('2000-01-01'),
+        },
+        {
+          name: 'future-custom',
+          url: 'https://github.com/test/custom.git',
+          createdAt: new Date('1990-01-01'),
+          scheduleCronExpression: '0 3 * * *',
+          nextScheduledScanAt: new Date('2099-01-01'),
+        },
+      ])
+      .returning()
+    try {
+      await db
+        .insert(schema.schedulePositionOverrides)
+        .values({ repositoryId: lifecycleRepository.id, position: -1023.5 })
+      await runSchedulerTick()
+      const dispatched = await db.query.scans.findFirst({
+        where: (table, { and, eq }) =>
+          and(
+            eq(table.repositoryId, lifecycleRepository.id),
+            eq(table.status, 'queued'),
+            eq(table.trigger, 'schedule'),
+          ),
+      })
+      if (!dispatched)
+        throw new Error(
+          'Manual priority did not select the next distributed scan',
+        )
+      if (
+        await db.$count(
+          schema.schedulePositionOverrides,
+          eq(
+            schema.schedulePositionOverrides.repositoryId,
+            lifecycleRepository.id,
+          ),
+        )
+      )
+        throw new Error(
+          'Scheduled dispatch did not consume its manual override',
+        )
+      if (await db.$count(schema.scheduledRepositoryQueue))
+        throw new Error(
+          'Distributed tick queued an untouched or not-yet-due custom repository',
+        )
+      await db
+        .update(schema.scans)
+        .set({ status: 'cancelled', finishedAt: new Date() })
+        .where(eq(schema.scans.id, dispatched.id))
+    } finally {
+      for (const repository of extraScheduleRepos)
+        await db
+          .delete(schema.repositories)
+          .where(eq(schema.repositories.id, repository.id))
+      await client`update scan_schedule_settings set scan_concurrency = 2, mode = 'cron', cooldown_minutes = 60 where id = 1`
+    }
+
     const historyBefore = await db.$count(
       schema.scans,
       eq(schema.scans.repositoryId, lifecycleRepository.id),
