@@ -11,6 +11,7 @@ __unconfig*
 .gitignore
 *.md
 !README.md
+!eve/agent/**/*.md
 Dockerfile
 .dockerignore
 .env*

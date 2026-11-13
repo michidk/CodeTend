@@ -46,6 +46,10 @@ export function scannerAgentMessage(input: {
     parts.push(
       '',
       '## Security review capability',
+      'Load the bundled security-audit skill in guidance mode. Read ATTACK-CLASSES.md and select companion files from the repository surfaces you actually find, rather than assuming a web application.',
+      securityReview === 'ci'
+        ? 'Read SUPPLY-CHAIN-AND-RELEASE.md, focusing on CI and automation, release and update paths, and its validation rules. Read CLOUD-AND-DEPLOYMENT.md when workflows cross deployment or cloud identity boundaries.'
+        : 'Use the applicable domain companions for this checkout: AI-AND-LLM.md, WEB-PROTOCOL-AND-AUTH.md, CLIENT-SIDE.md, MEMORY-SAFETY-AND-BINARY.md, CLOUD-AND-DEPLOYMENT.md, PROTOCOLS-RPC-AND-MESSAGING.md, RESOURCE-EXHAUSTION-AND-AVAILABILITY.md, DATA-ISOLATION-AND-LIFECYCLE.md, or DESKTOP-MOBILE-AND-LOCAL-IPC.md. Read only the companions supported by discovered surfaces and stay within application security ownership.',
       `Security review is enabled (${securityReview}). Supply classification, securityContext, rootCause, codeEvidence, attackPath, remediationTests and preventiveControls when supported. An independent agent will verify practical exploitability.`,
       securityReview === 'ci'
         ? 'For CI evidence, identify the external actor or lower-trust producer as source and the privileged job, credential exposure or release operation as sink. Workflow configuration is source evidence; unknown repository settings remain assumptions.'

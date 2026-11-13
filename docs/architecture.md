@@ -62,6 +62,15 @@ Each scanner's `prompt` names what it owns, which neighbouring dimensions own
 the adjacent concerns ("Not yours"), and how to calibrate severity, so the same
 problem has a stable owner. After security review, a bounded independent duplicate adjudicator inspects candidates sharing file evidence. Only verified same-root-cause pairs are consolidated; invalid references, cycles, conflicting decisions and security downgrades are rejected. Uncertain pairs remain separate. At most eight batches are reviewed; exhaustion or review failures are disclosed in coverage.
 
+Security-review tasks load Cloudflare's [`security-audit`](https://github.com/cloudflare/security-audit-skill)
+skill in guidance mode. The complete skill package is vendored under
+`eve/agent/subagents/scanner/skills/security-audit` and compiled into Eve's
+scanner sandbox, including its companion references and validators. CodeTend
+keeps control of scan scope, budgets, structured results, independent review
+and sandboxed validation. Installing this skill does not enable its standalone
+six-phase audit workflow. See [`eve/security-audit-skill.md`](../eve/security-audit-skill.md)
+for the pinned source and update procedure.
+
 ### Adding a scanner
 
 Operators can add an organization-specific agent scanner from the Scanners
