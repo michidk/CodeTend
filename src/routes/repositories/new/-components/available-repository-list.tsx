@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { GitBranch, Lock, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -20,7 +20,7 @@ export function AvailableRepositoryList({
 }: {
   readonly repositories: AvailableRepository[]
 }) {
-  const navigate = useNavigate()
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [adding, setAdding] = useState<string | null>(null)
   const filtered = useMemo(() => {
@@ -34,7 +34,7 @@ export function AvailableRepositoryList({
   const add = async (repository: AvailableRepository) => {
     setAdding(repository.name)
     try {
-      const saved = await createRepository({
+      await createRepository({
         data: {
           name: repository.name,
           url: repository.url,
@@ -44,12 +44,10 @@ export function AvailableRepositoryList({
         },
       })
       toast.success(`${repository.name} added`)
-      await navigate({
-        to: '/repositories/$repositoryId',
-        params: { repositoryId: String(saved.id) },
-      })
+      await router.invalidate({ sync: true })
     } catch (error) {
       toast.error(getErrorMessage(error, 'Could not add the repository'))
+    } finally {
       setAdding(null)
     }
   }
