@@ -18,11 +18,14 @@ export function FindingPatchControls({
   patches,
   agentPrompt,
   disabled,
+  patchable = true,
 }: {
   readonly findingId: number
   readonly patches: readonly FindingPatch[]
   readonly agentPrompt: string
   readonly disabled: boolean
+  /** False when the fix needs a package manager, which the fix agent lacks. */
+  readonly patchable?: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -61,6 +64,7 @@ export function FindingPatchControls({
   }
 
   const canGenerate =
+    patchable &&
     !disabled &&
     (!latest || latest.status === 'failed' || latest.status === 'rejected')
   const awaitingReview =
@@ -74,8 +78,9 @@ export function FindingPatchControls({
             Automated fix
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Generates a focused diff in a disposable clone for review and
-            download. CodeTend never writes it to the source repository.
+            {patchable
+              ? 'Generates a focused diff in a disposable clone for review and download. CodeTend never writes it to the source repository.'
+              : 'Dependency upgrades regenerate the lockfile, so they run through the package manager in your checkout. The prompt covers every listed package in one change.'}
           </p>
         </div>
         {latest ? (

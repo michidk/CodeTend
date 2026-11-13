@@ -328,6 +328,7 @@ function FindingDetailPanel({
         patches={finding.patches}
         agentPrompt={finding.agentPrompt}
         disabled={finding.disposition !== null || finding.state === 'resolved'}
+        patchable={getScanner(finding.scannerId)?.kind !== 'dependency-audit'}
       />
     </>
   )

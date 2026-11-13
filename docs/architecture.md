@@ -157,6 +157,16 @@ vectors locally, fetches FIRST EPSS probabilities, and joins the CISA Known
 Exploited Vulnerabilities catalog. An unavailable EPSS or KEV feed is reported
 in the scanner summary but never discards an OSV result.
 
+The scanner reports one finding per repository, not one per advisory. An
+impact-review agent judges every matched advisory against the repository's
+code, build and deployment; the finding lists which advisories are exploitable
+here, which are not and why, and the single upgrade set that clears them. Its
+severity is the worst exploitable advisory, or low when none is exploitable.
+The fingerprint differs between those two outcomes, so accepting an
+unexploitable backlog never suppresses a later exploitable advisory. Lockfile
+upgrades need a package manager, so this finding offers the local-agent prompt
+instead of a generated patch.
+
 Raw severity and contextual priority are deliberately separate. Dependency
 priority combines CVSS, EPSS, KEV and fix availability; a confirmed exploitable KEV match becomes critical priority. The Security Hygiene discovery agent classifies
 source-code findings with CWE/OWASP and records evidenced reachability,

@@ -3,6 +3,7 @@ import type { EpssMetric, KevEntry } from '@/lib/findings'
 import {
   cveIdsForMatches,
   dependencyFindingsFromMatches,
+  dependencyReportFinding,
   deriveDependencyPriority,
   deriveSourcePriority,
   parseOsvDependencyReport,
@@ -143,6 +144,34 @@ describe('OSV dependency findings', () => {
     expect(findings[0]?.evidence).toContainEqual(
       expect.objectContaining({ path: 'src/package-call.ts' }),
     )
+
+    const unreachable = dependencyFindingsFromMatches(matches, {
+      epssByCve: new Map(),
+      kevByCve: new Map(),
+    }).map((entry) => ({ ...entry, fingerprint: 'other-advisory' }))
+    const [report, ...others] = dependencyReportFinding([
+      ...unreachable,
+      ...findings,
+    ])
+    expect(others).toEqual([])
+    expect(report?.fingerprint).toBe('dependency-vulnerabilities-exploitable')
+    expect(report?.title).toBe(
+      '1 of 2 dependency advisories are exploitable in this application',
+    )
+    expect(report?.severity).toBe('medium')
+    expect(report?.priority).toBe('critical')
+    expect(report?.description).toContain('### Exploitable (1)')
+    expect(report?.description).toContain('### No practical attack path (1)')
+    expect(report?.recommendation).toContain('`demo-package` 1.2.3')
+
+    const [backlog] = dependencyReportFinding(unreachable)
+    expect(backlog).toMatchObject({
+      fingerprint: 'dependency-advisories-not-exploitable',
+      severity: 'low',
+      priority: 'low',
+      exploitability: { verdict: 'not-confirmed' },
+    })
+    expect(dependencyReportFinding([])).toEqual([])
   })
 })
 

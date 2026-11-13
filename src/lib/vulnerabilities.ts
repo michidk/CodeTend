@@ -12,6 +12,7 @@ import type {
   Severity,
   VulnerabilityMetadata,
 } from '@/lib/findings'
+import { SEVERITY_ORDER } from '@/lib/findings'
 
 const osvEventSchema = z.object({
   introduced: z.string().optional(),
@@ -305,7 +306,7 @@ export function dependencyFindingsFromMatches(
       title: `${primary} affects ${match.packageName} ${match.version}`,
       severity,
       confidence: 'high',
-      description: `${summary} The installed version was matched from ${match.manifestPath} using exact ${purl ? 'purl' : 'ecosystem, package and version'} evidence.`,
+      description: summary,
       whyItMatters: dependencyImpactText({
         epss,
         kev,
@@ -350,6 +351,170 @@ export function dependencyFindingsFromMatches(
     }
   })
   return mergeDependencyFindings(findings)
+}
+
+/**
+ * Collapses the per-advisory entries into the single finding the scanner
+ * reports: which matched advisories this application can actually be attacked
+ * through, and the one upgrade set that clears them all.
+ */
+export function dependencyReportFinding(
+  entries: readonly EnrichedScannerFinding[],
+): EnrichedScannerFinding[] {
+  if (entries.length === 0) return []
+  const byPriority = [...entries].sort(
+    (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+  )
+  const exploitable = byPriority.filter(
+    (entry) => entry.exploitability?.verdict === 'confirmed',
+  )
+  const rest = byPriority.filter((entry) => !exploitable.includes(entry))
+  const ordered = [...exploitable, ...rest]
+  const top = exploitable[0]
+
+  const packages = new Map<
+    string,
+    { name: string; version: string; ids: string[]; fixed: string[] }
+  >()
+  for (const entry of ordered) {
+    const meta = entry.vulnerability
+    if (!meta) continue
+    const key = `${meta.package.name}@${meta.package.version}`
+    const current = packages.get(key) ?? {
+      name: meta.package.name,
+      version: meta.package.version,
+      ids: [],
+      fixed: [],
+    }
+    current.ids.push(advisoryLabel(entry))
+    current.fixed = uniqueStrings([...current.fixed, ...meta.fixedVersions])
+    packages.set(key, current)
+  }
+  const manifests = uniqueStrings(
+    entries.flatMap((entry) =>
+      entry.vulnerability ? [entry.vulnerability.package.manifestPath] : [],
+    ),
+  )
+  const verdict =
+    exploitable.length > 0
+      ? `${exploitable.length} of ${entries.length} can be abused in this application.`
+      : 'None of them can be abused in this application as it is written and deployed today.'
+
+  return [
+    {
+      // A separate identity per outcome: accepting the unexploitable backlog
+      // must not suppress a later advisory that is exploitable.
+      fingerprint:
+        exploitable.length > 0
+          ? 'dependency-vulnerabilities-exploitable'
+          : 'dependency-advisories-not-exploitable',
+      title:
+        exploitable.length > 0
+          ? `${exploitable.length} of ${entries.length} dependency advisories are exploitable in this application`
+          : `${entries.length} dependency ${entries.length === 1 ? 'advisory matches' : 'advisories match'}, none confirmed exploitable`,
+      severity: top
+        ? exploitable.reduce(
+            (worst, entry) =>
+              SEVERITY_ORDER[entry.severity] < SEVERITY_ORDER[worst]
+                ? entry.severity
+                : worst,
+            top.severity,
+          )
+        : 'low',
+      confidence: 'high',
+      description: [
+        `OSV matched ${entries.length} published ${entries.length === 1 ? 'advisory' : 'advisories'} against ${packages.size} locked package ${packages.size === 1 ? 'version' : 'versions'} in ${manifests.join(', ')}. An impact review inspected each one against this repository's code, build and deployment. ${verdict}`,
+        ...(exploitable.length > 0
+          ? [
+              `### Exploitable (${exploitable.length})`,
+              exploitable.map((entry) => reportLine(entry, 2_000)).join('\n'),
+            ]
+          : []),
+        ...(rest.length > 0
+          ? [
+              `### No practical attack path (${rest.length})`,
+              rest.map((entry) => reportLine(entry, 600)).join('\n'),
+            ]
+          : []),
+      ].join('\n\n'),
+      whyItMatters: top
+        ? `An attacker-controlled path reaches the vulnerable behavior of ${uniqueStrings(exploitable.flatMap((entry) => (entry.vulnerability ? [entry.vulnerability.package.name] : []))).join(', ')}.${exploitable.some((entry) => (entry.vulnerability?.kev.length ?? 0) > 0) ? ' At least one of these is recorded by CISA as exploited in the wild.' : ''} The remaining matches are upgrade hygiene, not open attack paths.`
+        : 'No matched advisory has a practical attack path here, so this is upgrade hygiene rather than an open exposure. It is worth clearing because a later code change can make an unreachable vulnerable API reachable.',
+      recommendation: [
+        `Upgrade these packages in one change with the repository package manager${exploitable.length > 0 ? ', exploitable ones first' : ''}, regenerate ${manifests.join(', ')}, and run the repository checks:`,
+        [...packages.values()]
+          .map(
+            (pkg) =>
+              `- \`${pkg.name}\` ${pkg.version} → ${pkg.fixed.length > 0 ? `a release at or above ${pkg.fixed.join(' / ')}` : 'no fixed version published; remove, replace or mitigate the affected use'} (${pkg.ids.join(', ')})`,
+          )
+          .join('\n'),
+      ].join('\n\n'),
+      effort: packages.size > 5 ? 'medium' : 'small',
+      subject: {
+        kind: 'repository',
+        aspect: 'declared and locked dependencies',
+      },
+      evidence: uniqueBy(
+        ordered.flatMap((entry) => entry.evidence),
+        (evidence) => JSON.stringify(evidence),
+      ).slice(0, 30),
+      locations: uniqueBy(
+        ordered.flatMap((entry) => entry.locations),
+        (location) => `${location.path}:${location.startLine ?? ''}`,
+      ).slice(0, 12),
+      classification: {
+        cwes: uniqueStrings(
+          exploitable.flatMap((entry) => entry.classification?.cwes ?? []),
+        ).slice(0, 12),
+        owasp: [],
+      },
+      exploitability: {
+        verdict: top ? 'confirmed' : 'not-confirmed',
+        rationale: verdict,
+      },
+      ...(top
+        ? {
+            priority: top.priority,
+            priorityScore: top.priorityScore,
+            priorityReasons: [
+              `Highest of ${exploitable.length} exploitable ${exploitable.length === 1 ? 'advisory' : 'advisories'}: ${advisoryLabel(top)}`,
+              ...(top.priorityReasons ?? []),
+            ],
+          }
+        : {
+            priority: 'low' as const,
+            priorityScore: 20,
+            priorityReasons: [
+              'Dependency impact review did not confirm a practical attack path for any matched advisory',
+            ],
+          }),
+    },
+  ]
+}
+
+function advisoryLabel(entry: EnrichedScannerFinding): string {
+  return preferredAdvisoryId(
+    entry.vulnerability?.advisories.map((advisory) => advisory.id) ?? [],
+    entry.title,
+  )
+}
+
+function reportLine(entry: EnrichedScannerFinding, rationaleLimit: number) {
+  const meta = entry.vulnerability
+  if (!meta) return `- ${entry.title}`
+  const id = advisoryLabel(entry)
+  const maxEpss = Math.max(0, ...meta.epss.map((metric) => metric.probability))
+  const facts = [
+    entry.severity,
+    ...(meta.cvss[0] ? [`CVSS ${meta.cvss[0].score.toFixed(1)}`] : []),
+    ...(meta.epss.length > 0 ? [`EPSS ${(maxEpss * 100).toFixed(2)}%`] : []),
+    ...(meta.kev.length > 0 ? ['CISA KEV'] : []),
+    meta.fixedVersions.length > 0
+      ? `fixed in ${meta.fixedVersions.join(' / ')}`
+      : 'no fixed version',
+  ]
+  const rationale = entry.exploitability?.rationale ?? ''
+  return `- **[${id}](https://osv.dev/vulnerability/${encodeURIComponent(id)})** in \`${meta.package.name}@${meta.package.version}\` (${facts.join(', ')}): ${entry.description} — ${rationale.length > rationaleLimit ? `${rationale.slice(0, rationaleLimit)}…` : rationale}`
 }
 
 export function enrichSourceSecurityFinding(
