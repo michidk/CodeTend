@@ -47,7 +47,10 @@ RUN ln -s /app/eve/node_modules /app/node_modules
 COPY eve/agent ./agent
 COPY eve/tsconfig.json ./
 RUN NODE_ENV=development npx eve build
+# The state volume mounted over .eve hides the sandbox templates `eve build`
+# prepared, so keep a copy outside it and seed the volume on every start.
+RUN cp -a .eve/sandbox-cache/just-bash/templates /app/eve/sandbox-templates
 RUN mkdir -p /data && chown -R node:node /data /app/eve/.eve
 USER node
 EXPOSE 2000
-CMD ["npx", "eve", "start", "--host", "0.0.0.0", "--port", "2000"]
+CMD ["sh", "-c", "mkdir -p .eve/sandbox-cache/just-bash/templates && cp -Rn /app/eve/sandbox-templates/. .eve/sandbox-cache/just-bash/templates/ && exec npx eve start --host 0.0.0.0 --port 2000"]
