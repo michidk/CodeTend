@@ -64,11 +64,11 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.4",
-    "@tailwindcss/vite": "4.3.3",
+    "@biomejs/biome": "2.6.6",
+    "@tailwindcss/vite": "4.3.5",
     "@tanstack/devtools-vite": "0.8.6",
     "@tanstack/react-devtools": "0.10.14",
-    "@tanstack/react-router-devtools": "1.167.2",
+    "@tanstack/react-router-devtools": "1.167.3",
     "@tanstack/router-cli": "1.167.46",
     "@types/bun": "1.4.4",
     "@types/node": "26.6.6",
@@ -76,10 +76,10 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "drizzle-kit": "0.31.11",
-    "knip": "6.44.1",
+    "knip": "6.44.2",
     "nitro": "3.0.260903-beta",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.5",
     "typescript": "7.0.2",
-    "vite": "8.3.5"
+    "vite": "8.3.8"
   }
 }
