@@ -1,42 +1,92 @@
 # @orcastrate
-# template: projects/codetend/ci
+# template: node/ci
 # params:
 #   custom_runner: "${{ contains(toJSON(matrix), 'linux/amd64') && 'ubicloud-standard-2' || 'ubicloud-standard-2-arm' }}"
+#   name: Checks and Build
+#   biome: false
+#   timeout_minutes: 30
+#   node_version: 26
+#   postgres:
+#     image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+#     db: tecdebt
+#     user: tecdebt
+#     password: tecdebt-ci
+#   steps:
+#     - name: Install Eve dependencies
+#       run: npm ci --prefix eve
+#     - name: Check formatting, lint and import boundaries
+#       run: bun run check
+#     - name: Test units
+#       run: bun run test
+#     - name: Type check app and Eve agent
+#       run: |
+#         bun run typecheck
+#         bun run eve:typecheck
+#     - name: Check for dead code
+#       run: bun run lint:deadcode
+#     - name: Audit production dependencies
+#       run: |
+#         bun audit --production
+#         # shortcut: moderate threshold waives GHSA-hp3w-g68c-fv3c (sprintf-js via
+#         # eve > just-bash, no patched release); restore plain `npm audit` once fixed.
+#         (cd eve && npm audit --omit=dev --audit-level=high)
+#     - name: Validate Docker Compose
+#       run: POSTGRES_PASSWORD=ci-password EVE_PASSWORD=ci-password OPENAI_API_KEY=ci-key docker compose config --quiet
+#     - name: Validate Helm chart
+#       run: |
+#         helm_args=(
+#           --set secrets.existingSecret=codetend
+#           --set postgresql.existingSecret=codetend-db
+#           --set hodor.existingSecret=codetend-hodor
+#           --set hodor.image.tag=latest
+#         )
+#         docker run --rm -v "$PWD:/work:ro" -w /work alpine/helm:3.19.0 \
+#           lint charts "${helm_args[@]}"
+#         docker run --rm -v "$PWD:/work:ro" -w /work alpine/helm:3.19.0 \
+#           template codetend charts "${helm_args[@]}" >/dev/null
+#     - name: Apply database migrations
+#       run: bun run db:migrate
+#     - name: Test database invariants
+#       run: bun run test:database
+#     - name: Build production assets
+#       run: bun run build
+#     - name: Check generated route tree
+#       run: git diff --exit-code -- src/routeTree.gen.ts
+#   image:
+#     targets:
+#       - {target: app, suffix: ""}
+#       - {target: eve, suffix: -eve}
 # @end-orcastrate
 
 name: Checks and Build
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
-    branches: [main]
-
-env:
-  REGISTRY: ghcr.io
-  # docker/metadata-action normalizes github.repository to lowercase
-  # automatically, but the raw value (michidk/CodeTend) is also
-  # interpolated directly into the per-platform build step's buildx
-  # `outputs=` string below, which does not normalize it - so this must
-  # already be lowercase, matching the ghcr.io package name.
-  IMAGE_NAME: michidk/codetend
+  workflow_dispatch:
 
 permissions:
   contents: read
+ 
 
 concurrency:
-  group: checks-build-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   checks:
+    name: Checks
     runs-on: ${{ contains(toJSON(matrix), 'linux/amd64') && 'ubicloud-standard-2' || 'ubicloud-standard-2-arm' }}
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:18@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc
+        image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
         env:
           POSTGRES_DB: tecdebt
           POSTGRES_USER: tecdebt
@@ -51,38 +101,46 @@ jobs:
     env:
       DATABASE_URL: postgresql://tecdebt:tecdebt-ci@127.0.0.1:5432/tecdebt
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Checkout sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 26
-          cache: npm
-          cache-dependency-path: eve/package-lock.json
-
-      - name: Install app dependencies
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
+
+
+
+
+
+
       - name: Install Eve dependencies
-        run: npm ci
-        working-directory: eve
+        run: |
+          npm ci --prefix eve
 
       - name: Check formatting, lint and import boundaries
-        run: bun run check
+        run: |
+          bun run check
 
       - name: Test units
-        run: bun run test
+        run: |
+          bun run test
 
       - name: Type check app and Eve agent
         run: |
           bun run typecheck
           bun run eve:typecheck
 
+
       - name: Check for dead code
-        run: bun run lint:deadcode
+        run: |
+          bun run lint:deadcode
 
       - name: Audit production dependencies
         run: |
@@ -91,12 +149,10 @@ jobs:
           # eve > just-bash, no patched release); restore plain `npm audit` once fixed.
           (cd eve && npm audit --omit=dev --audit-level=high)
 
+
       - name: Validate Docker Compose
-        env:
-          POSTGRES_PASSWORD: ci-password
-          EVE_PASSWORD: ci-password
-          OPENAI_API_KEY: ci-key
-        run: docker compose config --quiet
+        run: |
+          POSTGRES_PASSWORD=ci-password EVE_PASSWORD=ci-password OPENAI_API_KEY=ci-key docker compose config --quiet
 
       - name: Validate Helm chart
         run: |
@@ -111,147 +167,148 @@ jobs:
           docker run --rm -v "$PWD:/work:ro" -w /work alpine/helm:3.19.0 \
             template codetend charts "${helm_args[@]}" >/dev/null
 
+
       - name: Apply database migrations
-        run: bun run db:migrate
+        run: |
+          bun run db:migrate
 
       - name: Test database invariants
-        run: bun run test:database
+        run: |
+          bun run test:database
 
       - name: Build production assets
-        run: bun run build
+        run: |
+          bun run build
 
       - name: Check generated route tree
-        run: git diff --exit-code -- src/routeTree.gen.ts
+        run: |
+          git diff --exit-code -- src/routeTree.gen.ts
 
-  # Bun's JIT reliably crashes under QEMU cross-arch emulation (SIGABRT/SIGILL;
-  # see oven-sh/bun#20442, #26635), so each platform builds natively on a
-  # matching-arch runner and the merge job below combines the two
-  # single-platform digests into one multi-arch manifest, per Docker's
-  # documented pattern for distributing builds across runners.
+
+
+  # Each platform builds natively; the merge job joins the per-platform digests.
   build:
+    name: Build image (${{ matrix.platform }}${{ matrix.image.target && format(', {0}', matrix.image.target) || '' }})
+    needs: checks
     runs-on: ${{ contains(toJSON(matrix), 'linux/amd64') && 'ubicloud-standard-2' || 'ubicloud-standard-2-arm' }}
     timeout-minutes: 45
-    needs: checks
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: app
-            suffix: ""
-            platform: linux/amd64
-          - target: app
-            suffix: ""
-            platform: linux/arm64
-          - target: eve
-            suffix: -eve
-            platform: linux/amd64
-          - target: eve
-            suffix: -eve
-            platform: linux/arm64
+        platform: ["linux/amd64", "linux/arm64"]
+        image: [{"suffix": "", "target": "app"}, {"suffix": "-eve", "target": "eve"}]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
+      - name: Checkout sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set image name
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}${{ matrix.image.suffix }}
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.image.target || 'default' }}
+        run: |
+          echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+          echo "DIGEST_KEY=${TARGET}-${PLATFORM//\//-}" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to Container Registry
+      - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set platform tag
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
-
-      - name: Build ${{ matrix.target }} image (${{ matrix.platform }})
+      - name: Extract image labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+      - name: Build image
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          target: ${{ matrix.target }}
+          file: Dockerfile
+          target: ${{ matrix.image.target }}
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-          cache-from: type=gha,scope=${{ matrix.target }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}-${{ matrix.platform }}
-
-      - name: Export digest
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          cache-from: type=gha,scope=${{ env.DIGEST_KEY }}
+          cache-to: type=gha,mode=max,scope=${{ env.DIGEST_KEY }}
+      - name: Export image digest
         if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
+          touch "/tmp/digests/${DIGEST#sha256:}"
+      - name: Upload image digest
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digests-${{ matrix.target }}-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ env.DIGEST_KEY }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
   merge:
+    name: Publish image${{ matrix.image.target && format(' ({0})', matrix.image.target) || '' }}
     if: github.event_name != 'pull_request'
+    needs: build
     runs-on: ${{ contains(toJSON(matrix), 'linux/amd64') && 'ubicloud-standard-2' || 'ubicloud-standard-2-arm' }}
     timeout-minutes: 15
-    needs: build
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: app
-            suffix: ""
-          - target: eve
-            suffix: -eve
+        image: [{"suffix": "", "target": "app"}, {"suffix": "-eve", "target": "eve"}]
     steps:
-      - name: Download digests
+      - name: Set image name
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}${{ matrix.image.suffix }}
+        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+      - name: Download image digests
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: /tmp/digests
-          pattern: digests-${{ matrix.target }}-*
+          pattern: digests-${{ matrix.image.target || 'default' }}-*
           merge-multiple: true
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=sha,prefix=sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Create manifest list and push
+      - name: Create multi-platform manifest
         working-directory: /tmp/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          # Split generated tags and digest references into separate arguments.
-          # shellcheck disable=SC2046
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}@sha256:%s ' *)
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}:${{ steps.meta.outputs.version }}
+          tag_args=()
+          while IFS= read -r tag; do
+            tag_args+=(--tag "$tag")
+          done <<< "$TAGS"
+          sources=()
+          for digest in *; do
+            sources+=("$IMAGE@sha256:$digest")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
