@@ -49,6 +49,7 @@ security. Their structured findings become deterministic scores and grades,
 every finding is tracked across scans, and each dimension produces one
 aggregated fix prompt you paste into Claude Code, Codex or another coding
 agent.
+
 - 🧭 **Fifteen dimensions, one registry.** Architecture & Modularity,
   Duplication & Abstraction, Dead & Obsolete Code, Complexity &
   Maintainability, Tests & Testability, Reliability & Error Handling,
