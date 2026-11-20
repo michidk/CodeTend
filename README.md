@@ -22,12 +22,12 @@
 <p align="center">
 <a href="https://github.com/michidk/CodeTend/actions/workflows/ci.yml">
 <img alt="Checks and Build" src="https://github.com/michidk/CodeTend/actions/workflows/ci.yml/badge.svg"></a>
-<img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
+<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-yes-0f766e.svg">
 </p>
 
 <p align="center">
-  <img src="docs/codetend-thumbnail.png" alt="CodeTend turning tangled technical debt into a healthy repository structure" width="960">
+  <img src="docs/codetend-thumbnail.png" alt="CodeTend turning tangled technical debt into a healthy repository structure" width="800">
 </p>
 
 ---
@@ -89,13 +89,13 @@ agent.
 ## 🖥️ Using it
 
 <p align="center">
-  <img src="docs/dashboard.png" alt="CodeTend dashboard showing three example repositories with scores, grades and finding counts" width="820">
+  <img src="docs/dashboard.png" alt="CodeTend dashboard showing three example repositories with scores, grades and finding counts" width="800">
 </p>
 
 <p align="center"><em>Repository health at a glance. All data shown is illustrative.</em></p>
 
 <p align="center">
-  <img src="docs/repository-page.png" alt="CodeTend repository page showing an example overall score, finding lifecycle counts, repository knowledge and change-over-time charts" width="820">
+  <img src="docs/repository-page.png" alt="CodeTend repository page showing an example overall score, finding lifecycle counts, repository knowledge and change-over-time charts" width="800">
 </p>
 
 <p align="center"><em>Drill into score trends, findings and the repository knowledge model.</em></p>
