@@ -8,7 +8,7 @@
       "esbuild": "^0.28.0"
     },
     "eve": {
-      "undici": "8.12.4"
+      "undici": "8.13.1"
     }
   },
   "scripts": {
