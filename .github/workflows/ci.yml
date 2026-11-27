@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:19@sha256:aaa10f7ba7328b4a221a6c3184d83eef885bd16bf1f6de864757863156b0a4d1
+        image: postgres:19@sha256:4ea94de574c17f0372722806c949757050fbb1cd7648410fe45d6bba275cc00e
         env:
           POSTGRES_DB: tecdebt
           POSTGRES_USER: tecdebt
@@ -114,7 +114,7 @@ jobs:
 
   image:
     needs: checks
-    uses: michidk/workflows/.github/workflows/container-image.yml@2c4ee9b8cfd92fbaea848db9c4c3d92a2ad6e71d # main
+    uses: michidk/workflows/.github/workflows/container-image.yml@734618661c89429ff08bcab1804e1e6f3e5f0fd5 # main
     permissions:
       contents: read
       packages: write
